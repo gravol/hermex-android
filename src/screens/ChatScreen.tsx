@@ -522,9 +522,7 @@ export default function ChatScreen() {
           isSystem ? styles.systemMessageRow : null,
         ]}>
           <TouchableOpacity
-            activeOpacity={0.78}
-            delayLongPress={250}
-            onLongPress={() => copyToClipboard(item.content, 'message')}
+            activeOpacity={0.9}
             style={[
               styles.bubble,
               isUser ? styles.userBubble : styles.assistantBubble,
