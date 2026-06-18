@@ -65,70 +65,60 @@ const formatDateSeparator = (timestamp: number) => {
 };
 
 const renderInlineMarkdown = (content: string, onCopy: (value: string, kind?: 'url' | 'code' | 'message') => void) => {
-  const codeBlockSegments = content.split(/(```[\s\S]*?```)/g);
+  const segments = content.split(/(`[^`\n]+`|\*\*[^*]+\*\*|\*[^*]+\*|https?:\/\/[^\s)]+)/g);
 
-  return codeBlockSegments.map((blockSegment, blockIndex) => {
-    if (!blockSegment) return null;
+  const parts: React.ReactNode[] = [];
 
-    if (blockSegment.startsWith('```') && blockSegment.endsWith('```')) {
-      const code = blockSegment.slice(3, -3).replace(/^\w+\n/, '').trim();
-      return (
-        <Text
-          key={`code-block-${blockIndex}`}
-          style={styles.markdownCodeBlock}
-          onPress={() => onCopy(code, 'code')}>
-          {code}
-        </Text>
-      );
-    }
-
-    const segments = blockSegment.split(/(`[^`\n]+`|\*\*[^*]+\*\*|\*[^*]+\*|https?:\/\/[^\s)]+)/g);
-
-    return segments.map((segment, index) => {
-    if (!segment) return null;
+  segments.forEach((segment, index) => {
+    if (!segment) return;
 
     if (segment.startsWith('`') && segment.endsWith('`')) {
       const code = segment.slice(1, -1);
-      return (
+      parts.push(
         <Text
-          key={`code-${blockIndex}-${index}`}
+          key={`code-${index}`}
           style={styles.markdownCode}
           onPress={() => onCopy(code, 'code')}>
           {code}
         </Text>
       );
+      return;
     }
 
     if (/^https?:\/\/[^\s)]+$/.test(segment)) {
-      return (
+      parts.push(
         <Text
-          key={`url-${blockIndex}-${index}`}
+          key={`url-${index}`}
           style={styles.markdownLink}
           onPress={() => onCopy(segment, 'url')}>
           {segment}
         </Text>
       );
+      return;
     }
 
     if (segment.startsWith('**') && segment.endsWith('**')) {
-      return (
-        <Text key={`bold-${blockIndex}-${index}`} style={styles.markdownBold}>
+      parts.push(
+        <Text key={`bold-${index}`} style={styles.markdownBold}>
           {segment.slice(2, -2)}
         </Text>
       );
+      return;
     }
 
     if (segment.startsWith('*') && segment.endsWith('*')) {
-      return (
-        <Text key={`italic-${blockIndex}-${index}`} style={styles.markdownItalic}>
+      parts.push(
+        <Text key={`italic-${index}`} style={styles.markdownItalic}>
           {segment.slice(1, -1)}
         </Text>
       );
+      return;
     }
 
-    return segment;
-    });
+    parts.push(segment);
   });
+
+  return parts;
 };
 
 const useAndroidKeyboardInset = (windowHeight: number) => {
@@ -513,6 +503,15 @@ export default function ChatScreen() {
     const shouldShowDateSeparator = index === 0
       || !isSameCalendarDay(messages[index - 1].timestamp, item.timestamp);
 
+    // Extract code blocks for rendering outside selectable text
+    const codeBlockRegex = /```[\s\S]*?```/g;
+    const codeBlocks: string[] = [];
+    const plainContent = item.content.replace(codeBlockRegex, (match) => {
+      codeBlocks.push(match);
+      return '\x00';
+    });
+    const contentParts = plainContent.split('\x00');
+
     return (
       <View>
         {shouldShowDateSeparator && renderDateSeparator(item.timestamp)}
@@ -543,14 +542,36 @@ export default function ChatScreen() {
                 <Text style={styles.voiceDuration}>{formatVoiceDuration(item.audioDuration || 0)}</Text>
               </View>
             ) : (
-              <Text selectable={true} style={[
-                styles.bubbleText,
-                isUser ? styles.userText : styles.assistantText,
-                isError ? styles.errorText : null,
-                isSystem ? styles.systemText : null,
-              ]}>
-                {renderInlineMarkdown(item.content, copyToClipboard)}
-              </Text>
+              <View>
+                {contentParts.map((part, partIndex) => (
+                  <View key={`part-${partIndex}`}>
+                    {part && (
+                      <Text selectable={true} style={[
+                        styles.bubbleText,
+                        isUser ? styles.userText : styles.assistantText,
+                        isError ? styles.errorText : null,
+                        isSystem ? styles.systemText : null,
+                      ]}>
+                        {renderInlineMarkdown(part, copyToClipboard)}
+                      </Text>
+                    )}
+                    {partIndex < codeBlocks.length && (() => {
+                      const block = codeBlocks[partIndex];
+                      const code = block.slice(3, -3).replace(/^\w+\n/, '').trim();
+                      return (
+                        <TouchableOpacity
+                          key={`cb-${partIndex}`}
+                          style={styles.markdownCodeBlock}
+                          activeOpacity={0.7}
+                          onPress={() => copyToClipboard(code, 'code')}>
+                          <Text style={styles.codeBlockText}>{code}</Text>
+                          <Text style={styles.codeCopyHint}>Tap to copy</Text>
+                        </TouchableOpacity>
+                      );
+                    })()}
+                  </View>
+                ))}
+              </View>
             )}
           </TouchableOpacity>
           <Text style={[
@@ -742,13 +763,22 @@ const styles = StyleSheet.create({
     borderColor: '#2d3748',
     borderRadius: 8,
     borderWidth: 1,
-    color: '#f8fafc',
+    marginVertical: 6,
+    padding: 12,
+    overflow: 'hidden',
+  },
+  codeBlockText: {
+    color: '#e2e8f0',
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 20,
-    marginVertical: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+  },
+  codeCopyHint: {
+    color: '#64748b',
+    fontSize: 11,
+    marginTop: 8,
+    textAlign: 'right',
+    fontStyle: 'italic',
   },
   markdownLink: {
     color: '#4ea3ff',
