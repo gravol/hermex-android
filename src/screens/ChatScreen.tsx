@@ -545,7 +545,7 @@ export default function ChatScreen() {
                 <Text style={styles.voiceDuration}>{formatVoiceDuration(item.audioDuration || 0)}</Text>
               </View>
             ) : (
-              <Text style={[
+              <Text selectable={true} style={[
                 styles.bubbleText,
                 isUser ? styles.userText : styles.assistantText,
                 isError ? styles.errorText : null,

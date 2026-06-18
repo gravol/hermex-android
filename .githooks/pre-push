@@ -1,11 +1,14 @@
 #!/bin/bash
-# Pre-push hook: run web export tests before pushing
-# If this fails, the push is aborted.
+# Pre-push hook: run web export tests, then wait for user approval before pushing.
 
 set -e
 
+echo ""
 echo "🔍 Running pre-push checks..."
 echo ""
+
+# Capture the push refs so we can re-push after approval
+PUSH_DATA=$(cat)
 
 # Step 1: TypeScript type check
 echo "📝 TypeScript check..."
@@ -19,4 +22,21 @@ npx expo export --platform web 2>&1 | tail -5
 echo "✅ Web export OK"
 echo ""
 
-echo "✨ All checks passed — pushing to remote..."
+echo "============================================"
+echo "   ✅ ALL CHECKS PASSED"
+echo "============================================"
+echo ""
+echo -n "Push to remote? (y/N): "
+read -r APPROVAL < /dev/tty
+
+if [ "$APPROVAL" != "y" ] && [ "$APPROVAL" != "Y" ]; then
+  echo ""
+  echo "⏸️  Push cancelled — nothing was pushed."
+  echo "   Run:  git push  — to try again when ready."
+  exit 1
+fi
+
+echo ""
+echo "🚀 Pushing..."
+# Re-pipe the push data and let git proceed
+echo "$PUSH_DATA" | git push --no-verify "$@"
