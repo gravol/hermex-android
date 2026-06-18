@@ -11,7 +11,7 @@ export const TAILSCALE_HOST = '100.80.204.66';   // Tailscale IP
 export const API_PORT = 8650;
 // Hermes API server key. Get yours from: grep API_SERVER_KEY ~/.hermes/.env
 // The repo is private — this is fine in code.
-export const API_KEY = 'hmrs-a...e5f6';
+export const API_KEY='hmrs-apiserver-a1b2c3d4e5f6';
 
 // LAN/Tailscale-only ntfy server used by the UnifiedPush bridge.
 export const NTFY_SERVER_URL = 'http://100.80.204.66:8080';
