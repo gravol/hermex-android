@@ -443,7 +443,8 @@ export default function ChatScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container}
-      behavior="padding">
+      behavior="padding"
+      keyboardVerticalOffset={Platform.OS === 'android' ? -200 : 0}>
       <View style={styles.statusBar}>
         <Text style={[styles.statusDot, {
           color: status === 'connected' ? '#4caf50' : status === 'connecting' ? '#ff9800' : '#f44336'

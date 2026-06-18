@@ -39,9 +39,15 @@ export default function SettingsScreen() {
   const [apiSessionId, setApiSessionId] = useState<string | null>(api.getCurrentApiSessionId());
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [networkInfo, setNetworkInfo] = useState(api.networkInfo);
+  const [lastError, setLastError] = useState<string | null>(api.lastError);
 
   useEffect(() => {
-    const unsub = api.onStatus(setStatus);
+    const unsub = api.onStatus((s) => {
+      setStatus(s);
+      setNetworkInfo(api.networkInfo);
+      setLastError(api.lastError);
+    });
     return unsub;
   }, []);
 
@@ -165,6 +171,18 @@ export default function SettingsScreen() {
           <Text style={styles.label}>Status</Text>
           <Text style={[styles.value, { color: statusColor }]}>● {statusText}</Text>
         </View>
+        {networkInfo && (
+          <View style={styles.row}>
+            <Text style={styles.label}>Via</Text>
+            <Text style={[styles.value, { color: '#4ecdc4' }]}>{networkInfo.type} ({networkInfo.host})</Text>
+          </View>
+        )}
+        {lastError && (
+          <View style={styles.row}>
+            <Text style={styles.label}>Error</Text>
+            <Text style={[styles.value, { color: '#f44336', fontSize: 12 }]} numberOfLines={2}>{lastError}</Text>
+          </View>
+        )}
         <TouchableOpacity style={styles.button} onPress={handleReconnect}>
           <Text style={styles.buttonText}>Reconnect</Text>
         </TouchableOpacity>

@@ -4,8 +4,8 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_PORT, API_KEY } from '../config';
-import { detectNetwork } from '../utils/network';
+import { API_PORT, API_KEY, TAILSCALE_HOST } from '../config';
+import { detectNetwork, NetworkInfo } from '../utils/network';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -63,6 +63,16 @@ export class HermesAPI {
   private modelInfo: ModelsResponse | null = null;
   private lastResponseId: string | null = null;
   private currentApiSessionId: string | null = null;
+  private _networkInfo: NetworkInfo | null = null;
+  private _lastError: string | null = null;
+
+  get networkInfo(): NetworkInfo | null {
+    return this._networkInfo;
+  }
+
+  get lastError(): string | null {
+    return this._lastError;
+  }
 
   get status(): ConnectionStatus {
     return this._status;
@@ -84,12 +94,18 @@ export class HermesAPI {
       this.lastResponseId = storedResponseId;
       this.currentApiSessionId = storedApiSessionId;
 
+      // Store which host we're connecting to
+      this._networkInfo = {
+        host,
+        type: host === TAILSCALE_HOST ? 'tailscale' : host === '192.168.68.105' ? 'local' : 'unknown',
+      };
+
       const resp = await fetch(`http://${host}:${API_PORT}/v1/models`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${API_KEY}`,
         },
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(8000),
       });
       
       if (resp.ok) {
@@ -111,6 +127,8 @@ export class HermesAPI {
       }
     } catch (e) {
       console.error('Connection failed:', e);
+      this._lastError = e instanceof Error ? e.message : String(e);
+      this._networkInfo = null;
       this.setStatus('error');
       // Retry after 3 seconds
       setTimeout(() => this.connect(host), 3000);

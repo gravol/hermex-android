@@ -13,7 +13,7 @@ export async function detectNetwork(): Promise<NetworkInfo> {
   try {
     const resp = await fetch(`http://${BIGRED_LOCAL}:${API_PORT}/health`, {
       method: 'GET',
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(4000),
     });
     if (resp.ok) {
       return { host: BIGRED_LOCAL, type: 'local' };
