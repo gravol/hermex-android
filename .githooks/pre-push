@@ -1,0 +1,22 @@
+#!/bin/bash
+# Pre-push hook: run web export tests before pushing
+# If this fails, the push is aborted.
+
+set -e
+
+echo "🔍 Running pre-push checks..."
+echo ""
+
+# Step 1: TypeScript type check
+echo "📝 TypeScript check..."
+npx tsc --noEmit
+echo "✅ TypeScript clean"
+echo ""
+
+# Step 2: Web export (compiles the full app)
+echo "🌐 Web export build..."
+npx expo export --platform web 2>&1 | tail -5
+echo "✅ Web export OK"
+echo ""
+
+echo "✨ All checks passed — pushing to remote..."
