@@ -45,7 +45,11 @@ interface ChatMessage {
 
 type ResponsesInput = string | Array<{
   role: 'user' | 'assistant' | 'system';
-  content: Array<{ type: 'input_text'; text: string } | { type: 'input_image'; image_url: string }>;
+  content: Array<
+    | { type: 'input_text'; text: string }
+    | { type: 'input_image'; image_url: string }
+    | { type: 'input_audio'; input_audio: { data: string; format: string } }
+  >;
 }>;
 
 function extractResponseText(response: any): string {
@@ -351,10 +355,21 @@ export class HermesAPI {
     await this.sendResponsesInput(input, 'Look at this image');
   }
 
-  async sendAudio(_base64Audio: string) {
-    // STT/audio-input support is not confirmed yet. Send a textual placeholder for now,
-    // keeping this API surface ready for attaching audio data in the future.
-    await this.sendMessage('🎤 Voice note');
+  async sendAudio(base64Audio: string, mimeType: string = 'audio/mp4', prompt: string = 'Voice note') {
+    const sanitizedBase64 = base64Audio.replace(/^data:[^;]+;base64,/, '');
+    const format = mimeType.includes('webm') ? 'webm'
+      : mimeType.includes('wav') ? 'wav'
+      : mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3'
+      : 'mp4';
+    const input: ResponsesInput = [{
+      role: 'user',
+      content: [
+        { type: 'input_text', text: 'Transcribe and respond to this voice note.' },
+        { type: 'input_audio', input_audio: { data: sanitizedBase64, format } },
+      ],
+    }];
+
+    await this.sendResponsesInput(input, `🎤 ${prompt}`);
   }
 
   async sendHiddenMessage(content: string): Promise<string> {

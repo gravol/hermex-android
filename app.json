@@ -2,7 +2,7 @@
   "expo": {
     "name": "hermes-chat-app",
     "slug": "hermes-chat-app",
-    "version": "0.3.6",
+    "version": "0.3.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -11,7 +11,7 @@
     },
     "android": {
       "package": "com.hermes.chat",
-      "versionCode": 7,
+      "versionCode": 8,
       "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.INTERNET",
@@ -52,6 +52,13 @@
         {
           "photosPermission": "Allow Hermes Chat to select photos for sending to Hermes.",
           "cameraPermission": "Allow Hermes Chat to use the camera for sending photos to Hermes."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Hermes Chat to record voice messages for Hermes.",
+          "recordAudioAndroid": true
         }
       ]
     ],

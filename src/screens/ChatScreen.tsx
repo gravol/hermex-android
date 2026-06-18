@@ -6,9 +6,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, AppState, Animated, Image,
-  Keyboard, useWindowDimensions, type KeyboardEvent,
+  Keyboard, useWindowDimensions, type KeyboardEvent, ToastAndroid,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Clipboard from 'expo-clipboard';
 import { getHermesAPI, ConnectionStatus } from '../services/api';
 import { showLocalNotification } from '../services/notifications';
 import CommandShortcuts from '../components/CommandShortcuts';
@@ -60,6 +61,73 @@ const formatDateSeparator = (timestamp: number) => {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+  });
+};
+
+const renderInlineMarkdown = (content: string, onCopy: (value: string, kind?: 'url' | 'code' | 'message') => void) => {
+  const codeBlockSegments = content.split(/(```[\s\S]*?```)/g);
+
+  return codeBlockSegments.map((blockSegment, blockIndex) => {
+    if (!blockSegment) return null;
+
+    if (blockSegment.startsWith('```') && blockSegment.endsWith('```')) {
+      const code = blockSegment.slice(3, -3).replace(/^\w+\n/, '').trim();
+      return (
+        <Text
+          key={`code-block-${blockIndex}`}
+          style={styles.markdownCodeBlock}
+          onPress={() => onCopy(code, 'code')}>
+          {code}
+        </Text>
+      );
+    }
+
+    const segments = blockSegment.split(/(`[^`\n]+`|\*\*[^*]+\*\*|\*[^*]+\*|https?:\/\/[^\s)]+)/g);
+
+    return segments.map((segment, index) => {
+    if (!segment) return null;
+
+    if (segment.startsWith('`') && segment.endsWith('`')) {
+      const code = segment.slice(1, -1);
+      return (
+        <Text
+          key={`code-${blockIndex}-${index}`}
+          style={styles.markdownCode}
+          onPress={() => onCopy(code, 'code')}>
+          {code}
+        </Text>
+      );
+    }
+
+    if (/^https?:\/\/[^\s)]+$/.test(segment)) {
+      return (
+        <Text
+          key={`url-${blockIndex}-${index}`}
+          style={styles.markdownLink}
+          onPress={() => onCopy(segment, 'url')}>
+          {segment}
+        </Text>
+      );
+    }
+
+    if (segment.startsWith('**') && segment.endsWith('**')) {
+      return (
+        <Text key={`bold-${blockIndex}-${index}`} style={styles.markdownBold}>
+          {segment.slice(2, -2)}
+        </Text>
+      );
+    }
+
+    if (segment.startsWith('*') && segment.endsWith('*')) {
+      return (
+        <Text key={`italic-${blockIndex}-${index}`} style={styles.markdownItalic}>
+          {segment.slice(1, -1)}
+        </Text>
+      );
+    }
+
+    return segment;
+    });
   });
 };
 
@@ -125,14 +193,8 @@ export default function ChatScreen() {
   const { height: windowHeight } = useWindowDimensions();
   const androidKeyboardInset = useAndroidKeyboardInset(windowHeight);
   const androidKeyboardSpacer = Platform.OS === 'android' ? androidKeyboardInset : 0;
-  const keyboardAwareMessageContainerStyle = useMemo(() => [
-    styles.messageContainer,
-    androidKeyboardSpacer > 0 ? { paddingBottom: androidKeyboardSpacer + 16 } : null,
-  ], [androidKeyboardSpacer]);
-  const keyboardAwareInputBarStyle = useMemo(() => [
-    styles.inputBar,
-    androidKeyboardSpacer > 0 ? { marginBottom: androidKeyboardSpacer } : null,
-  ], [androidKeyboardSpacer]);
+  const keyboardAwareMessageContainerStyle = styles.messageContainer;
+  const keyboardAwareInputBarStyle = styles.inputBar;
   const keyboardAwareMediaOptionsStyle = useMemo(() => [
     styles.mediaOptions,
     androidKeyboardSpacer > 0 ? { bottom: androidKeyboardSpacer + 60 } : null,
@@ -145,6 +207,7 @@ export default function ChatScreen() {
   const [showMediaOptions, setShowMediaOptions] = useState(false);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState('');
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [historyLoadTrigger, setHistoryLoadTrigger] = useState(0);
   const [dot1] = useState(new Animated.Value(0));
@@ -292,11 +355,32 @@ export default function ChatScreen() {
     }]);
   };
 
+  const copyToClipboard = async (value: string, kind: 'url' | 'code' | 'message' = 'message') => {
+    const text = value.trim();
+    if (!text) return;
+
+    if (kind === 'url') {
+      await Clipboard.setUrlAsync(text);
+    } else {
+      await Clipboard.setStringAsync(text);
+    }
+
+    const label = kind === 'url' ? 'Link copied' : kind === 'code' ? 'Code copied' : 'Message copied';
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(label, ToastAndroid.SHORT);
+    }
+    setCopyFeedback(label);
+    setTimeout(() => setCopyFeedback(''), 1200);
+  };
+
   const handleSend = () => {
     const text = input.trim();
     if (!text) return;
 
     addMessage('user', text);
+    if (text.startsWith('/queue')) {
+      addMessage('system', '📋 Queued for next turn');
+    }
     assistantResponseRef.current = '';
     setInput('');
     setIsTyping(true);
@@ -398,7 +482,7 @@ export default function ChatScreen() {
     }
   };
 
-  const handleVoiceComplete = (result: { uri: string; duration: number; cancelled: boolean }) => {
+  const handleVoiceComplete = async (result: { uri: string; duration: number; cancelled: boolean; base64?: string; mimeType?: string }) => {
     setShowVoiceRecorder(false);
     if (result.cancelled) return;
 
@@ -409,7 +493,11 @@ export default function ChatScreen() {
     });
     assistantResponseRef.current = '';
     setIsTyping(true);
-    api.sendMessage(`🎤 Voice note (${durationLabel})`);
+    if (result.base64) {
+      await api.sendAudio(result.base64, result.mimeType || 'audio/mp4', `Voice note (${durationLabel})`);
+    } else {
+      await api.sendMessage(`🎤 Voice note (${durationLabel})`);
+    }
   };
 
   const renderDateSeparator = (timestamp: number) => (
@@ -433,12 +521,16 @@ export default function ChatScreen() {
           isUser ? styles.userMessageRow : styles.assistantMessageRow,
           isSystem ? styles.systemMessageRow : null,
         ]}>
-          <View style={[
-            styles.bubble,
-            isUser ? styles.userBubble : styles.assistantBubble,
-            isError ? styles.errorBubble : null,
-            isSystem ? styles.systemBubble : null,
-          ]}>
+          <TouchableOpacity
+            activeOpacity={0.78}
+            delayLongPress={250}
+            onLongPress={() => copyToClipboard(item.content, 'message')}
+            style={[
+              styles.bubble,
+              isUser ? styles.userBubble : styles.assistantBubble,
+              isError ? styles.errorBubble : null,
+              isSystem ? styles.systemBubble : null,
+            ]}>
             {item.imageUri && (
               <Image source={{ uri: item.imageUri }}
                 style={styles.chatImage}
@@ -459,10 +551,10 @@ export default function ChatScreen() {
                 isError ? styles.errorText : null,
                 isSystem ? styles.systemText : null,
               ]}>
-                {item.content}
+                {renderInlineMarkdown(item.content, copyToClipboard)}
               </Text>
             )}
-          </View>
+          </TouchableOpacity>
           <Text style={[
             styles.timestamp,
             isUser ? styles.userTimestamp : styles.assistantTimestamp,
@@ -506,6 +598,12 @@ export default function ChatScreen() {
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()} />
 
       {isTyping && renderTypingIndicator()}
+
+      {!!copyFeedback && (
+        <View style={styles.copyFeedback} pointerEvents="none">
+          <Text style={styles.copyFeedbackText}>{copyFeedback}</Text>
+        </View>
+      )}
 
       <CommandShortcuts onSelect={handleCommandSelect} />
 
@@ -630,6 +728,47 @@ const styles = StyleSheet.create({
   assistantText: { color: '#e0e0e0' },
   errorText: { color: '#ff6b6b' },
   systemText: { color: '#667788', fontSize: 12, lineHeight: 17, textAlign: 'center' },
+  markdownBold: { fontWeight: '700' },
+  markdownItalic: { fontStyle: 'italic' },
+  markdownCode: {
+    backgroundColor: '#111827',
+    borderRadius: 4,
+    color: '#f8fafc',
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 14,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  markdownCodeBlock: {
+    backgroundColor: '#111827',
+    borderColor: '#2d3748',
+    borderRadius: 8,
+    borderWidth: 1,
+    color: '#f8fafc',
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 14,
+    lineHeight: 20,
+    marginVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  markdownLink: {
+    color: '#4ea3ff',
+    textDecorationLine: 'underline',
+  },
+  copyFeedback: {
+    position: 'absolute',
+    bottom: 120,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(20, 20, 35, 0.96)',
+    borderColor: '#B8860B',
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    zIndex: 20,
+  },
+  copyFeedbackText: { color: '#f8fafc', fontSize: 13, fontWeight: '600' },
   timestamp: { fontSize: 11, color: '#556677', marginTop: 2 },
   userTimestamp: { textAlign: 'right', alignSelf: 'flex-end' },
   assistantTimestamp: { textAlign: 'left', alignSelf: 'flex-start' },

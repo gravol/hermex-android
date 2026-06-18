@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { View, TouchableOpacity, Text, ScrollView, StyleSheet } from 'react-native';
 
 const COMMANDS = [
-  '/new', '/stop', '/clear',
+  '/new', '/stop', '/clear', '/queue',
   '/retry', '/undo', '/compress',
   '/model', '/skills', '/memory',
   '/help', '/usage', '/status',
