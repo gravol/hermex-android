@@ -3,12 +3,11 @@
 
 set -e
 
+PUSH_DATA=$(cat)
+
 echo ""
 echo "🔍 Running pre-push checks..."
 echo ""
-
-# Capture the push refs so we can re-push after approval
-PUSH_DATA=$(cat)
 
 # Step 1: TypeScript type check
 echo "📝 TypeScript check..."
@@ -26,17 +25,27 @@ echo "============================================"
 echo "   ✅ ALL CHECKS PASSED"
 echo "============================================"
 echo ""
-echo -n "Push to remote? (y/N): "
-read -r APPROVAL < /dev/tty
 
-if [ "$APPROVAL" != "y" ] && [ "$APPROVAL" != "Y" ]; then
+# Check if we're in an interactive terminal
+if [ -t 0 ] && [ -c /dev/tty ] 2>/dev/null; then
+  echo -n "Push to remote? (y/N): "
+  read -r APPROVAL < /dev/tty
+
+  if [ "$APPROVAL" != "y" ] && [ "$APPROVAL" != "Y" ]; then
+    echo ""
+    echo "⏸️  Push cancelled — nothing was pushed."
+    echo "   Run:  git push  — to try again when ready."
+    exit 1
+  fi
+
   echo ""
-  echo "⏸️  Push cancelled — nothing was pushed."
-  echo "   Run:  git push  — to try again when ready."
+  echo "🚀 Pushing..."
+  # Re-pipe the push data — git already read it from stdin, so we push normally
+  git push --no-verify origin "$@"
+else
+  echo "📋 Non-interactive shell detected."
+  echo "   To push, run in your terminal:  git push --no-verify"
+  echo ""
+  echo "⏸️  Push blocked — user approval required."
   exit 1
 fi
-
-echo ""
-echo "🚀 Pushing..."
-# Re-pipe the push data and let git proceed
-echo "$PUSH_DATA" | git push --no-verify "$@"
