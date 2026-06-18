@@ -2,7 +2,7 @@
   "expo": {
     "name": "hermes-chat-app",
     "slug": "hermes-chat-app",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -11,7 +11,7 @@
     },
     "android": {
       "package": "com.hermes.chat",
-      "versionCode": 3,
+      "versionCode": 4,
       "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.INTERNET",
