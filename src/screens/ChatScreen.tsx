@@ -25,6 +25,21 @@ interface Message {
   audioDuration?: number;
 }
 
+const INPUT_MIN_HEIGHT = 32;
+const INPUT_MAX_HEIGHT = 116;
+const webInputResetStyle = Platform.OS === 'web'
+  ? ({
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    outlineStyle: 'none',
+    outlineWidth: 0,
+    boxShadow: 'none',
+    resize: 'none',
+    backgroundColor: 'transparent',
+    caretColor: '#e0e0e0',
+  } as any)
+  : null;
+
 const isSameCalendarDay = (a: number, b: number) => {
   const first = new Date(a);
   const second = new Date(b);
@@ -65,7 +80,7 @@ const formatDateSeparator = (timestamp: number) => {
 };
 
 const renderInlineMarkdown = (content: string, onCopy: (value: string, kind?: 'url' | 'code' | 'message') => void) => {
-  const segments = content.split(/(`[^`\n]+`|\*\*[^*]+\*\*|\*[^*]+\*|https?:\/\/[^\s)]+)/g);
+  const segments = content.split(/(`[^`\n]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s)]+)/g);
 
   const parts: React.ReactNode[] = [];
 
@@ -85,11 +100,24 @@ const renderInlineMarkdown = (content: string, onCopy: (value: string, kind?: 'u
       return;
     }
 
+    const markdownLinkMatch = segment.match(/^\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)$/);
+    if (markdownLinkMatch) {
+      parts.push(
+        <Text
+          key={`md-url-${index}`}
+          style={[styles.markdownCode, styles.markdownLink]}
+          onPress={() => onCopy(markdownLinkMatch[2], 'url')}>
+          {markdownLinkMatch[1]}
+        </Text>
+      );
+      return;
+    }
+
     if (/^https?:\/\/[^\s)]+$/.test(segment)) {
       parts.push(
         <Text
           key={`url-${index}`}
-          style={styles.markdownLink}
+          style={[styles.markdownCode, styles.markdownLink]}
           onPress={() => onCopy(segment, 'url')}>
           {segment}
         </Text>
@@ -119,6 +147,124 @@ const renderInlineMarkdown = (content: string, onCopy: (value: string, kind?: 'u
   });
 
   return parts;
+};
+
+const isMarkdownDivider = (line: string) => /^\s*([-*_])(?:\s*\1){2,}\s*$/.test(line);
+const isTableRow = (line: string) => /^\s*\|.+\|\s*$/.test(line);
+const isTableDivider = (line: string) => /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+const parseTableCells = (line: string) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+
+const renderTable = (
+  rows: string[],
+  key: string,
+  onCopy: (value: string, kind?: 'url' | 'code' | 'message') => void,
+) => {
+  const parsedRows = rows
+    .filter(line => !isTableDivider(line))
+    .map(parseTableCells);
+  const columnCount = Math.max(...parsedRows.map(row => row.length));
+  const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) => {
+    const maxChars = Math.max(...parsedRows.map(row => (row[columnIndex] || '').length), 6);
+    return Math.min(Math.max(maxChars * 8 + 24, 86), 220);
+  });
+
+  return (
+    <ScrollView key={key} horizontal showsHorizontalScrollIndicator={false} style={styles.markdownTableScroll}>
+      <View style={styles.markdownTable}>
+        {parsedRows.map((row, rowIndex) => (
+          <View key={`${key}-row-${rowIndex}`} style={[styles.markdownTableRow, rowIndex === 0 ? styles.markdownTableHeaderRow : null]}>
+            {columnWidths.map((width, columnIndex) => (
+              <Text
+                key={`${key}-cell-${rowIndex}-${columnIndex}`}
+                style={[
+                  styles.markdownTableCell,
+                  rowIndex === 0 ? styles.markdownTableHeaderCell : null,
+                  { width },
+                ]}>
+                {renderInlineMarkdown(row[columnIndex] || '', onCopy)}
+              </Text>
+            ))}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+};
+
+const renderMarkdownBlocks = (
+  content: string,
+  textStyle: any,
+  onCopy: (value: string, kind?: 'url' | 'code' | 'message') => void,
+) => {
+  const lines = content.split('\n');
+  const blocks: React.ReactNode[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+
+    if (isMarkdownDivider(line)) {
+      blocks.push(<View key={`hr-${index}`} style={styles.markdownDivider} />);
+      index += 1;
+      continue;
+    }
+
+    if (/^\s*>/.test(line)) {
+      const quoteLines: string[] = [];
+      const startIndex = index;
+      while (index < lines.length && /^\s*>/.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^\s*>\s?/, ''));
+        index += 1;
+      }
+      blocks.push(
+        <View key={`quote-${startIndex}`} style={styles.markdownBlockquote}>
+          <Text selectable style={[textStyle, styles.markdownBlockquoteText]}>
+            {renderInlineMarkdown(quoteLines.join('\n'), onCopy)}
+          </Text>
+        </View>
+      );
+      continue;
+    }
+
+    if (isTableRow(line) && index + 1 < lines.length && isTableDivider(lines[index + 1])) {
+      const tableLines: string[] = [line, lines[index + 1]];
+      const startIndex = index;
+      index += 2;
+      while (index < lines.length && isTableRow(lines[index])) {
+        tableLines.push(lines[index]);
+        index += 1;
+      }
+      blocks.push(renderTable(tableLines, `table-${startIndex}`, onCopy));
+      continue;
+    }
+
+    const paragraphLines: string[] = [line];
+    const startIndex = index;
+    index += 1;
+    while (
+      index < lines.length
+      && lines[index].trim()
+      && !isMarkdownDivider(lines[index])
+      && !/^\s*>/.test(lines[index])
+      && !(isTableRow(lines[index]) && index + 1 < lines.length && isTableDivider(lines[index + 1]))
+    ) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+
+    blocks.push(
+      <Text key={`p-${startIndex}`} selectable={true} style={textStyle}>
+        {renderInlineMarkdown(paragraphLines.join('\n'), onCopy)}
+      </Text>
+    );
+  }
+
+  return blocks;
 };
 
 const useAndroidKeyboardInset = (windowHeight: number) => {
@@ -199,6 +345,7 @@ export default function ChatScreen() {
   const [showEmoji, setShowEmoji] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState('');
   const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [inputHeight, setInputHeight] = useState(INPUT_MIN_HEIGHT);
   const [historyLoadTrigger, setHistoryLoadTrigger] = useState(0);
   const [dot1] = useState(new Animated.Value(0));
   const [dot2] = useState(new Animated.Value(0));
@@ -373,6 +520,7 @@ export default function ChatScreen() {
     }
     assistantResponseRef.current = '';
     setInput('');
+    setInputHeight(INPUT_MIN_HEIGHT);
     setIsTyping(true);
     api.sendMessage(text);
     inputRef.current?.focus();
@@ -543,34 +691,43 @@ export default function ChatScreen() {
               </View>
             ) : (
               <View>
-                {contentParts.map((part, partIndex) => (
-                  <View key={`part-${partIndex}`}>
-                    {part && (
-                      <Text selectable={true} style={[
-                        styles.bubbleText,
-                        isUser ? styles.userText : styles.assistantText,
-                        isError ? styles.errorText : null,
-                        isSystem ? styles.systemText : null,
-                      ]}>
-                        {renderInlineMarkdown(part, copyToClipboard)}
-                      </Text>
-                    )}
-                    {partIndex < codeBlocks.length && (() => {
-                      const block = codeBlocks[partIndex];
-                      const code = block.slice(3, -3).replace(/^\w+\n/, '').trim();
-                      return (
-                        <TouchableOpacity
-                          key={`cb-${partIndex}`}
-                          style={styles.markdownCodeBlock}
-                          activeOpacity={0.7}
-                          onPress={() => copyToClipboard(code, 'code')}>
-                          <Text style={styles.codeBlockText}>{code}</Text>
-                          <Text style={styles.codeCopyHint}>Tap to copy</Text>
-                        </TouchableOpacity>
-                      );
-                    })()}
-                  </View>
-                ))}
+                {contentParts.map((part, partIndex) => {
+                  const messageTextStyle = [
+                    styles.bubbleText,
+                    isUser ? styles.userText : styles.assistantText,
+                    isError ? styles.errorText : null,
+                    isSystem ? styles.systemText : null,
+                  ];
+
+                  return (
+                    <View key={`part-${partIndex}`}>
+                      {part ? renderMarkdownBlocks(part, messageTextStyle, copyToClipboard) : null}
+                      {partIndex < codeBlocks.length && (() => {
+                        const block = codeBlocks[partIndex];
+                        const rawCode = block.slice(3, -3).replace(/^\n/, '');
+                        const languageMatch = rawCode.match(/^([A-Za-z0-9_+.-]+)\n/);
+                        const language = languageMatch?.[1];
+                        const code = (languageMatch ? rawCode.slice(languageMatch[0].length) : rawCode).trim();
+                        return (
+                          <View key={`cb-${partIndex}`} style={styles.markdownCodeBlock}>
+                            <View style={styles.codeBlockHeader}>
+                              <Text style={styles.codeBlockLanguage}>{language || 'code'}</Text>
+                              <TouchableOpacity
+                                style={styles.codeCopyButton}
+                                activeOpacity={0.75}
+                                onPress={() => copyToClipboard(code, 'code')}
+                                accessibilityRole="button"
+                                accessibilityLabel="Copy code block">
+                                <Text style={styles.codeCopyButtonText}>Copy</Text>
+                              </TouchableOpacity>
+                            </View>
+                            <Text selectable style={styles.codeBlockText}>{code}</Text>
+                          </View>
+                        );
+                      })()}
+                    </View>
+                  );
+                })}
               </View>
             )}
           </TouchableOpacity>
@@ -656,11 +813,20 @@ export default function ChatScreen() {
           <Text style={styles.emojiButtonText}>😀</Text>
         </TouchableOpacity>
         <View style={styles.inputPill}>
-          <TextInput ref={inputRef} style={styles.input}
+          <TextInput ref={inputRef} style={[styles.input, webInputResetStyle, { height: inputHeight }]}
             value={input} onChangeText={setInput}
             placeholder="Message..." placeholderTextColor="#556677"
-            multiline={false} maxLength={4000}
+            multiline maxLength={4000}
             returnKeyType="send"
+            scrollEnabled={inputHeight >= INPUT_MAX_HEIGHT}
+            underlineColorAndroid="transparent"
+            onContentSizeChange={({ nativeEvent }) => {
+              const nextHeight = Math.min(
+                INPUT_MAX_HEIGHT,
+                Math.max(INPUT_MIN_HEIGHT, Math.ceil(nativeEvent.contentSize.height)),
+              );
+              setInputHeight(nextHeight);
+            }}
             selection={selection}
             onSelectionChange={({ nativeEvent }) => setSelection(nativeEvent.selection)}
             onFocus={closeEmojiPicker}
@@ -751,12 +917,70 @@ const styles = StyleSheet.create({
   markdownItalic: { fontStyle: 'italic' },
   markdownCode: {
     backgroundColor: '#111827',
-    borderRadius: 4,
+    borderColor: '#2d3748',
+    borderRadius: 5,
+    borderWidth: 1,
     color: '#f8fafc',
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
     fontSize: 14,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  markdownDivider: {
+    height: 2,
+    alignSelf: 'stretch',
+    backgroundColor: '#B8860B',
+    borderRadius: 999,
+    marginVertical: 10,
+    opacity: 0.85,
+  },
+  markdownBlockquote: {
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(184, 134, 11, 0.10)',
+    borderLeftColor: '#B8860B',
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    marginVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  markdownBlockquoteText: {
+    color: '#f1e4c2',
+    fontStyle: 'italic',
+  },
+  markdownTableScroll: {
+    alignSelf: 'stretch',
+    marginVertical: 8,
+  },
+  markdownTable: {
+    borderColor: '#2d3748',
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  markdownTableRow: {
+    flexDirection: 'row',
+    backgroundColor: '#111827',
+    borderTopColor: '#2d3748',
+    borderTopWidth: 1,
+  },
+  markdownTableHeaderRow: {
+    backgroundColor: '#1f2937',
+    borderTopWidth: 0,
+  },
+  markdownTableCell: {
+    color: '#e2e8f0',
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 12,
+    lineHeight: 18,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    borderLeftColor: '#2d3748',
+    borderLeftWidth: 1,
+  },
+  markdownTableHeaderCell: {
+    color: '#fbbf24',
+    fontWeight: '700',
   },
   markdownCodeBlock: {
     backgroundColor: '#111827',
@@ -764,25 +988,50 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     marginVertical: 6,
-    padding: 12,
     overflow: 'hidden',
+  },
+  codeBlockHeader: {
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+    borderBottomColor: '#2d3748',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 40,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  codeBlockLanguage: {
+    color: '#94a3b8',
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 12,
+    textTransform: 'lowercase',
+  },
+  codeCopyButton: {
+    minHeight: 32,
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#B8860B',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  codeCopyButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   codeBlockText: {
     color: '#e2e8f0',
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
     fontSize: 13,
     lineHeight: 20,
-  },
-  codeCopyHint: {
-    color: '#64748b',
-    fontSize: 11,
-    marginTop: 8,
-    textAlign: 'right',
-    fontStyle: 'italic',
+    padding: 12,
   },
   markdownLink: {
-    color: '#4ea3ff',
-    textDecorationLine: 'underline',
+    color: '#fbbf24',
+    textDecorationLine: 'none',
   },
   copyFeedback: {
     position: 'absolute',
@@ -812,7 +1061,7 @@ const styles = StyleSheet.create({
   typingDot: { color: '#8899aa', fontSize: 20, letterSpacing: 2, lineHeight: 22 },
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     paddingHorizontal: 8,
     paddingTop: 8,
     paddingBottom: 8,
@@ -891,15 +1140,27 @@ const styles = StyleSheet.create({
   mediaOptionText: { color: '#e0e0e0', fontSize: 14 },
   inputPill: {
     flex: 1,
-    height: 48,
+    minHeight: 48,
+    maxHeight: 132,
     borderRadius: 24,
     backgroundColor: '#1a1a2e',
     borderWidth: 1,
     borderColor: '#2a2a3e',
     justifyContent: 'center',
     paddingHorizontal: 16,
+    paddingVertical: 7,
   },
-  input: { color: '#e0e0e0', fontSize: 15, padding: 0 },
+  input: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    color: '#e0e0e0',
+    fontSize: 15,
+    lineHeight: 20,
+    maxHeight: INPUT_MAX_HEIGHT,
+    minHeight: INPUT_MIN_HEIGHT,
+    padding: 0,
+    textAlignVertical: 'top',
+  },
   sendButton: {
     width: 40,
     height: 40,

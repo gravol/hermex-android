@@ -1,6 +1,6 @@
 /**
  * Hermes API client — connects directly to the Hermes API server (port 8650).
- * Uses stateful /v1/responses with previous_response_id for continuity.
+ * Uses stateful /v1/runs with SSE event streaming and approval support.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,7 @@ import { API_PORT, API_KEY, TAILSCALE_HOST } from '../config';
 import { detectNetwork, NetworkInfo } from '../utils/network';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny';
 
 export const HERMES_SESSION_STORAGE_KEY = 'hermes_session_id';
 export const HERMES_API_SESSION_STORAGE_KEY = 'hermes_api_session_id';
@@ -16,7 +17,18 @@ type MessageHandler = (data: any) => void;
 type StatusHandler = (status: ConnectionStatus) => void;
 
 export interface ModelsResponse {
-  data?: Array<{ id?: string; [key: string]: any }>;
+  data?: Array<{ id?: string; name?: string; provider?: string; [key: string]: any }>;
+  [key: string]: any;
+}
+
+export interface ApprovalRequest {
+  id?: string;
+  run_id?: string;
+  command?: string;
+  tool?: string;
+  description?: string;
+  reason?: string;
+  requires_password?: boolean;
   [key: string]: any;
 }
 
@@ -43,7 +55,7 @@ interface ChatMessage {
   content: string;
 }
 
-type ResponsesInput = string | Array<{
+type RunInput = string | Array<{
   role: 'user' | 'assistant' | 'system';
   content: Array<
     | { type: 'input_text'; text: string }
@@ -53,6 +65,8 @@ type ResponsesInput = string | Array<{
 }>;
 
 function extractResponseText(response: any): string {
+  if (typeof response?.content === 'string') return response.content;
+  if (typeof response?.text === 'string') return response.text;
   const content = response?.output?.flatMap((item: any) => item?.content || []) || [];
   return content.map((part: any) => part?.text || '').join('');
 }
@@ -65,7 +79,7 @@ export class HermesAPI {
   private abortController: AbortController | null = null;
   private activeModel = 'Unknown';
   private modelInfo: ModelsResponse | null = null;
-  private lastResponseId: string | null = null;
+  private lastRunId: string | null = null;
   private currentApiSessionId: string | null = null;
   private _networkInfo: NetworkInfo | null = null;
   private _lastError: string | null = null;
@@ -87,39 +101,42 @@ export class HermesAPI {
     this.statusHandlers.forEach(h => h(s));
   }
 
+  private getBaseUrl(host: string) {
+    return `http://${host}:${API_PORT}`;
+  }
+
   async connect(host: string) {
     this.setStatus('connecting');
-    
+
     try {
-      const [storedResponseId, storedApiSessionId] = await Promise.all([
+      const [storedRunId, storedApiSessionId] = await Promise.all([
         AsyncStorage.getItem(HERMES_SESSION_STORAGE_KEY),
         AsyncStorage.getItem(HERMES_API_SESSION_STORAGE_KEY),
       ]);
-      this.lastResponseId = storedResponseId;
+      this.lastRunId = storedRunId;
       this.currentApiSessionId = storedApiSessionId;
 
-      // Store which host we're connecting to
       this._networkInfo = {
         host,
         type: host === TAILSCALE_HOST ? 'tailscale' : host === '192.168.68.105' ? 'local' : 'unknown',
       };
 
-      const resp = await fetch(`http://${host}:${API_PORT}/v1/models`, {
+      const resp = await fetch(`${this.getBaseUrl(host)}/v1/models`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${API_KEY}`,
         },
         signal: AbortSignal.timeout(8000),
       });
-      
+
       if (resp.ok) {
         const modelInfo: ModelsResponse = await resp.json();
         this.modelInfo = modelInfo;
-        this.activeModel = modelInfo.data?.[0]?.id || 'Unknown';
+        this.activeModel = modelInfo.data?.[0]?.id || 'hermes-agent';
         this.setStatus('connected');
         this.emit({
           type: 'connected',
-          content: this.lastResponseId ? 'Connected to Hermes API (session resumed)' : 'Connected to Hermes API',
+          content: this.currentApiSessionId || this.lastRunId ? 'Connected to Hermes API (session resumed)' : 'Connected to Hermes API',
         });
         this.emitSessionUpdated();
 
@@ -134,7 +151,6 @@ export class HermesAPI {
       this._lastError = e instanceof Error ? e.message : String(e);
       this._networkInfo = null;
       this.setStatus('error');
-      // Retry after 3 seconds
       setTimeout(() => this.connect(host), 3000);
     }
   }
@@ -143,16 +159,41 @@ export class HermesAPI {
     return this.activeModel;
   }
 
+  setActiveModel(model: string) {
+    this.activeModel = model;
+    this.emit({ type: 'model_updated', model });
+  }
+
   getModelInfo(): ModelsResponse | null {
     return this.modelInfo;
   }
 
+  async fetchModels(): Promise<ModelsResponse> {
+    const net = await detectNetwork();
+    const resp = await fetch(`${this.getBaseUrl(net.host)}/v1/models`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${API_KEY}` },
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Failed to fetch models (${resp.status}): ${errText.slice(0, 200)}`);
+    }
+
+    const modelInfo: ModelsResponse = await resp.json();
+    this.modelInfo = modelInfo;
+    if (!this.activeModel || this.activeModel === 'Unknown') {
+      this.activeModel = modelInfo.data?.[0]?.id || 'hermes-agent';
+    }
+    return modelInfo;
+  }
+
   getLastResponseId(): string | null {
-    return this.lastResponseId;
+    return this.lastRunId;
   }
 
   getCurrentSessionId(): string | null {
-    return this.lastResponseId;
+    return this.currentApiSessionId || this.lastRunId;
   }
 
   getCurrentApiSessionId(): string | null {
@@ -167,10 +208,10 @@ export class HermesAPI {
     this.setStatus('disconnected');
   }
 
-  private async persistResponseId(responseId: string | null) {
-    this.lastResponseId = responseId;
-    if (responseId) {
-      await AsyncStorage.setItem(HERMES_SESSION_STORAGE_KEY, responseId);
+  private async persistRunId(runId: string | null) {
+    this.lastRunId = runId;
+    if (runId) {
+      await AsyncStorage.setItem(HERMES_SESSION_STORAGE_KEY, runId);
     } else {
       await AsyncStorage.removeItem(HERMES_SESSION_STORAGE_KEY);
     }
@@ -190,21 +231,19 @@ export class HermesAPI {
   private emitSessionUpdated() {
     this.emit({
       type: 'session_updated',
-      sessionId: this.lastResponseId,
+      sessionId: this.lastRunId,
       apiSessionId: this.currentApiSessionId,
     });
   }
 
-  private async buildResponsesBody(input: ResponsesInput, stream: boolean) {
+  private async buildRunBody(input: RunInput) {
     const body: Record<string, any> = {
-      model: 'hermes-agent',
+      model: this.activeModel && this.activeModel !== 'Unknown' ? this.activeModel : 'hermes-agent',
       input,
-      stream,
     };
 
-    if (this.lastResponseId) {
-      body.previous_response_id = this.lastResponseId;
-    }
+    if (this.currentApiSessionId) body.session_id = this.currentApiSessionId;
+    if (this.lastRunId) body.previous_run_id = this.lastRunId;
 
     return body;
   }
@@ -220,115 +259,168 @@ export class HermesAPI {
         await this.persistApiSessionId(latestApiSession.id);
       }
     } catch {
-      // Session metadata is best-effort; previous_response_id is the source of truth for resume.
+      // Session metadata is best-effort.
     }
   }
 
-  private async sendResponsesInput(input: ResponsesInput, historyContent: string) {
+  private async createRun(input: RunInput): Promise<{ runId: string; sessionId: string | null }> {
+    const net = await detectNetwork();
+    const resp = await fetch(`${this.getBaseUrl(net.host)}/v1/runs`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(await this.buildRunBody(input)),
+      signal: this.abortController?.signal,
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`API error ${resp.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const json = await resp.json();
+    const runId = json?.id || json?.run_id || json?.run?.id;
+    if (!runId) throw new Error('Run creation response did not include a run id');
+
+    const sessionId = json?.session_id || json?.session?.id || json?.run?.session_id || null;
+    return { runId, sessionId };
+  }
+
+  private parseSseBlock(block: string): { event: string; data: string } | null {
+    let event = 'message';
+    const dataLines: string[] = [];
+
+    block.split(/\r?\n/).forEach(line => {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+    });
+
+    if (!dataLines.length) return null;
+    return { event, data: dataLines.join('\n') };
+  }
+
+  private extractEventText(eventName: string, chunk: any): string {
+    if (typeof chunk?.delta === 'string') return chunk.delta;
+    if (typeof chunk?.text === 'string') return chunk.text;
+    if (typeof chunk?.data?.delta === 'string') return chunk.data.delta;
+    if (typeof chunk?.data?.text === 'string') return chunk.data.text;
+    if (typeof chunk?.choices?.[0]?.delta?.content === 'string') return chunk.choices[0].delta.content;
+    if (typeof chunk?.content === 'string' && /delta|chunk|text|message/.test(eventName)) return chunk.content;
+    if (chunk?.type === 'response.output_text.delta' && typeof chunk?.delta === 'string') return chunk.delta;
+    return '';
+  }
+
+  private extractApprovalRequest(runId: string, payload: any): ApprovalRequest {
+    const request = payload?.approval || payload?.request || payload?.data || payload || {};
+    return {
+      ...request,
+      id: request?.id || payload?.approval_id || payload?.id,
+      run_id: request?.run_id || payload?.run_id || runId,
+      command: request?.command || request?.tool_input?.command || request?.arguments?.command || request?.cmd,
+      tool: request?.tool || request?.tool_name || payload?.tool,
+      description: request?.description || request?.message || payload?.message,
+      reason: request?.reason || payload?.reason,
+      requires_password: Boolean(request?.requires_password || request?.requiresPassword),
+    };
+  }
+
+  private async streamRunEvents(runId: string) {
+    const net = await detectNetwork();
+    const resp = await fetch(`${this.getBaseUrl(net.host)}/v1/runs/${encodeURIComponent(runId)}/events`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Accept': 'text/event-stream',
+      },
+      signal: this.abortController?.signal,
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Run event stream error ${resp.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const reader = resp.body?.getReader();
+    if (!reader) throw new Error('No event stream body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+    let finished = false;
+
+    const finishResponse = async () => {
+      if (finished) return;
+      finished = true;
+      if (fullText) this.history.push({ role: 'assistant', content: fullText });
+      await this.persistRunId(runId);
+      await this.refreshCurrentApiSessionId();
+      this.emit({ type: 'response_end', content: fullText, runId });
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      buffer = blocks.pop() || '';
+
+      for (const block of blocks) {
+        const parsed = this.parseSseBlock(block);
+        if (!parsed) continue;
+        if (parsed.data === '[DONE]') {
+          await finishResponse();
+          return;
+        }
+
+        let chunk: any = parsed.data;
+        try { chunk = JSON.parse(parsed.data); } catch { /* plain-text SSE data */ }
+        const eventName = typeof chunk === 'string' ? parsed.event : (chunk?.type || parsed.event);
+
+        if (typeof chunk !== 'string' && (chunk?.session_id || chunk?.session?.id || chunk?.run?.session_id)) {
+          await this.persistApiSessionId(chunk.session_id || chunk.session?.id || chunk.run?.session_id);
+        }
+
+        if (eventName === 'approval.request') {
+          this.emit({ type: 'approval_request', request: this.extractApprovalRequest(runId, chunk), runId });
+          continue;
+        }
+
+        const delta = typeof chunk === 'string' ? (parsed.event === 'message' ? chunk : '') : this.extractEventText(eventName, chunk);
+        if (delta) {
+          fullText += delta;
+          this.emit({ type: 'response_chunk', content: delta, runId });
+        }
+
+        if (/completed|done|finished|failed|cancelled|canceled/.test(eventName)) {
+          if (!fullText && typeof chunk !== 'string') fullText = extractResponseText(chunk.response || chunk);
+          await finishResponse();
+          return;
+        }
+      }
+    }
+
+    await finishResponse();
+  }
+
+  private async sendRunInput(input: RunInput, historyContent: string) {
     if (this._status !== 'connected') return;
     if (!historyContent.trim()) return;
 
-    // Keep a lightweight local history only for UI/error recovery. Server-side continuity uses previous_response_id.
     this.history.push({ role: 'user', content: historyContent });
 
     this.abortController?.abort();
     this.abortController = new AbortController();
 
-    const net = await detectNetwork();
-    const url = `http://${net.host}:${API_PORT}/v1/responses`;
-
     this.emit({ type: 'status', content: 'thinking' });
 
     try {
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(await this.buildResponsesBody(input, true)),
-        signal: this.abortController.signal,
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        this.emit({ type: 'error', content: `API error ${resp.status}: ${errText.slice(0, 200)}` });
-        this.history.pop();
-        return;
-      }
-
-      const reader = resp.body?.getReader();
-      if (!reader) {
-        this.emit({ type: 'error', content: 'No response body' });
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let fullText = '';
-      let responseId: string | null = null;
-
-      const finishResponse = async () => {
-        if (fullText) {
-          this.history.push({ role: 'assistant', content: fullText });
-        }
-        if (responseId) {
-          await this.persistResponseId(responseId);
-          await this.refreshCurrentApiSessionId();
-        }
-        this.emit({ type: 'response_end', content: fullText });
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';  // Keep incomplete line in buffer
-        
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          
-          const data = trimmed.slice(6);
-          if (data === '[DONE]') {
-            await finishResponse();
-            return;
-          }
-          
-          try {
-            const chunk = JSON.parse(data);
-
-            if (chunk?.response?.id) {
-              responseId = chunk.response.id;
-            } else if (chunk?.id && typeof chunk.id === 'string') {
-              responseId = chunk.id;
-            }
-
-            const delta = chunk.type === 'response.output_text.delta'
-              ? chunk.delta
-              : chunk.choices?.[0]?.delta?.content;
-
-            if (delta) {
-              fullText += delta;
-              this.emit({ type: 'response_chunk', content: delta });
-            }
-
-            if (chunk.type === 'response.completed') {
-              const completedId = chunk.response?.id;
-              if (completedId) responseId = completedId;
-              if (!fullText) fullText = extractResponseText(chunk.response);
-            }
-          } catch {
-            // Skip malformed JSON
-          }
-        }
-      }
-
-      // If stream ended without [DONE]
-      await finishResponse();
-
+      const { runId, sessionId } = await this.createRun(input);
+      await this.persistRunId(runId);
+      if (sessionId) await this.persistApiSessionId(sessionId);
+      await this.streamRunEvents(runId);
     } catch (e: any) {
       if (e.name !== 'AbortError') {
         this.emit({ type: 'error', content: `Network error: ${e.message}` });
@@ -338,13 +430,13 @@ export class HermesAPI {
   }
 
   async sendMessage(content: string) {
-    await this.sendResponsesInput(content, content);
+    await this.sendRunInput(content, content);
   }
 
   async sendImage(base64: string, mimeType: string = 'image/jpeg') {
     const sanitizedBase64 = base64.replace(/^data:[^;]+;base64,/, '');
     const imageUrl = `data:${mimeType};base64,${sanitizedBase64}`;
-    const input: ResponsesInput = [{
+    const input: RunInput = [{
       role: 'user',
       content: [
         { type: 'input_text', text: 'Look at this image' },
@@ -352,7 +444,7 @@ export class HermesAPI {
       ],
     }];
 
-    await this.sendResponsesInput(input, 'Look at this image');
+    await this.sendRunInput(input, 'Look at this image');
   }
 
   async sendAudio(base64Audio: string, mimeType: string = 'audio/mp4', prompt: string = 'Voice note') {
@@ -361,7 +453,7 @@ export class HermesAPI {
       : mimeType.includes('wav') ? 'wav'
       : mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3'
       : 'mp4';
-    const input: ResponsesInput = [{
+    const input: RunInput = [{
       role: 'user',
       content: [
         { type: 'input_text', text: 'Transcribe and respond to this voice note.' },
@@ -369,34 +461,50 @@ export class HermesAPI {
       ],
     }];
 
-    await this.sendResponsesInput(input, `🎤 ${prompt}`);
+    await this.sendRunInput(input, `🎤 ${prompt}`);
   }
 
-  async sendHiddenMessage(content: string): Promise<string> {
-    if (!content.trim()) return '';
-
+  async submitApproval(runId: string, choice: ApprovalChoice, approvalId?: string, password?: string) {
     const net = await detectNetwork();
-    const resp = await fetch(`http://${net.host}:${API_PORT}/v1/responses`, {
+    const resp = await fetch(`${this.getBaseUrl(net.host)}/v1/runs/${encodeURIComponent(runId)}/approval`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(await this.buildResponsesBody(content, false)),
+      body: JSON.stringify({ choice, approval_id: approvalId, password }),
     });
 
     if (!resp.ok) {
       const errText = await resp.text();
-      throw new Error(`API error ${resp.status}: ${errText.slice(0, 200)}`);
+      throw new Error(`Approval failed (${resp.status}): ${errText.slice(0, 200)}`);
     }
 
-    const response = await resp.json();
-    if (response?.id) {
-      await this.persistResponseId(response.id);
-      await this.refreshCurrentApiSessionId();
+    this.emit({ type: 'approval_submitted', choice, runId });
+  }
+
+  async sendHiddenMessage(content: string): Promise<string> {
+    if (!content.trim()) return '';
+
+    this.abortController?.abort();
+    this.abortController = new AbortController();
+
+    const { runId, sessionId } = await this.createRun(content);
+    await this.persistRunId(runId);
+    if (sessionId) await this.persistApiSessionId(sessionId);
+
+    let result = '';
+    const unsub = this.onMessage(data => {
+      if (data.runId === runId && data.type === 'response_chunk') result += data.content;
+    });
+
+    try {
+      await this.streamRunEvents(runId);
+    } finally {
+      unsub();
     }
 
-    return extractResponseText(response);
+    return result;
   }
 
   async listSessions(): Promise<SessionListItem[]> {
@@ -431,7 +539,6 @@ export class HermesAPI {
       return Array.isArray(json?.data) ? json.data : [];
     }
 
-    // Fallback for servers that expose only the session list/preview.
     const sessions = await this.listSessions();
     const preview = sessions.find(session => session.id === sessionId || session.preview === sessionId);
     if (preview?.preview) {
@@ -450,7 +557,7 @@ export class HermesAPI {
 
   async resetConversation() {
     this.history = [];
-    await this.persistResponseId(null);
+    await this.persistRunId(null);
     await this.persistApiSessionId(null);
     this.emit({ type: 'status', content: 'Conversation reset' });
   }
@@ -474,7 +581,6 @@ export class HermesAPI {
   }
 }
 
-// Singleton
 let _instance: HermesAPI | null = null;
 export function getHermesAPI(): HermesAPI {
   if (!_instance) {
