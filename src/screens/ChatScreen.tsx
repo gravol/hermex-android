@@ -2,10 +2,11 @@
  * Chat screen — talk to Hermes via the API server (HTTP streaming, port 8650).
  * Full tools, memory, skills, streaming — no bridge needed.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, AppState, Animated, Image,
+  Keyboard, useWindowDimensions, type KeyboardEvent,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { getHermesAPI, ConnectionStatus } from '../services/api';
@@ -62,6 +63,33 @@ const formatDateSeparator = (timestamp: number) => {
   });
 };
 
+const useAndroidKeyboardInset = (windowHeight: number) => {
+  const [keyboardInset, setKeyboardInset] = useState(0);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+
+    const calculateInset = (event: KeyboardEvent) => {
+      const { height, screenY } = event.endCoordinates;
+      const insetFromScreenY = screenY > 0 ? Math.max(0, windowHeight - screenY) : 0;
+      // Android 15/16 edge-to-edge devices can report a non-resized window even
+      // with adjustResize. Prefer the native keyboard height, but keep the
+      // screenY-derived fallback for devices that report more accurate insets.
+      setKeyboardInset(Math.max(height || 0, insetFromScreenY));
+    };
+
+    const showSubscription = Keyboard.addListener('keyboardDidShow', calculateInset);
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => setKeyboardInset(0));
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [windowHeight]);
+
+  return keyboardInset;
+};
+
 const EMOJI_CATEGORIES = [
   {
     name: 'Smileys',
@@ -94,6 +122,22 @@ const EMOJI_CATEGORIES = [
 ];
 
 export default function ChatScreen() {
+  const { height: windowHeight } = useWindowDimensions();
+  const androidKeyboardInset = useAndroidKeyboardInset(windowHeight);
+  const androidKeyboardSpacer = Platform.OS === 'android' ? androidKeyboardInset : 0;
+  const keyboardAwareMessageContainerStyle = useMemo(() => [
+    styles.messageContainer,
+    androidKeyboardSpacer > 0 ? { paddingBottom: androidKeyboardSpacer + 16 } : null,
+  ], [androidKeyboardSpacer]);
+  const keyboardAwareInputBarStyle = useMemo(() => [
+    styles.inputBar,
+    androidKeyboardSpacer > 0 ? { marginBottom: androidKeyboardSpacer } : null,
+  ], [androidKeyboardSpacer]);
+  const keyboardAwareMediaOptionsStyle = useMemo(() => [
+    styles.mediaOptions,
+    androidKeyboardSpacer > 0 ? { bottom: androidKeyboardSpacer + 60 } : null,
+  ], [androidKeyboardSpacer]);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
@@ -441,10 +485,8 @@ export default function ChatScreen() {
     </View>
   );
 
-  return (
-    <KeyboardAvoidingView style={styles.container}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'android' ? -200 : 0}>
+  const content = (
+    <>
       <View style={styles.statusBar}>
         <Text style={[styles.statusDot, {
           color: status === 'connected' ? '#4caf50' : status === 'connecting' ? '#ff9800' : '#f44336'
@@ -459,7 +501,7 @@ export default function ChatScreen() {
         data={messages} renderItem={renderMessage}
         keyExtractor={item => item.id}
         style={styles.messageList}
-        contentContainerStyle={styles.messageContainer}
+        contentContainerStyle={keyboardAwareMessageContainerStyle}
         onTouchStart={closeEmojiPicker}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()} />
 
@@ -470,7 +512,7 @@ export default function ChatScreen() {
       {showEmoji && renderEmojiPicker()}
 
       {showMediaOptions && (
-        <View style={styles.mediaOptions}>
+        <View style={keyboardAwareMediaOptionsStyle}>
           <TouchableOpacity style={styles.mediaOption} onPress={() => handlePickImage('camera')}>
             <Text style={styles.mediaOptionText}>📷 Camera</Text>
           </TouchableOpacity>
@@ -488,7 +530,7 @@ export default function ChatScreen() {
         onRecordingComplete={handleVoiceComplete}
         onCancel={() => setShowVoiceRecorder(false)} />
 
-      <View style={styles.inputBar}>
+      <View style={keyboardAwareInputBarStyle}>
         <TouchableOpacity style={styles.mediaButton}
           onPress={() => { setShowEmoji(false); setShowMediaOptions(prev => !prev); }}>
           <Text style={styles.mediaButtonText}>➕</Text>
@@ -512,8 +554,18 @@ export default function ChatScreen() {
           <Text style={[styles.sendText, !input.trim() && styles.sendTextDisabled]}>➤</Text>
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </>
   );
+
+  if (Platform.OS === 'ios') {
+    return (
+      <KeyboardAvoidingView style={styles.container} behavior="padding" keyboardVerticalOffset={0}>
+        {content}
+      </KeyboardAvoidingView>
+    );
+  }
+
+  return <View style={styles.container}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
