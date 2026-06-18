@@ -329,8 +329,14 @@ export default function ChatScreen() {
   const { height: windowHeight } = useWindowDimensions();
   const androidKeyboardInset = useAndroidKeyboardInset(windowHeight);
   const androidKeyboardSpacer = Platform.OS === 'android' ? androidKeyboardInset : 0;
-  const keyboardAwareMessageContainerStyle = styles.messageContainer;
-  const keyboardAwareInputBarStyle = styles.inputBar;
+  const keyboardAwareMessageContainerStyle = useMemo(() => [
+    styles.messageContainer,
+    androidKeyboardSpacer > 0 ? { paddingBottom: androidKeyboardSpacer + 16 } : null,
+  ], [androidKeyboardSpacer]);
+  const keyboardAwareInputBarStyle = useMemo(() => [
+    styles.inputBar,
+    androidKeyboardSpacer > 0 ? { marginBottom: androidKeyboardSpacer } : null,
+  ], [androidKeyboardSpacer]);
   const keyboardAwareMediaOptionsStyle = useMemo(() => [
     styles.mediaOptions,
     androidKeyboardSpacer > 0 ? { bottom: androidKeyboardSpacer + 60 } : null,
