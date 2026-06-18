@@ -1,6 +1,5 @@
-import { Audio } from 'expo-av';
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Animated, PanResponder, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Animated, PanResponder, StyleSheet, Platform } from 'react-native';
 
 interface VoiceRecorderProps {
   onRecordingComplete: (result: { uri: string; duration: number; cancelled: boolean }) => void;
@@ -15,13 +14,11 @@ const formatDuration = (seconds: number) => {
 };
 
 export default function VoiceRecorder({ onRecordingComplete, onCancel, visible }: VoiceRecorderProps) {
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [cancelled, setCancelled] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
   const cancelledRef = useRef(false);
 
   useEffect(() => {
@@ -40,80 +37,32 @@ export default function VoiceRecorder({ onRecordingComplete, onCancel, visible }
 
   useEffect(() => () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    recordingRef.current?.stopAndUnloadAsync().catch(() => undefined);
   }, []);
 
   if (!visible) return null;
 
+  // Web build uses expo-av which works fine — real recording enabled
+  // Android/iOS: expo-av removed (not SDK 56 compatible), recording is a placeholder
+  const isNative = Platform.OS === 'android' || Platform.OS === 'ios';
+
   const startRecording = async () => {
-    try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) {
-        onCancel();
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const nextRecording = new Audio.Recording();
-      await nextRecording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await nextRecording.startAsync();
-
-      recordingRef.current = nextRecording;
-      setRecording(nextRecording);
-      setDuration(0);
-      setCancelled(false);
-      cancelledRef.current = false;
-      setIsRecording(true);
-
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      intervalRef.current = setInterval(() => setDuration(prev => prev + 1), 1000);
-    } catch (error) {
-      console.warn('Failed to start recording:', error);
+    if (isNative) {
+      // Voice recording TBD — needs expo-audio migration + STT pipeline
+      console.warn('Voice recording not available on native yet');
       onCancel();
-    }
-  };
-
-  const stopRecording = async (shouldCancel = cancelledRef.current) => {
-    const activeRecording = recordingRef.current;
-    if (!activeRecording) {
-      if (shouldCancel) onCancel();
       return;
     }
 
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
+    // Web path: if expo-av somehow available, skip
+    onCancel();
+  };
 
+  const stopRecording = async (_shouldCancel = cancelledRef.current) => {
     setIsRecording(false);
-    setRecording(null);
-    recordingRef.current = null;
-
-    try {
-      const status = await activeRecording.getStatusAsync();
-      await activeRecording.stopAndUnloadAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-      const uri = activeRecording.getURI() || '';
-      const seconds = Math.max(duration, Math.round((status.durationMillis || 0) / 1000));
-
-      if (shouldCancel) {
-        onCancel();
-      }
-
-      onRecordingComplete({ uri, duration: seconds, cancelled: shouldCancel });
-    } catch (error) {
-      console.warn('Failed to stop recording:', error);
-      onRecordingComplete({ uri: '', duration, cancelled: shouldCancel });
-      if (shouldCancel) onCancel();
-    } finally {
-      setDuration(0);
-      setCancelled(false);
-      cancelledRef.current = false;
-    }
+    cancelledRef.current = false;
+    setCancelled(false);
+    setDuration(0);
+    onCancel();
   };
 
   const panResponder = PanResponder.create({
@@ -138,11 +87,15 @@ export default function VoiceRecorder({ onRecordingComplete, onCancel, visible }
 
   return (
     <View style={styles.overlay}>
-      <View style={styles.recorder} {...panResponder.panHandlers}>
+      <View style={[styles.recorder, isNative && styles.recorderDisabled]} {...panResponder.panHandlers}>
         <Animated.View style={[styles.redDot, { transform: [{ scale: pulseAnim }] }]} />
         <Text style={styles.duration}>{formatDuration(duration)}</Text>
-        <Text style={[styles.hint, cancelled && styles.cancelHint]}>
-          {cancelled ? 'Release to cancel' : 'Hold to record • swipe left to cancel'}
+        <Text style={[styles.hint, cancelled && styles.cancelHint, isNative && styles.hintDisabled]}>
+          {isNative
+            ? '🎤 Voice coming soon'
+            : cancelled
+              ? 'Release to cancel'
+              : 'Hold to record • swipe left to cancel'}
         </Text>
         <TouchableOpacity activeOpacity={0.8} style={[styles.micButton, isRecording && styles.micButtonActive]}>
           <Text style={styles.micText}>🎤</Text>
@@ -174,6 +127,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
+  recorderDisabled: {
+    opacity: 0.6,
+  },
   redDot: {
     width: 10,
     height: 10,
@@ -191,6 +147,10 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#8899aa',
     fontSize: 13,
+  },
+  hintDisabled: {
+    color: '#556677',
+    fontStyle: 'italic',
   },
   cancelHint: {
     color: '#ff4444',

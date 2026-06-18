@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, FlatList,
+  View, Text, TextInput, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, AppState, Animated, Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -62,6 +62,37 @@ const formatDateSeparator = (timestamp: number) => {
   });
 };
 
+const EMOJI_CATEGORIES = [
+  {
+    name: 'Smileys',
+    emojis: ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😌', '😍', '🥰', '😘', '😗', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😔', '😪', '😴', '🤤', '😷', '🤒', '🤕', '🤢', '🤮', '🥴', '😵', '🤯', '🥳']
+  },
+  {
+    name: 'Gestures',
+    emojis: ['👍', '👎', '👊', '✊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✌️', '🤟', '🤘', '👌', '😎', '💪', '🖕', '✋', '🤚', '👋', '🤙', '💅', '👀', '🫡', '🫶']
+  },
+  {
+    name: 'Hearts',
+    emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💕', '💞', '💗', '💖', '💘', '💝', '❣️', '💟', '♥️', '💌', '💋']
+  },
+  {
+    name: 'Nature',
+    emojis: ['☀️', '🌤️', '⛅', '🌧️', '⛈️', '🌨️', '❄️', '🔥', '💧', '🌊', '🌈', '☁️', '🌪️', '🌫️', '☂️', '🌺', '🌸', '🌻', '🌹', '🌷', '🌿', '🍀', '🌵', '🌲', '🌳', '🍄', '⭐', '🌟', '✨', '💫', '⚡']
+  },
+  {
+    name: 'Food',
+    emojis: ['🍎', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥝', '🍆', '🥑', '🥦', '🥬', '🥒', '🌽', '🥕', '🧅', '🥔', '🍞', '🧀', '🍔', '🍟', '🌭', '🍕', '🥪', '🥙', '🌮', '🌯', '🥗', '🥘', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🍚', '🍙', '🍘', '🍢', '🍡', '🍧', '🍨', '🍦', '🎂', '🍰', '🧁', '🍫', '🍬', '🍭', '🍩', '🍪', '☕', '🍵', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸']
+  },
+  {
+    name: 'Travel',
+    emojis: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚲', '🛴', '🏍️', '✈️', '🚀', '🛸', '🚁', '⛵', '🚢', '⚓', '🗺️', '🏔️', '🏖️', '🏜️', '🏝️']
+  },
+  {
+    name: 'Objects',
+    emojis: ['💡', '🔦', '🕯️', '📱', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '💾', '💿', '📷', '🎥', '🎧', '🎤', '📚', '📌', '✏️', '📝', '📦', '🔑', '🔒', '🔧', '🔨', '⚙️', '🧰', '🎁', '🛒']
+  }
+];
+
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -69,6 +100,9 @@ export default function ChatScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const [showMediaOptions, setShowMediaOptions] = useState(false);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [historyLoadTrigger, setHistoryLoadTrigger] = useState(0);
   const [dot1] = useState(new Animated.Value(0));
   const [dot2] = useState(new Animated.Value(0));
   const [dot3] = useState(new Animated.Value(0));
@@ -76,6 +110,7 @@ export default function ChatScreen() {
   const inputRef = useRef<TextInput>(null);
   const appStateRef = useRef(AppState.currentState);
   const assistantResponseRef = useRef('');
+  const historyLoadedSessionRef = useRef<string | null>(null);
   const api = getHermesAPI();
 
   useEffect(() => {
@@ -124,16 +159,54 @@ export default function ChatScreen() {
           break;
         case 'connected':
           addMessage('system', 'Connected to Hermes');
+          setHistoryLoadTrigger(prev => prev + 1);
           break;
       }
     });
 
     const unsubStatus = api.onStatus(setStatus);
+    setStatus(api.status);
+    if (api.status === 'connected') {
+      setHistoryLoadTrigger(prev => prev + 1);
+    }
     return () => {
       unsub();
       unsubStatus();
     };
   }, []);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (status !== 'connected') return;
+      const sessionId = api.getCurrentApiSessionId();
+      const lastResponseId = api.getLastResponseId();
+      if (!sessionId && !lastResponseId) return;
+      if (!sessionId || historyLoadedSessionRef.current === sessionId) return;
+
+      try {
+        const messages = await api.loadSessionMessages(sessionId);
+        if (messages.length > 0) {
+          const converted: Message[] = messages.map((m, index) => {
+            const timestamp = m.timestamp || Date.now();
+            return {
+              id: String(m.id || `${timestamp}-${index}`),
+              role: m.role === 'user' ? 'user' : (m.role === 'assistant' ? 'assistant' : 'system'),
+              content: m.content || '',
+              timestamp: timestamp < 1000000000000 ? timestamp * 1000 : timestamp,
+            };
+          });
+          const visibleMessages = converted.filter(m => m.role === 'user' || m.role === 'assistant');
+          setMessages(visibleMessages);
+          requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated: false }));
+        }
+        historyLoadedSessionRef.current = sessionId;
+      } catch {
+        // Silent fail — history is best-effort
+      }
+    };
+
+    loadHistory();
+  }, [status, historyLoadTrigger]);
 
   useEffect(() => {
     if (isTyping) {
@@ -191,6 +264,48 @@ export default function ChatScreen() {
     setInput(cmd + ' ');
   };
 
+  const insertEmoji = (emoji: string) => {
+    const start = Math.min(selection.start, input.length);
+    const end = Math.min(selection.end, input.length);
+    const nextInput = `${input.slice(0, start)}${emoji}${input.slice(end)}`;
+    const nextCursor = start + emoji.length;
+    setInput(nextInput);
+    setSelection({ start: nextCursor, end: nextCursor });
+    setShowEmoji(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const renderEmojiPicker = () => (
+    <View style={styles.emojiContainer}>
+      <ScrollView keyboardShouldPersistTaps="handled">
+        {EMOJI_CATEGORIES.map(category => (
+          <View key={category.name}>
+            <Text style={styles.emojiCategoryTitle}>{category.name}</Text>
+            <View style={styles.emojiRow}>
+              {category.emojis.map((emoji, index) => (
+                <TouchableOpacity
+                  key={`${category.name}-${emoji}-${index}`}
+                  style={styles.emojiItem}
+                  onPress={() => insertEmoji(emoji)}>
+                  <Text style={styles.emojiText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const closeEmojiPicker = () => {
+    if (showEmoji) setShowEmoji(false);
+  };
+
+  const toggleEmojiPicker = () => {
+    setShowMediaOptions(false);
+    setShowEmoji(prev => !prev);
+  };
+
   const sendSelectedImage = async (asset: ImagePicker.ImagePickerAsset) => {
     if (!asset.base64) {
       addMessage('error', 'Selected image did not include base64 data.');
@@ -205,6 +320,7 @@ export default function ChatScreen() {
 
   const handlePickImage = async (source: 'camera' | 'gallery') => {
     setShowMediaOptions(false);
+    setShowEmoji(false);
     try {
       if (source === 'camera') {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -343,11 +459,14 @@ export default function ChatScreen() {
         keyExtractor={item => item.id}
         style={styles.messageList}
         contentContainerStyle={styles.messageContainer}
+        onTouchStart={closeEmojiPicker}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()} />
 
       {isTyping && renderTypingIndicator()}
 
       <CommandShortcuts onSelect={handleCommandSelect} />
+
+      {showEmoji && renderEmojiPicker()}
 
       {showMediaOptions && (
         <View style={styles.mediaOptions}>
@@ -357,7 +476,7 @@ export default function ChatScreen() {
           <TouchableOpacity style={styles.mediaOption} onPress={() => handlePickImage('gallery')}>
             <Text style={styles.mediaOptionText}>🖼 Gallery</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.mediaOption} onPress={() => { setShowMediaOptions(false); setShowVoiceRecorder(true); }}>
+          <TouchableOpacity style={styles.mediaOption} onPress={() => { setShowMediaOptions(false); setShowEmoji(false); setShowVoiceRecorder(true); }}>
             <Text style={styles.mediaOptionText}>🎤 Voice</Text>
           </TouchableOpacity>
         </View>
@@ -370,8 +489,11 @@ export default function ChatScreen() {
 
       <View style={styles.inputBar}>
         <TouchableOpacity style={styles.mediaButton}
-          onPress={() => setShowMediaOptions(prev => !prev)}>
+          onPress={() => { setShowEmoji(false); setShowMediaOptions(prev => !prev); }}>
           <Text style={styles.mediaButtonText}>➕</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.emojiButton} onPress={toggleEmojiPicker}>
+          <Text style={styles.emojiButtonText}>😀</Text>
         </TouchableOpacity>
         <View style={styles.inputPill}>
           <TextInput ref={inputRef} style={styles.input}
@@ -379,6 +501,9 @@ export default function ChatScreen() {
             placeholder="Message..." placeholderTextColor="#556677"
             multiline={false} maxLength={4000}
             returnKeyType="send"
+            selection={selection}
+            onSelectionChange={({ nativeEvent }) => setSelection(nativeEvent.selection)}
+            onFocus={closeEmojiPicker}
             onSubmitEditing={handleSend} blurOnSubmit={false} />
         </View>
         <TouchableOpacity style={[styles.sendButton, !input.trim() && styles.sendButtonDisabled]}
@@ -485,6 +610,48 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   mediaButtonText: { fontSize: 20 },
+  emojiContainer: {
+    backgroundColor: '#111128',
+    borderTopWidth: 1,
+    borderTopColor: '#1a1a2e',
+    maxHeight: 200,
+    padding: 8,
+  },
+  emojiCategoryTitle: {
+    color: '#8899aa',
+    fontSize: 12,
+    fontWeight: '600',
+    marginHorizontal: 4,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  emojiRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    marginBottom: 4,
+  },
+  emojiItem: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emojiText: {
+    fontSize: 24,
+  },
+  emojiButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1a1a2e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  emojiButtonText: {
+    fontSize: 20,
+  },
   mediaOptions: {
     flexDirection: 'row',
     position: 'absolute',
