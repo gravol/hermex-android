@@ -34,18 +34,46 @@ function TabIcon({ label }: { label: string; focused: boolean }) {
 export default function App() {
   useEffect(() => {
     let cleanupNotifications: (() => void) | undefined;
+    let isMounted = true;
 
-    setupNotifications().then(cleanup => {
-      cleanupNotifications = cleanup;
-    });
+    const initializeApp = async () => {
+      try {
+        const cleanup = await setupNotifications();
+        if (isMounted) {
+          cleanupNotifications = cleanup;
+        } else {
+          cleanup?.();
+        }
+      } catch (error) {
+        console.warn('Notification initialization failed:', error);
+      }
 
-    detectNetwork().then(info => {
-      getHermesAPI().connect(info.host);
+      try {
+        const info = await detectNetwork();
+        if (isMounted) {
+          await getHermesAPI().connect(info.host);
+        }
+      } catch (error) {
+        console.warn('Hermes API initialization failed:', error);
+      }
+    };
+
+    initializeApp().catch(error => {
+      console.warn('Unexpected app initialization failure:', error);
     });
 
     return () => {
-      cleanupNotifications?.();
-      getHermesAPI().disconnect();
+      isMounted = false;
+      try {
+        cleanupNotifications?.();
+      } catch (error) {
+        console.warn('Notification cleanup failed:', error);
+      }
+      try {
+        getHermesAPI().disconnect();
+      } catch (error) {
+        console.warn('Hermes API disconnect failed:', error);
+      }
     };
   }, []);
 
