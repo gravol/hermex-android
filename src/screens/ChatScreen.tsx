@@ -5,25 +5,74 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  StyleSheet, KeyboardAvoidingView, Platform, AppState,
+  StyleSheet, KeyboardAvoidingView, Platform, AppState, Animated, Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { getHermesAPI, ConnectionStatus } from '../services/api';
 import { showLocalNotification } from '../services/notifications';
 import CommandShortcuts from '../components/CommandShortcuts';
+import VoiceRecorder from '../components/VoiceRecorder';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'error';
   content: string;
   timestamp: number;
+  imageUri?: string;
+  audioUri?: string;
+  audioDuration?: number;
 }
+
+const isSameCalendarDay = (a: number, b: number) => {
+  const first = new Date(a);
+  const second = new Date(b);
+  return first.getFullYear() === second.getFullYear()
+    && first.getMonth() === second.getMonth()
+    && first.getDate() === second.getDate();
+};
+
+const formatTime = (timestamp: number) => (
+  new Date(timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+);
+
+const formatVoiceDuration = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+  return `${mins}:${secs}`;
+};
+
+const formatDateSeparator = (timestamp: number) => {
+  const messageDate = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (isSameCalendarDay(messageDate.getTime(), today.getTime())) {
+    return 'Today';
+  }
+
+  if (isSameCalendarDay(messageDate.getTime(), yesterday.getTime())) {
+    return 'Yesterday';
+  }
+
+  return messageDate.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [isTyping, setIsTyping] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
+  const [showMediaOptions, setShowMediaOptions] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [dot1] = useState(new Animated.Value(0));
+  const [dot2] = useState(new Animated.Value(0));
+  const [dot3] = useState(new Animated.Value(0));
+  const flatListRef = useRef<FlatList<Message>>(null);
   const inputRef = useRef<TextInput>(null);
   const appStateRef = useRef(AppState.currentState);
   const assistantResponseRef = useRef('');
@@ -86,8 +135,44 @@ export default function ChatScreen() {
     };
   }, []);
 
-  const addMessage = (role: Message['role'], content: string) => {
-    setMessages(prev => [...prev, { id: Date.now().toString(), role, content, timestamp: Date.now() }]);
+  useEffect(() => {
+    if (isTyping) {
+      const animate = (dot: Animated.Value, delay: number) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.delay(delay),
+            Animated.timing(dot, { toValue: -4, duration: 300, useNativeDriver: true }),
+            Animated.timing(dot, { toValue: 0, duration: 300, useNativeDriver: true }),
+          ])
+        );
+
+      const animation1 = animate(dot1, 0);
+      const animation2 = animate(dot2, 150);
+      const animation3 = animate(dot3, 300);
+
+      animation1.start();
+      animation2.start();
+      animation3.start();
+
+      return () => {
+        animation1.stop();
+        animation2.stop();
+        animation3.stop();
+        dot1.setValue(0);
+        dot2.setValue(0);
+        dot3.setValue(0);
+      };
+    }
+  }, [isTyping, dot1, dot2, dot3]);
+
+  const addMessage = (role: Message['role'], content: string, media?: Partial<Message>) => {
+    setMessages(prev => [...prev, {
+      id: `${Date.now()}-${prev.length}`,
+      role,
+      content,
+      timestamp: Date.now(),
+      ...media,
+    }]);
   };
 
   const handleSend = () => {
@@ -106,32 +191,139 @@ export default function ChatScreen() {
     setInput(cmd + ' ');
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const sendSelectedImage = async (asset: ImagePicker.ImagePickerAsset) => {
+    if (!asset.base64) {
+      addMessage('error', 'Selected image did not include base64 data.');
+      return;
+    }
+
+    addMessage('user', 'Look at this image', { imageUri: asset.uri });
+    assistantResponseRef.current = '';
+    setIsTyping(true);
+    await api.sendImage(asset.base64, asset.mimeType || 'image/jpeg');
+  };
+
+  const handlePickImage = async (source: 'camera' | 'gallery') => {
+    setShowMediaOptions(false);
+    try {
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          addMessage('error', 'Camera permission denied.');
+          return;
+        }
+      } else {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          addMessage('error', 'Photo library permission denied.');
+          return;
+        }
+      }
+
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
+        quality: 0.7,
+        base64: true,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      };
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync(pickerOptions)
+        : await ImagePicker.launchImageLibraryAsync(pickerOptions);
+
+      if (!result.canceled && result.assets[0]) {
+        await sendSelectedImage(result.assets[0]);
+      }
+    } catch (error: any) {
+      addMessage('error', `Image selection failed: ${error?.message || 'Unknown error'}`);
+      setIsTyping(false);
+    }
+  };
+
+  const handleVoiceComplete = (result: { uri: string; duration: number; cancelled: boolean }) => {
+    setShowVoiceRecorder(false);
+    if (result.cancelled) return;
+
+    const durationLabel = formatVoiceDuration(result.duration);
+    addMessage('user', `🎤 Voice note (${durationLabel})`, {
+      audioUri: result.uri,
+      audioDuration: result.duration,
+    });
+    assistantResponseRef.current = '';
+    setIsTyping(true);
+    api.sendMessage(`🎤 Voice note (${durationLabel})`);
+  };
+
+  const renderDateSeparator = (timestamp: number) => (
+    <View style={styles.dateSeparator}>
+      <Text style={styles.dateSeparatorText}>{formatDateSeparator(timestamp)}</Text>
+    </View>
+  );
+
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isUser = item.role === 'user';
     const isError = item.role === 'error';
     const isSystem = item.role === 'system';
+    const shouldShowDateSeparator = index === 0
+      || !isSameCalendarDay(messages[index - 1].timestamp, item.timestamp);
 
     return (
-      <View style={[
-        styles.bubble,
-        isUser ? styles.userBubble : styles.assistantBubble,
-        isError ? styles.errorBubble : null,
-        isSystem ? styles.systemBubble : null,
-      ]}>
-        {!isUser && !isSystem && (
-          <Text style={styles.roleLabel}>{isError ? '⚠️' : '🤖'}</Text>
-        )}
-        <Text style={[
-          styles.bubbleText,
-          isUser ? styles.userText : styles.assistantText,
-          isError ? styles.errorText : null,
-          isSystem ? styles.systemText : null,
+      <View>
+        {shouldShowDateSeparator && renderDateSeparator(item.timestamp)}
+        <View style={[
+          styles.messageRow,
+          isUser ? styles.userMessageRow : styles.assistantMessageRow,
+          isSystem ? styles.systemMessageRow : null,
         ]}>
-          {item.content}
-        </Text>
+          <View style={[
+            styles.bubble,
+            isUser ? styles.userBubble : styles.assistantBubble,
+            isError ? styles.errorBubble : null,
+            isSystem ? styles.systemBubble : null,
+          ]}>
+            {item.imageUri && (
+              <Image source={{ uri: item.imageUri }}
+                style={styles.chatImage}
+                resizeMode="cover" />
+            )}
+            {item.audioUri ? (
+              <View style={styles.voiceBubble}>
+                <View style={styles.voicePlayButton}>
+                  <Text style={styles.voicePlayText}>▶️</Text>
+                </View>
+                <Text style={styles.voiceWaveform}>▁▃▅▇▅▃▁▂▆▃</Text>
+                <Text style={styles.voiceDuration}>{formatVoiceDuration(item.audioDuration || 0)}</Text>
+              </View>
+            ) : (
+              <Text style={[
+                styles.bubbleText,
+                isUser ? styles.userText : styles.assistantText,
+                isError ? styles.errorText : null,
+                isSystem ? styles.systemText : null,
+              ]}>
+                {item.content}
+              </Text>
+            )}
+          </View>
+          <Text style={[
+            styles.timestamp,
+            isUser ? styles.userTimestamp : styles.assistantTimestamp,
+            isSystem ? styles.systemTimestamp : null,
+          ]}>
+            {formatTime(item.timestamp)}
+          </Text>
+        </View>
       </View>
     );
   };
+
+  const renderTypingIndicator = () => (
+    <View style={styles.typingRow}>
+      <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
+        <Animated.Text style={[styles.typingDot, { transform: [{ translateY: dot1 }] }]}>•</Animated.Text>
+        <Animated.Text style={[styles.typingDot, { transform: [{ translateY: dot2 }] }]}>•</Animated.Text>
+        <Animated.Text style={[styles.typingDot, { transform: [{ translateY: dot3 }] }]}>•</Animated.Text>
+      </View>
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView style={styles.container}
@@ -139,10 +331,10 @@ export default function ChatScreen() {
       <View style={styles.statusBar}>
         <Text style={[styles.statusDot, {
           color: status === 'connected' ? '#4caf50' : status === 'connecting' ? '#ff9800' : '#f44336'
-        }]}>● </Text>
+        }]}>●</Text>
         <Text style={styles.statusText}>
-          {status === 'connected' ? 'Connected' : status === 'connecting' ? 'Connecting...' :
-           status === 'error' ? 'Error' : 'Disconnected'}
+          {status === 'connected' ? 'Online' : status === 'connecting' ? 'Connecting...' :
+           status === 'error' ? 'Connection error' : 'Offline'}
         </Text>
       </View>
 
@@ -153,23 +345,45 @@ export default function ChatScreen() {
         contentContainerStyle={styles.messageContainer}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()} />
 
-      {isTyping && (
-        <View style={styles.typingIndicator}>
-          <Text style={styles.typingText}>Hermes is thinking...</Text>
-        </View>
-      )}
+      {isTyping && renderTypingIndicator()}
 
       <CommandShortcuts onSelect={handleCommandSelect} />
 
+      {showMediaOptions && (
+        <View style={styles.mediaOptions}>
+          <TouchableOpacity style={styles.mediaOption} onPress={() => handlePickImage('camera')}>
+            <Text style={styles.mediaOptionText}>📷 Camera</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.mediaOption} onPress={() => handlePickImage('gallery')}>
+            <Text style={styles.mediaOptionText}>🖼 Gallery</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.mediaOption} onPress={() => { setShowMediaOptions(false); setShowVoiceRecorder(true); }}>
+            <Text style={styles.mediaOptionText}>🎤 Voice</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <VoiceRecorder
+        visible={showVoiceRecorder}
+        onRecordingComplete={handleVoiceComplete}
+        onCancel={() => setShowVoiceRecorder(false)} />
+
       <View style={styles.inputBar}>
-        <TextInput ref={inputRef} style={styles.input}
-          value={input} onChangeText={setInput}
-          placeholder="Message Hermes..." placeholderTextColor="#666"
-          multiline maxLength={4000}
-          onSubmitEditing={handleSend} blurOnSubmit={false} />
+        <TouchableOpacity style={styles.mediaButton}
+          onPress={() => setShowMediaOptions(prev => !prev)}>
+          <Text style={styles.mediaButtonText}>➕</Text>
+        </TouchableOpacity>
+        <View style={styles.inputPill}>
+          <TextInput ref={inputRef} style={styles.input}
+            value={input} onChangeText={setInput}
+            placeholder="Message..." placeholderTextColor="#556677"
+            multiline={false} maxLength={4000}
+            returnKeyType="send"
+            onSubmitEditing={handleSend} blurOnSubmit={false} />
+        </View>
         <TouchableOpacity style={[styles.sendButton, !input.trim() && styles.sendButtonDisabled]}
           onPress={handleSend} disabled={!input.trim()}>
-          <Text style={styles.sendText}>Send</Text>
+          <Text style={[styles.sendText, !input.trim() && styles.sendTextDisabled]}>➤</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -178,27 +392,162 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a1a' },
-  statusBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, backgroundColor: '#111128' },
-  statusDot: { fontSize: 10, marginRight: 6 },
+  statusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    backgroundColor: '#0a0a1a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#151525',
+  },
+  statusDot: { fontSize: 10, marginRight: 8 },
   statusText: { color: '#8899aa', fontSize: 12 },
-  messageList: { flex: 1 },
-  messageContainer: { padding: 12, paddingBottom: 4 },
-  bubble: { maxWidth: '85%', padding: 12, borderRadius: 16, marginBottom: 8 },
-  userBubble: { backgroundColor: '#1a3a5c', alignSelf: 'flex-end', borderBottomRightRadius: 4 },
-  assistantBubble: { backgroundColor: '#111128', alignSelf: 'flex-start', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#1a1a2e' },
-  errorBubble: { backgroundColor: '#2a1010', borderColor: '#5c1a1a' },
-  systemBubble: { backgroundColor: '#1a1a2e', alignSelf: 'center', borderColor: '#B8860B', borderWidth: 0.5 },
-  roleLabel: { fontSize: 10, marginBottom: 2, color: '#666' },
+  messageList: { flex: 1, backgroundColor: '#0a0a1a' },
+  messageContainer: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6 },
+  dateSeparator: {
+    alignSelf: 'center',
+    backgroundColor: '#1a1a2e',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  dateSeparatorText: { color: '#667788', fontSize: 12 },
+  messageRow: { marginBottom: 7 },
+  userMessageRow: { alignItems: 'flex-end' },
+  assistantMessageRow: { alignItems: 'flex-start' },
+  systemMessageRow: { alignItems: 'center' },
+  bubble: {
+    maxWidth: '75%',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+  },
+  userBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#2b5278',
+    borderBottomRightRadius: 4,
+  },
+  assistantBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#1c1c2e',
+    borderBottomLeftRadius: 4,
+  },
+  errorBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#3a1a1a',
+    borderBottomLeftRadius: 4,
+  },
+  systemBubble: {
+    alignSelf: 'center',
+    backgroundColor: 'transparent',
+    maxWidth: '85%',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   bubbleText: { fontSize: 15, lineHeight: 21 },
-  userText: { color: '#e0e8f0' },
-  assistantText: { color: '#d0d8e0' },
+  userText: { color: '#ffffff' },
+  assistantText: { color: '#e0e0e0' },
   errorText: { color: '#ff6b6b' },
-  systemText: { color: '#e0c070', fontSize: 13 },
-  typingIndicator: { paddingHorizontal: 16, paddingVertical: 4 },
-  typingText: { color: '#667788', fontSize: 12, fontStyle: 'italic' },
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 8, paddingVertical: 8, backgroundColor: '#111128', borderTopWidth: 1, borderTopColor: '#1a1a2e' },
-  input: { flex: 1, backgroundColor: '#1a1a2e', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, color: '#e0e0e0', fontSize: 15, maxHeight: 100 },
-  sendButton: { backgroundColor: '#B8860B', borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10, marginLeft: 8 },
-  sendButtonDisabled: { backgroundColor: '#333', opacity: 0.5 },
-  sendText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+  systemText: { color: '#667788', fontSize: 12, lineHeight: 17, textAlign: 'center' },
+  timestamp: { fontSize: 11, color: '#556677', marginTop: 2 },
+  userTimestamp: { textAlign: 'right', alignSelf: 'flex-end' },
+  assistantTimestamp: { textAlign: 'left', alignSelf: 'flex-start' },
+  systemTimestamp: { textAlign: 'center', alignSelf: 'center' },
+  typingRow: { alignItems: 'flex-start', paddingHorizontal: 10, paddingVertical: 4 },
+  typingBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    minWidth: 54,
+  },
+  typingDot: { color: '#8899aa', fontSize: 20, letterSpacing: 2, lineHeight: 22 },
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: '#0a0a1a',
+    borderTopWidth: 1,
+    borderTopColor: '#151525',
+  },
+  mediaButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1a1a2e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  mediaButtonText: { fontSize: 20 },
+  mediaOptions: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: 60,
+    left: 8,
+    right: 8,
+    backgroundColor: '#111128',
+    borderRadius: 12,
+    padding: 8,
+    zIndex: 10,
+  },
+  mediaOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  mediaOptionText: { color: '#e0e0e0', fontSize: 14 },
+  inputPill: {
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  input: { color: '#e0e0e0', fontSize: 15, padding: 0 },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginLeft: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#B8860B',
+  },
+  sendButtonDisabled: { backgroundColor: '#333' },
+  sendText: { color: '#ffffff', fontWeight: 'bold', fontSize: 20, lineHeight: 22, marginLeft: 2 },
+  sendTextDisabled: { color: '#666' },
+  chatImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  voiceBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1c1c2e',
+    padding: 12,
+    borderRadius: 14,
+    gap: 10,
+  },
+  voicePlayButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#B8860B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voicePlayText: { fontSize: 16 },
+  voiceWaveform: { color: '#e0e0e0', fontSize: 16, letterSpacing: 1 },
+  voiceDuration: { color: '#8899aa', fontSize: 13 },
 });

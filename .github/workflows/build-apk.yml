@@ -29,11 +29,26 @@ jobs:
       - name: Prebuild Android
         run: npx expo prebuild --platform android
 
+      - name: Generate keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore android/app/hermes.keystore \
+            -alias hermes-key \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Hermes Chat, OU=Dev, O=Hermes, L=Vancouver, ST=BC, C=CA"
+
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
 
       - name: Build release APK
         run: cd android && ./gradlew assembleRelease
+        env:
+          ORG_GRADLE_PROJECT_android.injected.signing.store.file: app/hermes.keystore
+          ORG_GRADLE_PROJECT_android.injected.signing.store.password: android
+          ORG_GRADLE_PROJECT_android.injected.signing.key.alias: hermes-key
+          ORG_GRADLE_PROJECT_android.injected.signing.key.password: android
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

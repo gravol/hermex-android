@@ -43,6 +43,11 @@ interface ChatMessage {
   content: string;
 }
 
+type ResponsesInput = string | Array<{
+  role: 'user' | 'assistant' | 'system';
+  content: Array<{ type: 'input_text'; text: string } | { type: 'input_image'; image_url: string }>;
+}>;
+
 function extractResponseText(response: any): string {
   const content = response?.output?.flatMap((item: any) => item?.content || []) || [];
   return content.map((part: any) => part?.text || '').join('');
@@ -168,7 +173,7 @@ export class HermesAPI {
     });
   }
 
-  private async buildResponsesBody(input: string, stream: boolean) {
+  private async buildResponsesBody(input: ResponsesInput, stream: boolean) {
     const body: Record<string, any> = {
       model: 'hermes-agent',
       input,
@@ -197,12 +202,12 @@ export class HermesAPI {
     }
   }
 
-  async sendMessage(content: string) {
+  private async sendResponsesInput(input: ResponsesInput, historyContent: string) {
     if (this._status !== 'connected') return;
-    if (!content.trim()) return;
+    if (!historyContent.trim()) return;
 
     // Keep a lightweight local history only for UI/error recovery. Server-side continuity uses previous_response_id.
-    this.history.push({ role: 'user', content });
+    this.history.push({ role: 'user', content: historyContent });
 
     this.abortController?.abort();
     this.abortController = new AbortController();
@@ -219,7 +224,7 @@ export class HermesAPI {
           'Authorization': `Bearer ${API_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(await this.buildResponsesBody(content, true)),
+        body: JSON.stringify(await this.buildResponsesBody(input, true)),
         signal: this.abortController.signal,
       });
 
@@ -308,6 +313,30 @@ export class HermesAPI {
         this.history.pop();
       }
     }
+  }
+
+  async sendMessage(content: string) {
+    await this.sendResponsesInput(content, content);
+  }
+
+  async sendImage(base64: string, mimeType: string = 'image/jpeg') {
+    const sanitizedBase64 = base64.replace(/^data:[^;]+;base64,/, '');
+    const imageUrl = `data:${mimeType};base64,${sanitizedBase64}`;
+    const input: ResponsesInput = [{
+      role: 'user',
+      content: [
+        { type: 'input_text', text: 'Look at this image' },
+        { type: 'input_image', image_url: imageUrl },
+      ],
+    }];
+
+    await this.sendResponsesInput(input, 'Look at this image');
+  }
+
+  async sendAudio(_base64Audio: string) {
+    // STT/audio-input support is not confirmed yet. Send a textual placeholder for now,
+    // keeping this API surface ready for attaching audio data in the future.
+    await this.sendMessage('🎤 Voice note');
   }
 
   async sendHiddenMessage(content: string): Promise<string> {
