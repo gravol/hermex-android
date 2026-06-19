@@ -9,6 +9,9 @@
     "ios": {
       "supportsTablet": true
     },
+    "splash": {
+      "backgroundColor": "#0a0a1a"
+    },
     "android": {
       "package": "com.hermes.chat",
       "versionCode": 13,

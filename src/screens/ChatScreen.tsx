@@ -806,8 +806,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-      keyboardVerticalOffset={0}>
+      behavior="padding"
+      keyboardVerticalOffset={Platform.OS === 'android' ? -200 : 0}>
       {content}
     </KeyboardAvoidingView>
   );
