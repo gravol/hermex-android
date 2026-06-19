@@ -325,9 +325,6 @@ export default function ChatScreen() {
   const historyLoadedSessionRef = useRef<string | null>(null);
   const api = getHermesAPI();
   const androidKeyboardNavInset = Platform.OS === 'android' && keyDbg.open ? insets.bottom : 0;
-  const androidInputBarStyle = androidKeyboardNavInset > 0
-    ? { transform: [{ translateY: androidKeyboardNavInset }] }
-    : null;
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -803,7 +800,7 @@ export default function ChatScreen() {
         </View>
       )}
 
-      <View style={[styles.inputBar, androidInputBarStyle]}>
+      <View style={styles.inputBar}>
         <TouchableOpacity style={styles.mediaButton}
           onPress={() => { setShowEmoji(false); setShowMediaOptions(prev => !prev); }}>
           <Text style={styles.mediaButtonText}>➕</Text>
@@ -847,8 +844,9 @@ export default function ChatScreen() {
     );
   }
 
-  // Android: adjustPan handles keyboard natively — no KeyboardAvoidingView needed
-  return <View style={styles.container}>{content}</View>;
+  // Android: adjustPan moves the window up by keyboard height minus nav bar
+  // Add paddingBottom = insets.bottom to push content back down flush
+  return <View style={[styles.container, androidKeyboardNavInset > 0 ? { paddingBottom: androidKeyboardNavInset } : null]}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
