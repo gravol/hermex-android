@@ -313,6 +313,8 @@ export default function ChatScreen() {
   const [dot1] = useState(new Animated.Value(0));
   const [dot2] = useState(new Animated.Value(0));
   const [dot3] = useState(new Animated.Value(0));
+  const [showDebug, setShowDebug] = useState(false);
+  const [keyDbg, setKeyDbg] = useState({ height: 0, screenY: 0, winH: 0, open: false });
   const flatListRef = useRef<FlatList<Message>>(null);
   const inputRef = useRef<TextInput>(null);
   const appStateRef = useRef(AppState.currentState);
@@ -326,6 +328,17 @@ export default function ChatScreen() {
     });
 
     return () => subscription.remove();
+  }, []);
+
+  // Keyboard debug listener
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyDbg({ height: e.endCoordinates.height, screenY: e.endCoordinates.screenY, winH: 0, open: true });
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyDbg(prev => ({ ...prev, open: false }));
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
   useEffect(() => {
@@ -718,15 +731,17 @@ export default function ChatScreen() {
 
   const content = (
     <>
-      <View style={styles.statusBar}>
-        <Text style={[styles.statusDot, {
-          color: status === 'connected' ? '#4caf50' : status === 'connecting' ? '#ff9800' : '#f44336'
-        }]}>●</Text>
-        <Text style={styles.statusText}>
-          {status === 'connected' ? 'Online' : status === 'connecting' ? 'Connecting...' :
-           status === 'error' ? 'Connection error' : 'Offline'}
-        </Text>
-      </View>
+      <TouchableOpacity onLongPress={() => setShowDebug(prev => !prev)} activeOpacity={1}>
+        <View style={styles.statusBar}>
+          <Text style={[styles.statusDot, {
+            color: status === 'connected' ? '#4caf50' : status === 'connecting' ? '#ff9800' : '#f44336'
+          }]}>●</Text>
+          <Text style={styles.statusText}>
+            {status === 'connected' ? 'Online' : status === 'connecting' ? 'Connecting...' :
+             status === 'error' ? 'Connection error' : 'Offline'}
+          </Text>
+        </View>
+      </TouchableOpacity>
 
       <FlatList ref={flatListRef}
         data={messages} renderItem={renderMessage}
@@ -766,6 +781,18 @@ export default function ChatScreen() {
         visible={showVoiceRecorder}
         onRecordingComplete={handleVoiceComplete}
         onCancel={() => setShowVoiceRecorder(false)} />
+
+      {showDebug && (
+        <View style={styles.debugOverlay} pointerEvents="none">
+          <Text style={styles.debugTitle}>📐 Keyboard Debug</Text>
+          <Text style={styles.debugText}>Open: {keyDbg.open ? '✅' : '❌'}</Text>
+          <Text style={styles.debugText}>height: {keyDbg.height}px</Text>
+          <Text style={styles.debugText}>screenY: {keyDbg.screenY}px</Text>
+          <Text style={styles.debugText}>winH: {keyDbg.winH}px</Text>
+          <Text style={styles.debugText}>Offset calc: {keyDbg.open ? `winH(${keyDbg.winH}) - screenY(${keyDbg.screenY}) = ${keyDbg.open ? Math.max(0, keyDbg.winH - keyDbg.screenY) : '?'}` : '—'}px</Text>
+          <Text style={styles.debugHint}>Long-press status bar to hide</Text>
+        </View>
+      )}
 
       <View style={styles.inputBar}>
         <TouchableOpacity style={styles.mediaButton}
@@ -1162,4 +1189,17 @@ const styles = StyleSheet.create({
   voicePlayText: { fontSize: 16 },
   voiceWaveform: { color: '#e0e0e0', fontSize: 16, letterSpacing: 1 },
   voiceDuration: { color: '#8899aa', fontSize: 13 },
+  debugOverlay: {
+    position: 'absolute',
+    top: 50,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    padding: 12,
+    borderRadius: 10,
+    zIndex: 999,
+    minWidth: 200,
+  },
+  debugTitle: { color: '#B8860B', fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
+  debugText: { color: '#e0e0e0', fontSize: 12, fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo', lineHeight: 18 },
+  debugHint: { color: '#667788', fontSize: 10, marginTop: 6, fontStyle: 'italic' },
 });
