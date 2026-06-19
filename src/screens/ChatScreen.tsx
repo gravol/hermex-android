@@ -267,71 +267,6 @@ const renderMarkdownBlocks = (
   return blocks;
 };
 
-const useAndroidKeyboardInset = (containerRef: React.RefObject<View | null>, windowHeight: number) => {
-  const [keyboardInset, setKeyboardInset] = useState(0);
-
-  useEffect(() => {
-    if (Platform.OS !== 'android') return undefined;
-    const measureTimers: ReturnType<typeof setTimeout>[] = [];
-
-    const calculateInset = (event: KeyboardEvent) => {
-      const { height, screenY } = event.endCoordinates;
-      const keyboardTop = screenY > 0 ? screenY : 0;
-
-      const applyMeasuredInset = (containerBottom?: number) => {
-        if (keyboardTop > 0 && containerBottom && containerBottom > 0) {
-          // The chat screen is inside a bottom tab navigator and Android 15/16
-          // edge-to-edge keyboard metrics include any area below this screen
-          // (tab bar / gesture-nav inset).  Moving by endCoordinates.height
-          // therefore overcompensates and leaves the composer floating.  Use
-          // the actual overlap between this screen's bottom edge and the IME
-          // top; it is also 0 when adjustResize has already resized the scene.
-          const measuredInset = Math.max(0, containerBottom - keyboardTop);
-          setKeyboardInset(height > 0 ? Math.min(measuredInset, height) : measuredInset);
-          return;
-        }
-
-        if (keyboardTop > 0) {
-          const insetFromWindow = Math.max(0, windowHeight - keyboardTop);
-          if (insetFromWindow > 0) {
-            setKeyboardInset(height > 0 ? Math.min(insetFromWindow, height) : insetFromWindow);
-            return;
-          }
-        }
-
-        setKeyboardInset(height || 0);
-      };
-
-      const measureAndApply = () => {
-        const node = containerRef.current;
-        if (!node?.measureInWindow) {
-          applyMeasuredInset();
-          return;
-        }
-
-        node.measureInWindow((_x, y, _width, measuredHeight) => {
-          applyMeasuredInset(y + measuredHeight);
-        });
-      };
-
-      measureAndApply();
-      requestAnimationFrame(measureAndApply);
-      measureTimers.push(setTimeout(measureAndApply, 80));
-    };
-
-    const showSubscription = Keyboard.addListener('keyboardDidShow', calculateInset);
-    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => setKeyboardInset(0));
-
-    return () => {
-      measureTimers.forEach(clearTimeout);
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, [containerRef, windowHeight]);
-
-  return keyboardInset;
-};
-
 const EMOJI_CATEGORIES = [
   {
     name: 'Smileys',
@@ -364,23 +299,6 @@ const EMOJI_CATEGORIES = [
 ];
 
 export default function ChatScreen() {
-  const containerRef = useRef<View>(null);
-  const { height: windowHeight } = useWindowDimensions();
-  const androidKeyboardInset = useAndroidKeyboardInset(containerRef, windowHeight);
-  const androidKeyboardSpacer = Platform.OS === 'android' ? androidKeyboardInset : 0;
-  const keyboardAwareMessageContainerStyle = useMemo(() => [
-    styles.messageContainer,
-    androidKeyboardSpacer > 0 ? { paddingBottom: androidKeyboardSpacer + 16 } : null,
-  ], [androidKeyboardSpacer]);
-  const keyboardAwareInputBarStyle = useMemo(() => [
-    styles.inputBar,
-    androidKeyboardSpacer > 0 ? { marginBottom: androidKeyboardSpacer } : null,
-  ], [androidKeyboardSpacer]);
-  const keyboardAwareMediaOptionsStyle = useMemo(() => [
-    styles.mediaOptions,
-    androidKeyboardSpacer > 0 ? { bottom: androidKeyboardSpacer + 60 } : null,
-  ], [androidKeyboardSpacer]);
-
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
@@ -814,7 +732,7 @@ export default function ChatScreen() {
         data={messages} renderItem={renderMessage}
         keyExtractor={item => item.id}
         style={styles.messageList}
-        contentContainerStyle={keyboardAwareMessageContainerStyle}
+        contentContainerStyle={styles.messageContainer}
         onTouchStart={closeEmojiPicker}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()} />
 
@@ -831,7 +749,7 @@ export default function ChatScreen() {
       {showEmoji && renderEmojiPicker()}
 
       {showMediaOptions && (
-        <View style={keyboardAwareMediaOptionsStyle}>
+        <View style={styles.mediaOptions}>
           <TouchableOpacity style={styles.mediaOption} onPress={() => handlePickImage('camera')}>
             <Text style={styles.mediaOptionText}>📷 Camera</Text>
           </TouchableOpacity>
@@ -849,7 +767,7 @@ export default function ChatScreen() {
         onRecordingComplete={handleVoiceComplete}
         onCancel={() => setShowVoiceRecorder(false)} />
 
-      <View style={keyboardAwareInputBarStyle}>
+      <View style={styles.inputBar}>
         <TouchableOpacity style={styles.mediaButton}
           onPress={() => { setShowEmoji(false); setShowMediaOptions(prev => !prev); }}>
           <Text style={styles.mediaButtonText}>➕</Text>
@@ -885,15 +803,14 @@ export default function ChatScreen() {
     </>
   );
 
-  if (Platform.OS === 'ios') {
-    return (
-      <KeyboardAvoidingView style={styles.container} behavior="padding" keyboardVerticalOffset={0}>
-        {content}
-      </KeyboardAvoidingView>
-    );
-  }
-
-  return <View ref={containerRef} style={styles.container}>{content}</View>;
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      keyboardVerticalOffset={0}>
+      {content}
+    </KeyboardAvoidingView>
+  );
 }
 
 const styles = StyleSheet.create({
