@@ -102,6 +102,7 @@ export default function App() {
         <Tab.Navigator
           screenOptions={({ route }) => ({
             tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
+            tabBarHideOnKeyboard: Platform.OS === 'android',
             tabBarActiveTintColor: '#B8860B',
             tabBarInactiveTintColor: '#667788',
             tabBarStyle: {

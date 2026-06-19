@@ -267,29 +267,67 @@ const renderMarkdownBlocks = (
   return blocks;
 };
 
-const useAndroidKeyboardInset = (windowHeight: number) => {
+const useAndroidKeyboardInset = (containerRef: React.RefObject<View | null>, windowHeight: number) => {
   const [keyboardInset, setKeyboardInset] = useState(0);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
+    const measureTimers: ReturnType<typeof setTimeout>[] = [];
 
     const calculateInset = (event: KeyboardEvent) => {
       const { height, screenY } = event.endCoordinates;
-      const insetFromScreenY = screenY > 0 ? Math.max(0, windowHeight - screenY) : 0;
-      // Android 15/16 edge-to-edge devices can report a non-resized window even
-      // with adjustResize. Prefer the native keyboard height, but keep the
-      // screenY-derived fallback for devices that report more accurate insets.
-      setKeyboardInset(Math.max(height || 0, insetFromScreenY));
+      const keyboardTop = screenY > 0 ? screenY : 0;
+
+      const applyMeasuredInset = (containerBottom?: number) => {
+        if (keyboardTop > 0 && containerBottom && containerBottom > 0) {
+          // The chat screen is inside a bottom tab navigator and Android 15/16
+          // edge-to-edge keyboard metrics include any area below this screen
+          // (tab bar / gesture-nav inset).  Moving by endCoordinates.height
+          // therefore overcompensates and leaves the composer floating.  Use
+          // the actual overlap between this screen's bottom edge and the IME
+          // top; it is also 0 when adjustResize has already resized the scene.
+          const measuredInset = Math.max(0, containerBottom - keyboardTop);
+          setKeyboardInset(height > 0 ? Math.min(measuredInset, height) : measuredInset);
+          return;
+        }
+
+        if (keyboardTop > 0) {
+          const insetFromWindow = Math.max(0, windowHeight - keyboardTop);
+          if (insetFromWindow > 0) {
+            setKeyboardInset(height > 0 ? Math.min(insetFromWindow, height) : insetFromWindow);
+            return;
+          }
+        }
+
+        setKeyboardInset(height || 0);
+      };
+
+      const measureAndApply = () => {
+        const node = containerRef.current;
+        if (!node?.measureInWindow) {
+          applyMeasuredInset();
+          return;
+        }
+
+        node.measureInWindow((_x, y, _width, measuredHeight) => {
+          applyMeasuredInset(y + measuredHeight);
+        });
+      };
+
+      measureAndApply();
+      requestAnimationFrame(measureAndApply);
+      measureTimers.push(setTimeout(measureAndApply, 80));
     };
 
     const showSubscription = Keyboard.addListener('keyboardDidShow', calculateInset);
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => setKeyboardInset(0));
 
     return () => {
+      measureTimers.forEach(clearTimeout);
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [windowHeight]);
+  }, [containerRef, windowHeight]);
 
   return keyboardInset;
 };
@@ -326,8 +364,9 @@ const EMOJI_CATEGORIES = [
 ];
 
 export default function ChatScreen() {
+  const containerRef = useRef<View>(null);
   const { height: windowHeight } = useWindowDimensions();
-  const androidKeyboardInset = useAndroidKeyboardInset(windowHeight);
+  const androidKeyboardInset = useAndroidKeyboardInset(containerRef, windowHeight);
   const androidKeyboardSpacer = Platform.OS === 'android' ? androidKeyboardInset : 0;
   const keyboardAwareMessageContainerStyle = useMemo(() => [
     styles.messageContainer,
@@ -854,7 +893,7 @@ export default function ChatScreen() {
     );
   }
 
-  return <View style={styles.container}>{content}</View>;
+  return <View ref={containerRef} style={styles.container}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
