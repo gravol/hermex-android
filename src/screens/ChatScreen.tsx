@@ -803,14 +803,16 @@ export default function ChatScreen() {
     </>
   );
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}>
-      {content}
-    </KeyboardAvoidingView>
-  );
+  if (Platform.OS === 'ios') {
+    return (
+      <KeyboardAvoidingView style={styles.container} behavior="padding" keyboardVerticalOffset={0}>
+        {content}
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // Android: adjustPan handles keyboard natively — no KeyboardAvoidingView needed
+  return <View style={styles.container}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
