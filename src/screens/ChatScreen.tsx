@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getHermesAPI, ConnectionStatus } from '../services/api';
 import { showLocalNotification } from '../services/notifications';
 import CommandShortcuts from '../components/CommandShortcuts';
@@ -299,6 +300,8 @@ const EMOJI_CATEGORIES = [
 ];
 
 export default function ChatScreen() {
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
@@ -321,6 +324,10 @@ export default function ChatScreen() {
   const assistantResponseRef = useRef('');
   const historyLoadedSessionRef = useRef<string | null>(null);
   const api = getHermesAPI();
+  const androidKeyboardNavInset = Platform.OS === 'android' && keyDbg.open ? insets.bottom : 0;
+  const androidInputBarStyle = androidKeyboardNavInset > 0
+    ? { transform: [{ translateY: androidKeyboardNavInset }] }
+    : null;
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -333,13 +340,13 @@ export default function ChatScreen() {
   // Keyboard debug listener
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-      setKeyDbg({ height: e.endCoordinates.height, screenY: e.endCoordinates.screenY, winH: 0, open: true });
+      setKeyDbg({ height: e.endCoordinates.height, screenY: e.endCoordinates.screenY, winH: windowHeight, open: true });
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => {
       setKeyDbg(prev => ({ ...prev, open: false }));
     });
     return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
+  }, [windowHeight]);
 
   useEffect(() => {
     const unsub = api.onMessage((data) => {
@@ -789,12 +796,14 @@ export default function ChatScreen() {
           <Text style={styles.debugText}>height: {keyDbg.height}px</Text>
           <Text style={styles.debugText}>screenY: {keyDbg.screenY}px</Text>
           <Text style={styles.debugText}>winH: {keyDbg.winH}px</Text>
+          <Text style={styles.debugText}>safeBottom: {insets.bottom}px</Text>
+          <Text style={styles.debugText}>input fix: {androidKeyboardNavInset}px</Text>
           <Text style={styles.debugText}>Offset calc: {keyDbg.open ? `winH(${keyDbg.winH}) - screenY(${keyDbg.screenY}) = ${keyDbg.open ? Math.max(0, keyDbg.winH - keyDbg.screenY) : '?'}` : '—'}px</Text>
           <Text style={styles.debugHint}>Long-press status bar to hide</Text>
         </View>
       )}
 
-      <View style={styles.inputBar}>
+      <View style={[styles.inputBar, androidInputBarStyle]}>
         <TouchableOpacity style={styles.mediaButton}
           onPress={() => { setShowEmoji(false); setShowMediaOptions(prev => !prev); }}>
           <Text style={styles.mediaButtonText}>➕</Text>

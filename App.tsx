@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, Platform } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import ChatScreen from './src/screens/ChatScreen';
 import TerminalScreen from './src/screens/TerminalScreen';
@@ -78,7 +79,7 @@ export default function App() {
   }, []);
 
   return (
-    <>
+    <SafeAreaProvider>
       <StatusBar style="light" />
       <NavigationContainer
         theme={{
@@ -134,6 +135,6 @@ export default function App() {
             options={{ headerStyle: { backgroundColor: '#0a0a1a', elevation: 0, shadowOpacity: 0 } }} />
         </Tab.Navigator>
       </NavigationContainer>
-    </>
+    </SafeAreaProvider>
   );
 }
