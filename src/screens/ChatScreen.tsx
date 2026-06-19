@@ -324,7 +324,7 @@ export default function ChatScreen() {
   const assistantResponseRef = useRef('');
   const historyLoadedSessionRef = useRef<string | null>(null);
   const api = getHermesAPI();
-  const androidKeyboardNavInset = Platform.OS === 'android' && keyDbg.open ? insets.bottom : 0;
+  // Android uses adjustResize (app.json) — no manual keyboard padding needed
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -794,7 +794,7 @@ export default function ChatScreen() {
           <Text style={styles.debugText}>screenY: {keyDbg.screenY}px</Text>
           <Text style={styles.debugText}>winH: {keyDbg.winH}px</Text>
           <Text style={styles.debugText}>safeBottom: {insets.bottom}px</Text>
-          <Text style={styles.debugText}>input fix: {androidKeyboardNavInset}px</Text>
+          <Text style={styles.debugText}>mode: adjustResize</Text>
           <Text style={styles.debugText}>Offset calc: {keyDbg.open ? `winH(${keyDbg.winH}) - screenY(${keyDbg.screenY}) = ${keyDbg.open ? Math.max(0, keyDbg.winH - keyDbg.screenY) : '?'}` : '—'}px</Text>
           <Text style={styles.debugHint}>Long-press status bar to hide</Text>
         </View>
@@ -844,9 +844,10 @@ export default function ChatScreen() {
     );
   }
 
-  // Android: adjustPan moves the window up by keyboard height minus nav bar
-  // Add paddingBottom = insets.bottom to push content back down flush
-  return <View style={[styles.container, androidKeyboardNavInset > 0 ? { paddingBottom: androidKeyboardNavInset } : null]}>{content}</View>;
+  // Android: app.json uses softwareKeyboardLayoutMode="resize".
+  // The OS resizes the window above the IME automatically.
+  // No manual padding/translation needed — it double-counts on edge-to-edge.
+  return <View style={styles.container}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
