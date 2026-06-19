@@ -793,6 +793,7 @@ export default function ChatScreen() {
           <Text style={styles.debugText}>height: {keyDbg.height}px</Text>
           <Text style={styles.debugText}>screenY: {keyDbg.screenY}px</Text>
           <Text style={styles.debugText}>winH: {keyDbg.winH}px</Text>
+          <Text style={styles.debugText}>liveH: {windowHeight}px</Text>
           <Text style={styles.debugText}>safeBottom: {insets.bottom}px</Text>
           <Text style={styles.debugText}>mode: adjustResize</Text>
           <Text style={styles.debugText}>Offset calc: {keyDbg.open ? `winH(${keyDbg.winH}) - screenY(${keyDbg.screenY}) = ${keyDbg.open ? Math.max(0, keyDbg.winH - keyDbg.screenY) : '?'}` : '—'}px</Text>
