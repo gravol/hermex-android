@@ -6,11 +6,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, AppState, Animated, Image,
-  Keyboard, useWindowDimensions, type KeyboardEvent, ToastAndroid,
+  ToastAndroid,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getHermesAPI, ConnectionStatus } from '../services/api';
 import { showLocalNotification } from '../services/notifications';
 import CommandShortcuts from '../components/CommandShortcuts';
@@ -300,8 +299,6 @@ const EMOJI_CATEGORIES = [
 ];
 
 export default function ChatScreen() {
-  const { height: windowHeight } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
@@ -317,14 +314,13 @@ export default function ChatScreen() {
   const [dot2] = useState(new Animated.Value(0));
   const [dot3] = useState(new Animated.Value(0));
   const [showDebug, setShowDebug] = useState(false);
-  const [keyDbg, setKeyDbg] = useState({ height: 0, screenY: 0, winH: 0, open: false });
   const flatListRef = useRef<FlatList<Message>>(null);
   const inputRef = useRef<TextInput>(null);
   const appStateRef = useRef(AppState.currentState);
   const assistantResponseRef = useRef('');
   const historyLoadedSessionRef = useRef<string | null>(null);
   const api = getHermesAPI();
-  // Android uses adjustResize (app.json) — no manual keyboard padding needed
+  // Android uses native KeyboardAvoidingView height behavior — no app.json keyboard mode or manual offsets.
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -333,17 +329,6 @@ export default function ChatScreen() {
 
     return () => subscription.remove();
   }, []);
-
-  // Keyboard debug listener
-  useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-      setKeyDbg({ height: e.endCoordinates.height, screenY: e.endCoordinates.screenY, winH: windowHeight, open: true });
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyDbg(prev => ({ ...prev, open: false }));
-    });
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, [windowHeight]);
 
   useEffect(() => {
     const unsub = api.onMessage((data) => {
@@ -789,14 +774,10 @@ export default function ChatScreen() {
       {showDebug && (
         <View style={styles.debugOverlay} pointerEvents="none">
           <Text style={styles.debugTitle}>📐 Keyboard Debug</Text>
-          <Text style={styles.debugText}>Open: {keyDbg.open ? '✅' : '❌'}</Text>
-          <Text style={styles.debugText}>height: {keyDbg.height}px</Text>
-          <Text style={styles.debugText}>screenY: {keyDbg.screenY}px</Text>
-          <Text style={styles.debugText}>winH: {keyDbg.winH}px</Text>
-          <Text style={styles.debugText}>liveH: {windowHeight}px</Text>
-          <Text style={styles.debugText}>safeBottom: {insets.bottom}px</Text>
-          <Text style={styles.debugText}>mode: adjustResize</Text>
-          <Text style={styles.debugText}>Offset calc: {keyDbg.open ? `winH(${keyDbg.winH}) - screenY(${keyDbg.screenY}) = ${keyDbg.open ? Math.max(0, keyDbg.winH - keyDbg.screenY) : '?'}` : '—'}px</Text>
+          <Text style={styles.debugText}>mode: native KeyboardAvoidingView</Text>
+          <Text style={styles.debugText}>Android behavior: default/undefined</Text>
+          <Text style={styles.debugText}>app.json keyboard mode: none</Text>
+          <Text style={styles.debugText}>vertical offset: 0</Text>
           <Text style={styles.debugHint}>Long-press status bar to hide</Text>
         </View>
       )}
@@ -837,18 +818,14 @@ export default function ChatScreen() {
     </>
   );
 
-  if (Platform.OS === 'ios') {
-    return (
-      <KeyboardAvoidingView style={styles.container} behavior="padding" keyboardVerticalOffset={0}>
-        {content}
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // Android: app.json uses softwareKeyboardLayoutMode="resize".
-  // The OS resizes the window above the IME automatically.
-  // No manual padding/translation needed — it double-counts on edge-to-edge.
-  return <View style={styles.container}>{content}</View>;
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}>
+      {content}
+    </KeyboardAvoidingView>
+  );
 }
 
 const styles = StyleSheet.create({
