@@ -5,8 +5,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList, ScrollView,
-  StyleSheet, KeyboardAvoidingView, Platform, AppState, Animated, Image,
-  ToastAndroid,
+  StyleSheet, Platform, AppState, Animated, Image,
+  Keyboard, ToastAndroid,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
@@ -314,13 +314,15 @@ export default function ChatScreen() {
   const [dot2] = useState(new Animated.Value(0));
   const [dot3] = useState(new Animated.Value(0));
   const [showDebug, setShowDebug] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList<Message>>(null);
   const inputRef = useRef<TextInput>(null);
   const appStateRef = useRef(AppState.currentState);
   const assistantResponseRef = useRef('');
   const historyLoadedSessionRef = useRef<string | null>(null);
   const api = getHermesAPI();
-  // Android uses native KeyboardAvoidingView height behavior — no app.json keyboard mode or manual offsets.
+  // Android 15+ — Keyboard.addListener with paddingBottom.
+  // No windowSoftInputMode, no KeyboardAvoidingView.
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -446,6 +448,21 @@ export default function ChatScreen() {
       };
     }
   }, [isTyping, dot1, dot2, dot3]);
+
+  // Android 15+ keyboard handling: listen for keyboard show/hide events
+  // instead of relying on windowSoftInputMode (which is broken with edge-to-edge).
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const addMessage = (role: Message['role'], content: string, media?: Partial<Message>) => {
     setMessages(prev => [...prev, {
@@ -774,7 +791,7 @@ export default function ChatScreen() {
       {showDebug && (
         <View style={styles.debugOverlay} pointerEvents="none">
           <Text style={styles.debugTitle}>📐 Keyboard Debug</Text>
-          <Text style={styles.debugText}>mode: native KeyboardAvoidingView</Text>
+          <Text style={styles.debugText}>mode: Keyboard.addListener + paddingBottom</Text>
           <Text style={styles.debugText}>Android behavior: default/undefined</Text>
           <Text style={styles.debugText}>app.json keyboard mode: none</Text>
           <Text style={styles.debugText}>vertical offset: 0</Text>
@@ -819,12 +836,9 @@ export default function ChatScreen() {
   );
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}>
+    <View style={[styles.container, { paddingBottom: keyboardHeight }]}>
       {content}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
