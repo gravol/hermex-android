@@ -7,18 +7,22 @@ import androidx.compose.runtime.setValue
 import com.hermes.chat.model.Message
 import com.hermes.chat.model.MessageAttachment
 import com.hermes.chat.model.ModelType
+import com.hermes.chat.model.NetworkMode
 import com.hermes.chat.model.NtfyConfig
 import com.hermes.chat.network.HermesClient
+import com.hermes.chat.network.HermesEndpointResolver
 import com.hermes.chat.network.HermesOkHttpClient
+import com.hermes.chat.network.NetworkModeDetector
 import com.hermes.chat.network.NtfyPublisher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Holds chat message state, current model, ntfy config, pending privileged commands,
- * and drives send / slash-command flow.
+ * network mode / away endpoint, and drives send / slash-command flow.
  * Defaults to HermesOkHttpClient for convenience.
  */
 class ChatState(
@@ -39,6 +43,16 @@ class ChatState(
     /** Clerk device MAC and IP for WoL and status checking. */
     var clerkMacAddress: String by mutableStateOf("")
     var clerkIpAddress: String by mutableStateOf("")
+
+    // ── Network mode (home / away routing) ─────────────────────
+
+    /** Current detected network mode. */
+    var currentMode: NetworkMode by mutableStateOf(NetworkMode.HOME)
+        private set
+
+    /** User-configured away (Tailscale) Hermes endpoint URL. */
+    var awayBaseUrl: String by mutableStateOf("")
+        private set
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -128,5 +142,36 @@ class ChatState(
             is SlashCommand.SetModel -> setModel(command.model)
             is SlashCommand.Secure -> { /* handled by executePendingCommand */ }
         }
+    }
+
+    // ── Network mode helpers ───────────────────────────────────
+
+    /** Detect current network mode and update the client endpoint. */
+    fun refreshNetworkMode() {
+        scope.launch {
+            val mode = withContext(Dispatchers.IO) {
+                NetworkModeDetector.detect()
+            }
+            currentMode = mode
+            applyMode()
+            addSystem("📡 Network: **${mode.displayName}**")
+        }
+    }
+
+    /** Set the away (Tailscale) Hermes endpoint URL and re-apply routing. */
+    fun setAwayUrl(url: String) {
+        awayBaseUrl = url
+        applyMode()
+    }
+
+    /** Update the Hermes client's base URL to match the current mode. */
+    private fun applyMode() {
+        val url = HermesEndpointResolver.resolve(currentMode, awayBaseUrl)
+        (client as? HermesOkHttpClient)?.baseUrl = url
+    }
+
+    init {
+        // Detect network mode on construction (non-blocking)
+        refreshNetworkMode()
     }
 }

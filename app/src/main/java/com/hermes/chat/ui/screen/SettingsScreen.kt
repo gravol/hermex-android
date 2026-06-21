@@ -1,13 +1,16 @@
 package com.hermes.chat.ui.screen
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -26,6 +29,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.hermes.chat.ChatState
 import com.hermes.chat.model.ModelType
+import com.hermes.chat.model.NetworkMode
 
 @Composable
 fun SettingsScreen(chatState: ChatState) {
@@ -106,7 +110,7 @@ fun SettingsScreen(chatState: ChatState) {
             placeholder = { Text("e.g. hermes-chat-alerts") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+            keyboardActions = KeyboardActions(
                 onDone = { chatState.setNtfyTopic(ntfyInput.trim()) },
             ),
             colors = OutlinedTextFieldDefaults.colors(
@@ -124,6 +128,77 @@ fun SettingsScreen(chatState: ChatState) {
                 "Enter a topic above to enable push notifications",
             style = MaterialTheme.typography.bodySmall,
             color = if (chatState.ntfyConfig.isConfigured)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        )
+
+        // ── Network mode section ──────────────────────────────────
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = "Network",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+
+        // Mode indicator
+        val modeColor = when (chatState.currentMode) {
+            NetworkMode.HOME -> MaterialTheme.colorScheme.primary
+            NetworkMode.AWAY -> MaterialTheme.colorScheme.error
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "● ${chatState.currentMode.displayName}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = modeColor,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "Re-check",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable { chatState.refreshNetworkMode() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+
+        // Away (Tailscale) endpoint field
+        var awayUrlInput by remember(chatState.awayBaseUrl) { mutableStateOf(chatState.awayBaseUrl) }
+        OutlinedTextField(
+            value = awayUrlInput,
+            onValueChange = { awayUrlInput = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Away Endpoint URL") },
+            placeholder = { Text("https://tailscale-ip:8080/v1/chat/completions") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = { chatState.setAwayUrl(awayUrlInput.trim()) },
+            ),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                cursorColor = MaterialTheme.colorScheme.primary,
+            ),
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = if(chatState.currentMode == NetworkMode.AWAY && chatState.awayBaseUrl.isBlank())
+                "\u26A0\uFE0F Away mode active but endpoint URL is blank"
+            else if(chatState.awayBaseUrl.isNotBlank())
+                "\u2705 Away endpoint set: ${chatState.awayBaseUrl}"
+            else
+                "Set only if connecting over Tailscale / WAN",
+            style = MaterialTheme.typography.bodySmall,
+            color = if(chatState.currentMode == NetworkMode.AWAY && chatState.awayBaseUrl.isBlank())
+                MaterialTheme.colorScheme.error
+            else if(chatState.awayBaseUrl.isNotBlank())
                 MaterialTheme.colorScheme.primary
             else
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
@@ -164,7 +239,7 @@ fun SettingsScreen(chatState: ChatState) {
             placeholder = { Text("e.g. 192.168.1.100") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+            keyboardActions = KeyboardActions(
                 onDone = {
                     chatState.clerkMacAddress = macInput.trim()
                     chatState.clerkIpAddress = ipInput.trim()
