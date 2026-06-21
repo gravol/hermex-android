@@ -31,6 +31,7 @@ import androidx.navigation.compose.rememberNavController
 import com.hermes.chat.ChatState
 import com.hermes.chat.model.Message
 import com.hermes.chat.network.NtfyClient
+import com.hermes.chat.storage.SecureTokenStore
 import com.hermes.chat.ui.screen.ChatScreen
 import com.hermes.chat.ui.screen.DevicesScreen
 import com.hermes.chat.ui.screen.LogsScreen
@@ -52,11 +53,11 @@ val bottomNavItems = listOf(
 )
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(tokenStore: SecureTokenStore? = null) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
-    val chatState = remember { ChatState() }
+    val chatState = remember { ChatState(tokenStore = tokenStore) }
 
     Scaffold(
         bottomBar = {

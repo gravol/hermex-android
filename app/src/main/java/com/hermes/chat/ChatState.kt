@@ -14,6 +14,7 @@ import com.hermes.chat.network.HermesEndpointResolver
 import com.hermes.chat.network.HermesOkHttpClient
 import com.hermes.chat.network.NetworkModeDetector
 import com.hermes.chat.network.NtfyPublisher
+import com.hermes.chat.storage.SecureTokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +28,7 @@ import kotlinx.coroutines.withContext
  */
 class ChatState(
     private val client: HermesClient = HermesOkHttpClient(),
+    private val tokenStore: SecureTokenStore? = null,
 ) {
     val messages = mutableStateListOf<Message>()
 
@@ -187,14 +189,29 @@ class ChatState(
     init {
         // Detect network mode on construction (non-blocking)
         refreshNetworkMode()
+        // Load persisted auth token and apply to client
+        val stored = tokenStore?.loadToken() ?: ""
+        if (stored.isNotBlank()) {
+            authToken = stored
+            (client as? HermesOkHttpClient)?.authToken = stored
+        }
     }
 
     // ── Auth helpers ────────────────────────────────────────────
 
-    /** Set the auth token and push to the HTTP client. */
+    /** Set the auth token, persist it, and push to the HTTP client. */
     fun updateAuthToken(token: String) {
         authToken = token
+        tokenStore?.saveToken(token)
         (client as? HermesOkHttpClient)?.authToken = token
+    }
+
+    /** Wipe the stored auth token from secure storage and the client. */
+    fun clearAuthToken() {
+        authToken = ""
+        tokenStore?.clearToken()
+        (client as? HermesOkHttpClient)?.authToken = ""
+        addSystem("🗑️ Auth token cleared")
     }
 
     /** Send a minimal test message to verify connectivity and auth. */

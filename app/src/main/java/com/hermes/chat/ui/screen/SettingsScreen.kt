@@ -157,6 +157,17 @@ fun SettingsScreen(chatState: ChatState) {
             }
         }
 
+        // Clear token action (only shown when token is set)
+        if (chatState.authToken.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Clear token",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.clickable { chatState.clearAuthToken() },
+            )
+        }
+
         // ── ntfy section ──────────────────────────────────────────
         Spacer(Modifier.height(24.dp))
         Text(
