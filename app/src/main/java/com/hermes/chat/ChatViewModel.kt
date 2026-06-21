@@ -16,6 +16,8 @@ import com.hermes.chat.network.HermesEndpointResolver
 import com.hermes.chat.network.HermesOkHttpClient
 import com.hermes.chat.network.NetworkModeDetector
 import com.hermes.chat.network.NtfyPublisher
+import com.hermes.chat.network.RetryPolicy
+import com.hermes.chat.network.retryWithBackoff
 import com.hermes.chat.storage.SecureTokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +79,15 @@ class ChatViewModel(
     var connectionTestResult: String? by mutableStateOf(null)
         private set
 
+    // ── Retry / offline queue ──────────────────────────────────
+
+    /** Retry policy for Hermes API calls. */
+    var retryPolicy: RetryPolicy = RetryPolicy()
+        private set
+
+    /** Indices into [messages] of assistant messages that failed and await retry. */
+    val failedMessageIndices = mutableStateListOf<Int>()
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     /** Publisher is re-reads [ntfyConfig] on each send via the provider lambda. */
@@ -128,18 +139,60 @@ class ChatViewModel(
         messages.add(Message(role = "assistant", text = "..."))
 
         scope.launch {
-            val response = client.sendMessage(
-                messages.toList().filter { it.text != "..." && !it.isSystem }
-            )
+            performSend(pendingIndex)
+        }
+    }
+
+    /**
+     * Perform the actual API send with retry/backoff.
+     * Called from [sendMessage] and [retryMessage].
+     */
+    private suspend fun performSend(pendingIndex: Int) {
+        val conversation = messages.toList().filterIndexed { i, m ->
+            i != pendingIndex && m.text != "..." && !m.isSystem
+        }
+
+        val result = retryWithBackoff(retryPolicy) {
+            client.sendMessage(conversation)
+        }
+
+        result.onSuccess { response ->
             if (pendingIndex < messages.size) {
                 messages[pendingIndex] = response
             }
+            failedMessageIndices.remove(pendingIndex)
             // Notify via ntfy
             val isError = response.text.startsWith("\u26A0\uFE0F") // ⚠️
             if (isError) {
                 publisher.send("Chat Error", response.text.take(200), listOf("hermes", "error"))
             }
+        }.onFailure { exception ->
+            if (pendingIndex < messages.size) {
+                val text = "\u26A0\uFE0F Failed — tap to retry"
+                messages[pendingIndex] = Message(role = "assistant", text = text)
+            }
+            if (!failedMessageIndices.contains(pendingIndex)) {
+                failedMessageIndices.add(pendingIndex)
+            }
+            publisher.send("Chat Error", "Message queued for retry: ${exception.message?.take(100) ?: "unknown"}",
+                listOf("hermes", "error"))
         }
+    }
+
+    /** Retry a single failed message at [failedIndex]. */
+    fun retryMessage(failedIndex: Int) {
+        if (failedIndex < 0 || failedIndex >= messages.size) return
+        // Reset to pending
+        messages[failedIndex] = Message(role = "assistant", text = "...")
+        scope.launch {
+            performSend(failedIndex)
+        }
+    }
+
+    /** Retry every message currently in the failed queue. */
+    fun retryAllFailed() {
+        val snapshot = failedMessageIndices.toList()
+        snapshot.forEach { retryMessage(it) }
     }
 
     /** Called after successful biometric / device-credential auth. */

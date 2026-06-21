@@ -126,9 +126,32 @@ fun ChatScreen(chatState: ChatViewModel) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             items(items = chatState.messages, key = { it.id }) { message ->
+                val index = chatState.messages.indexOf(message)
                 when {
                     message.isSystem -> SystemMessage(text = message.text)
-                    else -> MessageBubble(message = message)
+                    else -> MessageBubble(message = message, chatState = chatState, index = index)
+                }
+            }
+        }
+
+        // Retry-all banner when messages are queued
+        if (chatState.failedMessageIndices.isNotEmpty()) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { chatState.retryAllFailed() }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = "\u26A0\uFE0F ${chatState.failedMessageIndices.size} message(s) failed \u2014 Tap to retry all",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
                 }
             }
         }
@@ -226,7 +249,10 @@ private fun SystemMessage(text: String) {
 }
 
 @Composable
-private fun MessageBubble(message: Message) {
+private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int) {
+    val isFailed = index in chatState.failedMessageIndices
+    val isPending = message.isAssistant && message.text == "..." && message.attachments.isEmpty()
+
     val alignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
     val color = if (message.isUser)
         MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
@@ -248,11 +274,18 @@ private fun MessageBubble(message: Message) {
             modifier = Modifier.widthIn(max = 300.dp),
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                if (message.isAssistant && message.text == "..." && message.attachments.isEmpty()) {
+                if (isPending) {
                     Text(
-                        text = "● ● ●",
+                        text = "\u23F3 Sending...",
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else if (isFailed) {
+                    Text(
+                        text = "\u26A0\uFE0F Failed \u2014 tap to retry",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.clickable { chatState.retryMessage(index) },
                     )
                 } else {
                     // Render attachments
