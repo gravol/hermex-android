@@ -34,7 +34,20 @@ jobs:
       - name: Run lint
         run: ./gradlew lint --no-daemon
 
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.HERMES_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            mkdir -p app/keystore
+            echo "$KEYSTORE_BASE64" | base64 --decode > app/keystore/hermes-chat.jks
+          fi
+
       - name: Build APKs
+        env:
+          HERMES_STORE_PASSWORD: ${{ secrets.HERMES_STORE_PASSWORD }}
+          HERMES_KEY_ALIAS: ${{ secrets.HERMES_KEY_ALIAS }}
+          HERMES_KEY_PASSWORD: ${{ secrets.HERMES_KEY_PASSWORD }}
         run: ./gradlew assembleDebug assembleRelease --no-daemon
 
       - name: Upload debug APK

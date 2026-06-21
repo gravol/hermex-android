@@ -8,6 +8,7 @@ android/local.properties
 *.aab
 *.keystore
 *.jks
+app/keystore/*.env
 
 # Gradle
 .gradle/

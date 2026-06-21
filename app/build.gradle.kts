@@ -27,6 +27,15 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = project.rootProject.file("app/keystore/hermes-chat.jks")
+            storePassword = System.getenv("HERMES_STORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("HERMES_KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("HERMES_KEY_PASSWORD") ?: ""
+        }
+    }
+
     buildTypes {
         debug { isDebuggable = true }
         release {
@@ -35,8 +44,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Use debug keystore for development releases
-            signingConfig = signingConfigs["debug"]
+            signingConfig = signingConfigs["release"]
         }
     }
 
