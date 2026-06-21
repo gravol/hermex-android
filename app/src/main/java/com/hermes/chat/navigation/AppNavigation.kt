@@ -37,6 +37,7 @@ import com.hermes.chat.ui.screen.DevicesScreen
 import com.hermes.chat.ui.screen.LogsScreen
 import com.hermes.chat.ui.screen.SecurePromptDialog
 import com.hermes.chat.ui.screen.SettingsScreen
+import com.hermes.chat.ui.theme.HermesChatTheme
 
 data class BottomNavItem(
     val route: String,
@@ -59,8 +60,9 @@ fun AppNavigation() {
     val currentDestination = navBackStackEntry?.destination
     val chatViewModel: ChatViewModel = viewModel()
 
-    Scaffold(
-        bottomBar = {
+    HermesChatTheme(isDarkTheme = chatViewModel.isDarkTheme) {
+        Scaffold(
+            bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface,
@@ -130,4 +132,5 @@ fun AppNavigation() {
         ntfyClient.start(chatViewModel.ntfyConfig)
         onDispose { ntfyClient.stop() }
     }
+}
 }

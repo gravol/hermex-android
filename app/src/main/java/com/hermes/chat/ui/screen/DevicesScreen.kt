@@ -146,7 +146,7 @@ private fun DeviceCard(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.PowerSettingsNew,
-                        contentDescription = null,
+                        contentDescription = "Wake device",
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))

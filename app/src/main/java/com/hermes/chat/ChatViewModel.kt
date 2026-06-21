@@ -80,6 +80,11 @@ class ChatViewModel(
     var connectionTestResult: String? by mutableStateOf(null)
         private set
 
+    // ── Theme ─────────────────────────────────────────────────
+
+    /** True = dark scheme (night mode on), False = light scheme. */
+    var isDarkTheme: Boolean by mutableStateOf(true)
+
     // ── Retry / offline queue ──────────────────────────────────
 
     /** Retry policy for Hermes API calls. */
@@ -106,6 +111,19 @@ class ChatViewModel(
         (client as? HermesOkHttpClient)?.model = model.apiName
         addSystem("\u2705 Switched to **${model.displayName}**")
         publisher.send("Model Changed", "Switched to ${model.displayName}", listOf("hermes", "settings"))
+    }
+
+    /** Toggle between dark and light theme. */
+    fun toggleDarkTheme() {
+        isDarkTheme = !isDarkTheme
+    }
+
+    /** Clear all messages from the chat. */
+    fun clearMessages() {
+        val count = messages.size
+        messages.clear()
+        failedMessageIndices.clear()
+        addSystem("\uD83D\uDDD1\uFE0F Cleared $count message(s)")
     }
 
     /** Update the ntfy topic and publish a test event when non-empty. */

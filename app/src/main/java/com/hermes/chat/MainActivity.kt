@@ -5,16 +5,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.hermes.chat.navigation.AppNavigation
-import com.hermes.chat.ui.theme.HermesChatTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            HermesChatTheme {
-                AppNavigation()
-            }
+            AppNavigation()
         }
     }
 }
