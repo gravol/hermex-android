@@ -11,6 +11,7 @@ import com.hermes.chat.model.MessageAttachment
 import com.hermes.chat.model.ModelType
 import com.hermes.chat.model.NetworkMode
 import com.hermes.chat.model.NtfyConfig
+import com.hermes.chat.model.SettingsBackup
 import com.hermes.chat.network.HermesClient
 import com.hermes.chat.network.HermesEndpointResolver
 import com.hermes.chat.network.HermesOkHttpClient
@@ -212,7 +213,7 @@ class ChatViewModel(
 
     // ── Internal ────────────────────────────────────────────────
 
-    private fun addSystem(text: String) {
+    fun addSystem(text: String) {
         messages.add(Message(role = "system", text = text))
     }
 
@@ -313,5 +314,49 @@ class ChatViewModel(
             messages.removeAll { it.text == "\uD83D\uDD04 Testing connection..." }
             addSystem(result)
         }
+    }
+
+    // ── Settings backup/restore ────────────────────────────────
+
+    /** Export current settings (excluding API token) as a JSON string. */
+    fun exportSettings(): String {
+        val backup = SettingsBackup(
+            model = currentModel.displayName,
+            awayUrl = awayBaseUrl,
+            ntfyTopic = ntfyConfig.topic,
+            clerkMacAddress = clerkMacAddress,
+            clerkIpAddress = clerkIpAddress,
+        )
+        return backup.toJson()
+    }
+
+    /** Import settings from a JSON string. Returns true on success. */
+    fun importSettings(json: String): Boolean {
+        val backup = SettingsBackup.fromJson(json) ?: return false
+        // Apply model
+        val model = ModelType.entries.find { it.displayName == backup.model }
+        if (model != null && model != currentModel) {
+            setModel(model)
+        }
+        // Apply away URL
+        if (backup.awayUrl != awayBaseUrl) {
+            awayBaseUrl = backup.awayUrl
+            (client as? HermesOkHttpClient)?.let {
+                it.baseUrl = HermesEndpointResolver.resolve(currentMode, awayBaseUrl)
+            }
+        }
+        // Apply ntfy topic
+        if (backup.ntfyTopic != ntfyConfig.topic) {
+            ntfyConfig = ntfyConfig.copy(topic = backup.ntfyTopic)
+        }
+        // Apply clerk config
+        if (backup.clerkMacAddress != clerkMacAddress) {
+            clerkMacAddress = backup.clerkMacAddress
+        }
+        if (backup.clerkIpAddress != clerkIpAddress) {
+            clerkIpAddress = backup.clerkIpAddress
+        }
+        addSystem("\u2705 Settings restored from backup")
+        return true
     }
 }

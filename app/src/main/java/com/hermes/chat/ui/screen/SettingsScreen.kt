@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,10 +26,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.hermes.chat.ChatViewModel
 import com.hermes.chat.model.ModelType
 import com.hermes.chat.model.NetworkMode
@@ -36,6 +40,7 @@ import com.hermes.chat.model.NetworkMode
 @Composable
 fun SettingsScreen(chatState: ChatViewModel) {
     var ntfyInput by remember { mutableStateOf(chatState.ntfyConfig.topic) }
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -342,5 +347,73 @@ fun SettingsScreen(chatState: ChatViewModel) {
             else
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
         )
+
+        // ── Backup & Restore section ──────────────────────────────
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = "Backup & Restore",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // Backup button
+            val backupLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("application/json"),
+            ) { uri ->
+                uri?.let {
+                    val json = chatState.exportSettings()
+                    try {
+                        context.contentResolver.openOutputStream(it)?.use { out ->
+                            out.write(json.toByteArray(Charsets.UTF_8))
+                        }
+                        chatState.addSystem("\u2705 Settings backed up")
+                    } catch (e: Exception) {
+                        chatState.addSystem("\u274C Backup failed: ${e.message?.take(100)}")
+                    }
+                }
+            }
+            Text(
+                text = "Backup settings",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable { backupLauncher.launch("hermes-chat-settings.json") }
+                    .padding(vertical = 8.dp),
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            // Restore button
+            val restoreLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument(),
+            ) { uri ->
+                uri?.let {
+                    try {
+                        val json = context.contentResolver.openInputStream(it)?.use { input ->
+                            input.bufferedReader(Charsets.UTF_8).readText()
+                        } ?: return@let
+                        if (chatState.importSettings(json)) {
+                            // no-op; system message is added by importSettings
+                        } else {
+                            chatState.addSystem("\u274C Restore failed: invalid file")
+                        }
+                    } catch (e: Exception) {
+                        chatState.addSystem("\u274C Restore failed: ${e.message?.take(100)}")
+                    }
+                }
+            }
+            Text(
+                text = "Restore settings",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable { restoreLauncher.launch(arrayOf("application/json")) }
+                    .padding(vertical = 8.dp),
+            )
+        }
     }
 }
