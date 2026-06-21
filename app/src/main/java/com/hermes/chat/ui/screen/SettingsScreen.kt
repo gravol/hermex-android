@@ -27,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import com.hermes.chat.ChatViewModel
 import com.hermes.chat.model.ModelType
 import com.hermes.chat.model.NetworkMode
@@ -108,7 +110,9 @@ fun SettingsScreen(chatState: ChatViewModel) {
         OutlinedTextField(
             value = authTokenInput,
             onValueChange = { authTokenInput = it },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { testTag = "apiTokenField" },
             label = { Text("API Token") },
             placeholder = { Text("sk-... or Bearer token") },
             singleLine = true,
