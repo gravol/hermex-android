@@ -1,8 +1,10 @@
 package com.hermes.chat.network
 
+import com.hermes.chat.BuildConfig
 import com.hermes.chat.model.Message
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.CertificatePinner
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -11,14 +13,29 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * Minimal Hermes HTTP client.
- * Sends chat completions to a Hermes-compatible /v1/chat/completions endpoint.
- * No auth headers, no cert pinning, no model switching — just a bare POST.
+ * Hermes HTTP client with Network Security Configuration support.
+ *
+ * == Build-type-aware defaults ==
+ * [DEBUG builds]  → baseUrl = "http://localhost:8080/v1/chat/completions"
+ *                  Certificate pinning DISABLED (localhost has no certs).
+ *                  OS-level cleartext allowed via debug network_security_config.xml override.
+ * [RELEASE builds] → baseUrl = BuildConfig.PRODUCTION_BASE_URL (placeholder)
+ *                   Certificate pinning ENABLED for HTTPS hosts.
+ *                   OS-level cleartext DENIED by network_security_config.xml.
+ *
+ * Override baseUrl or isPinningEnabled at runtime to customise.
  */
 class HermesOkHttpClient : HermesClient {
 
-    /** Override to point at a different server or port. */
-    var baseUrl: String = "http://localhost:8080/v1/chat/completions"
+    /**
+     * Hermes API endpoint. Defaults to localhost in debug, production URL in release.
+     * Override to point at a different server (e.g. from Settings).
+     */
+    var baseUrl: String = if (BuildConfig.DEBUG) {
+        "http://localhost:8080/v1/chat/completions"
+    } else {
+        BuildConfig.PRODUCTION_BASE_URL
+    }
 
     /** Model name sent in each request. Override to switch models. */
     var model: String = "hermes"
@@ -26,11 +43,36 @@ class HermesOkHttpClient : HermesClient {
     /** Max tokens in the response. */
     var maxTokens: Int = 4096
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    /**
+     * Whether CertificatePinner is active.
+     * Default: disabled in debug (localhost), enabled in release.
+     * Set false explicitly to bypass pinning for a non-production host in a release build.
+     */
+    var isPinningEnabled: Boolean = !BuildConfig.DEBUG
+
+    private val client: OkHttpClient by lazy {
+        val builder = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+
+        if (isPinningEnabled) {
+            val host = extractHost(baseUrl)
+            if (host != null && !isLoopback(host)) {
+                builder.certificatePinner(
+                    CertificatePinner.Builder()
+                        .add(host,
+                            // TODO: Replace with real production cert SHA-256 hashes.
+                            "sha256/CHANGE_ME_TO_REAL_HASH_1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                            "sha256/CHANGE_ME_TO_REAL_BACKUP_HASH_2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
+                        )
+                        .build()
+                )
+            }
+        }
+
+        builder.build()
+    }
 
     private val jsonMediaType = "application/json".toMediaType()
 
@@ -79,5 +121,24 @@ class HermesOkHttpClient : HermesClient {
             maxTokens = maxTokens,
         )
         return request.toJson().toRequestBody(jsonMediaType)
+    }
+
+    // ── Helpers ────────────────────────────────────────────────
+
+    /** Extract hostname (no port) from a URL. Returns null on failure. */
+    private fun extractHost(url: String): String? {
+        return try {
+            val withoutProtocol = url.substringAfter("://")
+            withoutProtocol.substringBefore(":").substringBefore("/")
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** True if the host is localhost or a loopback IP. */
+    private fun isLoopback(host: String): Boolean {
+        return host.equals("localhost", ignoreCase = true) ||
+               host == "127.0.0.1" ||
+               host == "::1"
     }
 }

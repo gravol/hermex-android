@@ -14,10 +14,27 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         vectorDrawables { useSupportLibrary = true }
+
+        // ── Network hardening ─────────────────────────────────
+        // Production Hermes endpoint. Override by setting HERMES_BASE_URL env var.
+        buildConfigField("String", "PRODUCTION_BASE_URL",
+            "\"https://hermes.internal.example.com/v1/chat/completions\"")
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
     }
 
     buildTypes {
         debug { isDebuggable = true }
+        release {
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
     }
 
     compileOptions {
