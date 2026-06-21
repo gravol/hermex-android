@@ -103,7 +103,7 @@ fun AppNavigation() {
         ) {
             composable("chat") { ChatScreen(chatState) }
             composable("settings") { SettingsScreen(chatState) }
-            composable("devices") { DevicesScreen() }
+            composable("devices") { DevicesScreen(chatState) }
             composable("logs") { LogsScreen() }
         }
     }

@@ -128,5 +128,65 @@ fun SettingsScreen(chatState: ChatState) {
             else
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
         )
+
+        // ── Clerk device section ───────────────────────────────────
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = "Clerk Device",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+
+        var macInput by remember(chatState.clerkMacAddress) { mutableStateOf(chatState.clerkMacAddress) }
+        var ipInput by remember(chatState.clerkIpAddress) { mutableStateOf(chatState.clerkIpAddress) }
+
+        OutlinedTextField(
+            value = macInput,
+            onValueChange = { macInput = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("MAC Address") },
+            placeholder = { Text("e.g. AA:BB:CC:DD:EE:FF") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                cursorColor = MaterialTheme.colorScheme.primary,
+            ),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = ipInput,
+            onValueChange = { ipInput = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("IP Address") },
+            placeholder = { Text("e.g. 192.168.1.100") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onDone = {
+                    chatState.clerkMacAddress = macInput.trim()
+                    chatState.clerkIpAddress = ipInput.trim()
+                },
+            ),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                cursorColor = MaterialTheme.colorScheme.primary,
+            ),
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = if (chatState.clerkIpAddress.isNotBlank())
+                "✅ Clerk configured — ${chatState.clerkIpAddress}"
+            else
+                "Enter MAC and IP to enable WoL and status checks",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (chatState.clerkIpAddress.isNotBlank())
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        )
     }
 }

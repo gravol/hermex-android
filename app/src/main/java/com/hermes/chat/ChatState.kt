@@ -35,6 +35,10 @@ class ChatState(
     /** ntfy.sh topic and optional auth token. */
     var ntfyConfig: NtfyConfig by mutableStateOf(NtfyConfig())
 
+    /** Clerk device MAC and IP for WoL and status checking. */
+    var clerkMacAddress: String by mutableStateOf("")
+    var clerkIpAddress: String by mutableStateOf("")
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     /** Publisher is re-reads [ntfyConfig] on each send via the provider lambda. */
