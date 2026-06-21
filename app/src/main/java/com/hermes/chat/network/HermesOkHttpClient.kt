@@ -50,6 +50,12 @@ class HermesOkHttpClient : HermesClient {
      */
     var isPinningEnabled: Boolean = !BuildConfig.DEBUG
 
+    /**
+     * Bearer auth token sent as Authorization header.
+     * Empty string = no auth. Set via Settings.
+     */
+    var authToken: String = ""
+
     private val client: OkHttpClient by lazy {
         val builder = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -78,10 +84,13 @@ class HermesOkHttpClient : HermesClient {
 
     override suspend fun sendMessage(conversation: List<Message>): Message = withContext(Dispatchers.IO) {
         val requestBody = buildRequest(conversation)
-        val httpRequest = Request.Builder()
+        val reqBuilder = Request.Builder()
             .url(baseUrl)
             .post(requestBody)
-            .build()
+        if (authToken.isNotBlank()) {
+            reqBuilder.addHeader("Authorization", "Bearer $authToken")
+        }
+        val httpRequest = reqBuilder.build()
 
         val httpResponse: okhttp3.Response = try {
             client.newCall(httpRequest).execute()
@@ -94,10 +103,13 @@ class HermesOkHttpClient : HermesClient {
 
         val bodyString = httpResponse.body?.string() ?: ""
         if (!httpResponse.isSuccessful) {
-            return@withContext Message(
-                role = "assistant",
-                text = "⚠️ HTTP ${httpResponse.code}: ${bodyString.take(200)}",
-            )
+            val message = when (httpResponse.code) {
+                401 -> "⚠️ Auth failed (HTTP 401). Check your API token."
+                403 -> "⚠️ Forbidden (HTTP 403). Token may lack permissions."
+                404 -> "⚠️ Endpoint not found (HTTP 404). Check your URL."
+                else -> "⚠️ HTTP ${httpResponse.code}: ${bodyString.take(200)}"
+            }
+            return@withContext Message(role = "assistant", text = message)
         }
 
         try {

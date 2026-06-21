@@ -93,6 +93,70 @@ fun SettingsScreen(chatState: ChatState) {
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
         )
 
+        // ── Hermes connection section ──────────────────────────────
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = "Hermes Connection",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+
+        var authTokenInput by remember(chatState.authToken) { mutableStateOf(chatState.authToken) }
+
+        // Auth token
+        OutlinedTextField(
+            value = authTokenInput,
+            onValueChange = { authTokenInput = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("API Token") },
+            placeholder = { Text("sk-... or Bearer token") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = { chatState.updateAuthToken(authTokenInput.trim()) },
+            ),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                cursorColor = MaterialTheme.colorScheme.primary,
+            ),
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = if (chatState.authToken.isNotBlank()) "✅ Token set" else "Leave blank for anonymous access",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (chatState.authToken.isNotBlank())
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        )
+        Spacer(Modifier.height(8.dp))
+
+        // Test connection button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (chatState.isTestingConnection) "⏳ Testing..." else "Test Connection",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable(enabled = !chatState.isTestingConnection) { chatState.testConnection() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+            Spacer(Modifier.weight(1f))
+            chatState.connectionTestResult?.let { result ->
+                val isError = result.startsWith("❌") || result.contains("failed", ignoreCase = true)
+                Text(
+                    text = result,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+
         // ── ntfy section ──────────────────────────────────────────
         Spacer(Modifier.height(24.dp))
         Text(

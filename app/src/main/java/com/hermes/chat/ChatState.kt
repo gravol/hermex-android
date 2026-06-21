@@ -54,6 +54,20 @@ class ChatState(
     var awayBaseUrl: String by mutableStateOf("")
         private set
 
+    // ── Hermes auth ────────────────────────────────────────────
+
+    /** Bearer token sent with every request. */
+    var authToken: String by mutableStateOf("")
+        private set
+
+    /** True while a connection test is running. */
+    var isTestingConnection: Boolean by mutableStateOf(false)
+        private set
+
+    /** Result of the last connection test (null = not tested). */
+    var connectionTestResult: String? by mutableStateOf(null)
+        private set
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     /** Publisher is re-reads [ntfyConfig] on each send via the provider lambda. */
@@ -173,5 +187,52 @@ class ChatState(
     init {
         // Detect network mode on construction (non-blocking)
         refreshNetworkMode()
+    }
+
+    // ── Auth helpers ────────────────────────────────────────────
+
+    /** Set the auth token and push to the HTTP client. */
+    fun updateAuthToken(token: String) {
+        authToken = token
+        (client as? HermesOkHttpClient)?.authToken = token
+    }
+
+    /** Send a minimal test message to verify connectivity and auth. */
+    fun testConnection() {
+        if (isTestingConnection) return
+        isTestingConnection = true
+        connectionTestResult = null
+        addSystem("🔄 Testing connection...")
+
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val httpClient = client as? HermesOkHttpClient
+                    if (httpClient == null) return@withContext "⚠️ Client not available"
+
+                    // Minimal ping — empty messages list, expect 422 or 400 which means connected
+                    val testMsg = Message(role = "user", text = "ping")
+                    val response = httpClient.sendMessage(listOf(testMsg))
+
+                    if (response.text.startsWith("⚠️")) {
+                        // Still counts as "reached server" for auth check
+                        val code = response.text.substringAfter("(").substringBefore(")")
+                        if (code.contains("401") || code.contains("403"))
+                            "❌ ${response.text}"
+                        else
+                            "✅ Server reached. ${response.text}"
+                    } else {
+                        "✅ Connected and authenticated. Got response."
+                    }
+                } catch (e: Exception) {
+                    "❌ Connection failed: ${e.message ?: "unknown error"}"
+                }
+            }
+            connectionTestResult = result
+            isTestingConnection = false
+            // Remove the "Testing..." message and replace with result
+            messages.removeAll { it.text == "🔄 Testing connection..." }
+            addSystem(result)
+        }
     }
 }
