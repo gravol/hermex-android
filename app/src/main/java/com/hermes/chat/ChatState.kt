@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import com.hermes.chat.model.Message
+import com.hermes.chat.model.MessageAttachment
 import com.hermes.chat.model.ModelType
 import com.hermes.chat.model.NtfyConfig
 import com.hermes.chat.network.HermesClient
@@ -65,8 +66,8 @@ class ChatState(
     }
 
     /** Send a message or handle a slash command (privileged commands are blocked until auth). */
-    fun sendMessage(text: String) {
-        if (text.isBlank()) return
+    fun sendMessage(text: String, attachments: List<MessageAttachment> = emptyList()) {
+        if (text.isBlank() && attachments.isEmpty()) return
 
         // Check for slash commands first
         val command = SlashCommandParser.parse(text)
@@ -80,7 +81,7 @@ class ChatState(
         }
 
         // Normal message flow
-        val userMsg = Message(role = "user", text = text.trim())
+        val userMsg = Message(role = "user", text = text.trim(), attachments = attachments)
         messages.add(userMsg)
 
         val pendingIndex = messages.size

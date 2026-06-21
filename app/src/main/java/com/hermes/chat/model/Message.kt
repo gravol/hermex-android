@@ -7,6 +7,7 @@ data class Message(
     val role: String,
     val text: String,
     val timestamp: Long = System.currentTimeMillis(),
+    val attachments: List<MessageAttachment> = emptyList(),
 ) {
     val isUser: Boolean get() = role == "user"
     val isAssistant: Boolean get() = role == "assistant"
