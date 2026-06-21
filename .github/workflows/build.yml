@@ -48,7 +48,11 @@ jobs:
           HERMES_STORE_PASSWORD: ${{ secrets.HERMES_STORE_PASSWORD }}
           HERMES_KEY_ALIAS: ${{ secrets.HERMES_KEY_ALIAS }}
           HERMES_KEY_PASSWORD: ${{ secrets.HERMES_KEY_PASSWORD }}
-        run: ./gradlew assembleDebug assembleRelease --no-daemon
+        run: |
+          ./gradlew assembleDebug --no-daemon
+          if [ -n "$HERMES_STORE_PASSWORD" ]; then
+            ./gradlew assembleRelease --no-daemon
+          fi
 
       - name: Run instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -71,12 +75,13 @@ jobs:
         with:
           name: app-release
           path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: ignore
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: build-${{ github.run_number }}
           name: "APK Build #${{ github.run_number }}"
-          artifacts: "app/build/outputs/apk/release/app-release.apk"
+          artifacts: "app/build/outputs/apk/debug/app-debug.apk"
           token: ${{ secrets.GITHUB_TOKEN }}
           removeArtifacts: true
