@@ -50,6 +50,16 @@ jobs:
           HERMES_KEY_PASSWORD: ${{ secrets.HERMES_KEY_PASSWORD }}
         run: ./gradlew assembleDebug assembleRelease --no-daemon
 
+      - name: Run instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: default
+          arch: x86_64
+          emulator-boot-timeout: 300
+          disable-animations: true
+          script: ./gradlew connectedDebugAndroidTest --no-daemon
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
