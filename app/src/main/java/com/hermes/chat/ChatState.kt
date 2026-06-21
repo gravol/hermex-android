@@ -14,7 +14,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Holds chat message state, current model, and drives send / slash-command flow.
+ * Holds chat message state, current model, pending privileged commands,
+ * and drives send / slash-command flow.
  * Defaults to HermesOkHttpClient for convenience.
  */
 class ChatState(
@@ -25,7 +26,13 @@ class ChatState(
     var currentModel: ModelType by mutableStateOf(ModelType.FLASH)
         private set
 
+    /** Non-null when a privileged command is waiting for biometric auth. */
+    var pendingPrivilegedCommand: SlashCommand? by mutableStateOf(null)
+        private set
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // ── Public API ──────────────────────────────────────────────
 
     /** Switch model and show a confirmation message. */
     fun setModel(model: ModelType) {
@@ -40,13 +47,17 @@ class ChatState(
         )
     }
 
-    /** Send a message or handle a slash command. */
+    /** Send a message or handle a slash command (privileged commands are blocked until auth). */
     fun sendMessage(text: String) {
         if (text.isBlank()) return
 
         // Check for slash commands first
         val command = SlashCommandParser.parse(text)
         if (command != null) {
+            if (command.isPrivileged) {
+                pendingPrivilegedCommand = command
+                return
+            }
             handleCommand(command)
             return
         }
@@ -55,11 +66,9 @@ class ChatState(
         val userMsg = Message(role = "user", text = text.trim())
         messages.add(userMsg)
 
-        // Add pending placeholder
         val pendingIndex = messages.size
         messages.add(Message(role = "assistant", text = "..."))
 
-        // Fire API call
         scope.launch {
             val response = client.sendMessage(
                 messages.toList().filter { it.text != "..." && !it.isSystem }
@@ -70,9 +79,33 @@ class ChatState(
         }
     }
 
+    /** Called after successful biometric / device-credential auth. */
+    fun executePendingCommand() {
+        val command = pendingPrivilegedCommand ?: return
+        pendingPrivilegedCommand = null
+        handleCommand(command)
+        messages.add(
+            Message(
+                role = "system",
+                text = "🔒 Privileged command executed",
+            )
+        )
+    }
+
+    /** Called when the user cancels the auth dialog. */
+    fun cancelPendingCommand() {
+        pendingPrivilegedCommand = null
+    }
+
+    // ── Internal ────────────────────────────────────────────────
+
     private fun handleCommand(command: SlashCommand) {
         when (command) {
             is SlashCommand.SetModel -> setModel(command.model)
+            is SlashCommand.Secure -> {
+                // After auth this is called by executePendingCommand
+                // Nothing more to do — the system message is added there
+            }
         }
     }
 }

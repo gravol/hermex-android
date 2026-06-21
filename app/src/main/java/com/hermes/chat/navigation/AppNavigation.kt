@@ -31,6 +31,7 @@ import com.hermes.chat.ChatState
 import com.hermes.chat.ui.screen.ChatScreen
 import com.hermes.chat.ui.screen.DevicesScreen
 import com.hermes.chat.ui.screen.LogsScreen
+import com.hermes.chat.ui.screen.SecurePromptDialog
 import com.hermes.chat.ui.screen.SettingsScreen
 
 data class BottomNavItem(
@@ -102,5 +103,14 @@ fun AppNavigation() {
             composable("devices") { DevicesScreen() }
             composable("logs") { LogsScreen() }
         }
+    }
+
+    // Secure prompt overlay for privileged commands
+    chatState.pendingPrivilegedCommand?.let { command ->
+        SecurePromptDialog(
+            commandLabel = command::class.simpleName ?: "unknown",
+            onAuthenticated = { chatState.executePendingCommand() },
+            onDismiss = { chatState.cancelPendingCommand() },
+        )
     }
 }
