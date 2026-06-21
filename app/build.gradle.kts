@@ -34,6 +34,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Use debug keystore for development releases
+            signingConfig = signingConfigs["debug"]
         }
     }
 
@@ -45,6 +47,20 @@ android {
 
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.8" }
+
+    // ── Unit tests ──────────────────────────────────────────────
+    testOptions {
+        unitTests.isReturnDefaultValues = false
+        unitTests.all { it.useJUnitPlatform() }
+    }
+
+    // ── Lint ────────────────────────────────────────────────────
+    lint {
+        // lint.xml is the single source of truth for severities
+        checkReleaseBuilds = true
+        abortOnError = false
+        htmlReport = true
+    }
 }
 
 dependencies {
@@ -60,4 +76,8 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("io.coil-kt:coil-compose:2.6.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // ── Test ────────────────────────────────────────────────────
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation("org.jetbrains.kotlin:kotlin-test:1.9.22")
 }

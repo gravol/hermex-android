@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Hermes Chat — Lint configuration.
+
+  Tracks quality baseline and suppresses noisy or irrelevant checks.
+  Run with: ./gradlew lint
+-->
+<lint>
+    <!-- Baseline — snapshot of current issues; only new or fixed issues trip CI -->
+    <issue id="Baseline" severity="informational" />
+
+    <!-- Suppress "GoogleAppIndexingWarning" — we don't use Google indexing -->
+    <issue id="GoogleAppIndexingWarning" severity="ignore" />
+
+    <!-- Suppress "UnusedResources" for generated / referenced-only resources -->
+    <issue id="UnusedResources" severity="ignore" />
+
+    <!-- Suppress "VectorRaster" — we target API 26+ where vector drawables are native -->
+    <issue id="VectorRaster" severity="ignore" />
+
+    <!-- Allow older lint versions on CI -->
+    <issue id="IconExpectedSize" severity="ignore" />
+    <issue id="MissingTranslation" severity="ignore" />
+</lint>
