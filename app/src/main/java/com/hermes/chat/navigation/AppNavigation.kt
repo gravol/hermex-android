@@ -17,6 +17,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -28,6 +29,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.hermes.chat.ChatState
+import com.hermes.chat.model.Message
+import com.hermes.chat.network.NtfyClient
 import com.hermes.chat.ui.screen.ChatScreen
 import com.hermes.chat.ui.screen.DevicesScreen
 import com.hermes.chat.ui.screen.LogsScreen
@@ -112,5 +115,18 @@ fun AppNavigation() {
             onAuthenticated = { chatState.executePendingCommand() },
             onDismiss = { chatState.cancelPendingCommand() },
         )
+    }
+
+    // ntfy SSE subscription — starts when topic is set, stops on config change / disposal
+    val ntfyClient = remember {
+        NtfyClient { title, message ->
+            chatState.messages.add(
+                Message(role = "system", text = "\uD83D\uDD14 $title — $message")
+            )
+        }
+    }
+    DisposableEffect(chatState.ntfyConfig) {
+        ntfyClient.start(chatState.ntfyConfig)
+        onDispose { ntfyClient.stop() }
     }
 }

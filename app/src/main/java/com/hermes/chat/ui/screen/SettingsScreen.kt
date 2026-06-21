@@ -1,28 +1,36 @@
 package com.hermes.chat.ui.screen
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.hermes.chat.ChatState
 import com.hermes.chat.model.ModelType
 
 @Composable
 fun SettingsScreen(chatState: ChatState) {
+    var ntfyInput by remember { mutableStateOf(chatState.ntfyConfig.topic) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -34,19 +42,18 @@ fun SettingsScreen(chatState: ChatState) {
             color = MaterialTheme.colorScheme.primary,
         )
 
+        // ── Model section ──────────────────────────────────────────
         Spacer(Modifier.height(24.dp))
-
         Text(
             text = "Model",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
         )
-
         Spacer(Modifier.height(8.dp))
 
         ModelType.entries.forEach { model ->
             val selected = chatState.currentModel == model
-            Row(
+            androidx.compose.foundation.layout.Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
@@ -59,7 +66,7 @@ fun SettingsScreen(chatState: ChatState) {
             ) {
                 RadioButton(
                     selected = selected,
-                    onClick = null, // handled by row click
+                    onClick = null,
                     colors = RadioButtonDefaults.colors(
                         selectedColor = MaterialTheme.colorScheme.primary,
                         unselectedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -80,6 +87,46 @@ fun SettingsScreen(chatState: ChatState) {
             text = "Current: ${chatState.currentModel.displayName}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        )
+
+        // ── ntfy section ──────────────────────────────────────────
+        Spacer(Modifier.height(24.dp))
+        Text(
+            text = "Notifications (ntfy.sh)",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = ntfyInput,
+            onValueChange = { ntfyInput = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Topic") },
+            placeholder = { Text("e.g. hermes-chat-alerts") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onDone = { chatState.setNtfyTopic(ntfyInput.trim()) },
+            ),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                cursorColor = MaterialTheme.colorScheme.primary,
+            ),
+        )
+
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = if (chatState.ntfyConfig.isConfigured)
+                "✅ Publishing to: ${chatState.ntfyConfig.topic}"
+            else
+                "Enter a topic above to enable push notifications",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (chatState.ntfyConfig.isConfigured)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
         )
     }
 }
