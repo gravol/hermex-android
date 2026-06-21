@@ -81,7 +81,7 @@ fun ChatScreen(chatState: ChatState = remember { ChatState() }) {
                     keyboardActions = KeyboardActions(
                         onSend = {
                             if (inputText.isNotBlank()) {
-                                chatState.sendLocalMessage(inputText)
+                                chatState.sendMessage(inputText)
                                 inputText = ""
                                 scope.launch {
                                     listState.animateScrollToItem(chatState.messages.lastIndex)
@@ -98,7 +98,7 @@ fun ChatScreen(chatState: ChatState = remember { ChatState() }) {
                 IconButton(
                     onClick = {
                         if (inputText.isNotBlank()) {
-                            chatState.sendLocalMessage(inputText)
+                            chatState.sendMessage(inputText)
                             inputText = ""
                             scope.launch {
                                 listState.animateScrollToItem(chatState.messages.lastIndex)

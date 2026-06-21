@@ -4,10 +4,12 @@ import com.hermes.chat.model.Message
 
 /**
  * Interface for communicating with the Hermes API.
- * The real implementation will connect to the Hermes Agent server.
- * For now, only used as a type placeholder.
+ * The concrete implementation will POST to a Hermes-compatible server.
  */
 interface HermesClient {
-    /** Send a user message and return the assistant's response. */
-    suspend fun sendMessage(text: String): Message
+    /**
+     * Send the full conversation history and return the assistant's response.
+     * Implementations must be safe to call from any thread.
+     */
+    suspend fun sendMessage(conversation: List<Message>): Message
 }

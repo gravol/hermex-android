@@ -2,29 +2,41 @@ package com.hermes.chat
 
 import androidx.compose.runtime.mutableStateListOf
 import com.hermes.chat.model.Message
+import com.hermes.chat.network.HermesClient
+import com.hermes.chat.network.HermesOkHttpClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
- * Holds chat message state.
- * Messages flow: user types → appended to list → HermesClient sends → response appended.
- * For now, sending just echoes back a placeholder.
+ * Holds chat message state and drives send → API → response flow.
+ * Requires a HermesClient; defaults to HermesOkHttpClient for convenience.
  */
-class ChatState {
+class ChatState(
+    private val client: HermesClient = HermesOkHttpClient(),
+) {
     val messages = mutableStateListOf<Message>()
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    fun sendLocalMessage(text: String) {
+    fun sendMessage(text: String) {
         if (text.isBlank()) return
 
-        messages.add(
-            Message(role = "user", text = text.trim())
-        )
+        // Add user message
+        val userMsg = Message(role = "user", text = text.trim())
+        messages.add(userMsg)
 
-        // Placeholder — will be replaced by real Hermes API call
-        messages.add(
-            Message(
-                role = "assistant",
-                text = "...",
-                timestamp = System.currentTimeMillis() + 1,
-            )
-        )
+        // Add pending placeholder
+        val pendingIndex = messages.size
+        messages.add(Message(role = "assistant", text = "..."))
+
+        // Fire API call
+        scope.launch {
+            val response = client.sendMessage(messages.toList().filter { it.text != "..." })
+            // Replace the placeholder with the real response
+            if (pendingIndex < messages.size) {
+                messages[pendingIndex] = response
+            }
+        }
     }
 }
