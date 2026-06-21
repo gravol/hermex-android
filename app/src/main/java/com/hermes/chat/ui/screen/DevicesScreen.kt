@@ -30,7 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.hermes.chat.ChatState
+import com.hermes.chat.ChatViewModel
 import com.hermes.chat.model.DeviceState
 import com.hermes.chat.network.DeviceStatusChecker
 import com.hermes.chat.network.WoLClient
@@ -38,7 +38,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun DevicesScreen(chatState: ChatState) {
+fun DevicesScreen(chatState: ChatViewModel) {
     var clerkState by remember { mutableStateOf(DeviceState.UNKNOWN) }
     val scope = rememberCoroutineScope()
 

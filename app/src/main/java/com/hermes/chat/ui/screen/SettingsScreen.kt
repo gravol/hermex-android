@@ -27,12 +27,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import com.hermes.chat.ChatState
+import com.hermes.chat.ChatViewModel
 import com.hermes.chat.model.ModelType
 import com.hermes.chat.model.NetworkMode
 
 @Composable
-fun SettingsScreen(chatState: ChatState) {
+fun SettingsScreen(chatState: ChatViewModel) {
     var ntfyInput by remember { mutableStateOf(chatState.ntfyConfig.topic) }
 
     Column(

@@ -22,16 +22,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.hermes.chat.ChatState
+import com.hermes.chat.ChatViewModel
 import com.hermes.chat.model.Message
 import com.hermes.chat.network.NtfyClient
-import com.hermes.chat.storage.SecureTokenStore
 import com.hermes.chat.ui.screen.ChatScreen
 import com.hermes.chat.ui.screen.DevicesScreen
 import com.hermes.chat.ui.screen.LogsScreen
@@ -46,18 +46,18 @@ data class BottomNavItem(
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem("chat", "Chat", Icons.AutoMirrored.Filled.Chat, Icons.AutoMirrored.Outlined.Chat),
-    BottomNavItem("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings),
-    BottomNavItem("devices", "Devices", Icons.Filled.Construction, Icons.Outlined.Construction),
-    BottomNavItem("logs", "Logs", Icons.Filled.Terminal, Icons.Outlined.Terminal),
+    BottomNavItem(Routes.Chat.route, "Chat", Icons.AutoMirrored.Filled.Chat, Icons.AutoMirrored.Outlined.Chat),
+    BottomNavItem(Routes.Settings.route, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings),
+    BottomNavItem(Routes.Devices.route, "Devices", Icons.Filled.Construction, Icons.Outlined.Construction),
+    BottomNavItem(Routes.Logs.route, "Logs", Icons.Filled.Terminal, Icons.Outlined.Terminal),
 )
 
 @Composable
-fun AppNavigation(tokenStore: SecureTokenStore? = null) {
+fun AppNavigation() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
-    val chatState = remember { ChatState(tokenStore = tokenStore) }
+    val chatViewModel: ChatViewModel = viewModel()
 
     Scaffold(
         bottomBar = {
@@ -99,35 +99,35 @@ fun AppNavigation(tokenStore: SecureTokenStore? = null) {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = "chat",
+            startDestination = Routes.Chat.route,
             modifier = Modifier.padding(innerPadding),
         ) {
-            composable("chat") { ChatScreen(chatState) }
-            composable("settings") { SettingsScreen(chatState) }
-            composable("devices") { DevicesScreen(chatState) }
-            composable("logs") { LogsScreen() }
+            composable(Routes.Chat.route) { ChatScreen(chatViewModel) }
+            composable(Routes.Settings.route) { SettingsScreen(chatViewModel) }
+            composable(Routes.Devices.route) { DevicesScreen(chatViewModel) }
+            composable(Routes.Logs.route) { LogsScreen() }
         }
     }
 
     // Secure prompt overlay for privileged commands
-    chatState.pendingPrivilegedCommand?.let { command ->
+    chatViewModel.pendingPrivilegedCommand?.let { command ->
         SecurePromptDialog(
             commandLabel = command::class.simpleName ?: "unknown",
-            onAuthenticated = { chatState.executePendingCommand() },
-            onDismiss = { chatState.cancelPendingCommand() },
+            onAuthenticated = { chatViewModel.executePendingCommand() },
+            onDismiss = { chatViewModel.cancelPendingCommand() },
         )
     }
 
     // ntfy SSE subscription — starts when topic is set, stops on config change / disposal
     val ntfyClient = remember {
         NtfyClient { title, message ->
-            chatState.messages.add(
+            chatViewModel.messages.add(
                 Message(role = "system", text = "\uD83D\uDD14 $title — $message")
             )
         }
     }
-    DisposableEffect(chatState.ntfyConfig) {
-        ntfyClient.start(chatState.ntfyConfig)
+    DisposableEffect(chatViewModel.ntfyConfig) {
+        ntfyClient.start(chatViewModel.ntfyConfig)
         onDispose { ntfyClient.stop() }
     }
 }

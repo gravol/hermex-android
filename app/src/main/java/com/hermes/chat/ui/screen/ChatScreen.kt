@@ -55,14 +55,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.hermes.chat.ChatState
+import com.hermes.chat.ChatViewModel
 import com.hermes.chat.model.AttachmentType
 import com.hermes.chat.model.Message
 import com.hermes.chat.model.MessageAttachment
 import kotlinx.coroutines.launch
 
 @Composable
-fun ChatScreen(chatState: ChatState) {
+fun ChatScreen(chatState: ChatViewModel) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }

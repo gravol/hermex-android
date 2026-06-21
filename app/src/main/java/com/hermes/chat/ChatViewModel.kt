@@ -1,9 +1,11 @@
 package com.hermes.chat
 
+import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
 import com.hermes.chat.model.Message
 import com.hermes.chat.model.MessageAttachment
 import com.hermes.chat.model.ModelType
@@ -22,14 +24,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
+ * ViewModel for the Hermes Chat screen.
+ *
  * Holds chat message state, current model, ntfy config, pending privileged commands,
- * network mode / away endpoint, and drives send / slash-command flow.
- * Defaults to HermesOkHttpClient for convenience.
+ * network mode / away endpoint, auth token (persisted in SecureTokenStore),
+ * and drives send / slash-command flow.
+ *
+ * Survives configuration changes. Use via viewModel() in Compose.
  */
-class ChatState(
+class ChatViewModel(
+    application: Application,
     private val client: HermesClient = HermesOkHttpClient(),
-    private val tokenStore: SecureTokenStore? = null,
-) {
+) : AndroidViewModel(application) {
+
     val messages = mutableStateListOf<Message>()
 
     var currentModel: ModelType by mutableStateOf(ModelType.FLASH)
@@ -75,6 +82,9 @@ class ChatState(
     /** Publisher is re-reads [ntfyConfig] on each send via the provider lambda. */
     private val publisher = NtfyPublisher { ntfyConfig }
 
+    /** Encrypted token store backed by Android Keystore. */
+    private val tokenStore = SecureTokenStore(application)
+
     // ── Public API ──────────────────────────────────────────────
 
     /** Switch model and show a confirmation message. */
@@ -82,7 +92,7 @@ class ChatState(
         if (model == currentModel) return
         currentModel = model
         (client as? HermesOkHttpClient)?.model = model.apiName
-        addSystem("✅ Switched to **${model.displayName}**")
+        addSystem("\u2705 Switched to **${model.displayName}**")
         publisher.send("Model Changed", "Switched to ${model.displayName}", listOf("hermes", "settings"))
     }
 
@@ -137,7 +147,7 @@ class ChatState(
         val command = pendingPrivilegedCommand ?: return
         pendingPrivilegedCommand = null
         handleCommand(command)
-        val text = "🔒 Privileged command executed"
+        val text = "\uD83D\uDD12 Privileged command executed"
         addSystem(text)
         publisher.send("Privileged Command", text, listOf("hermes", "secure"))
     }
@@ -170,7 +180,7 @@ class ChatState(
             }
             currentMode = mode
             applyMode()
-            addSystem("📡 Network: **${mode.displayName}**")
+            addSystem("\uD83D\uDCE1 Network: **${mode.displayName}**")
         }
     }
 
@@ -190,7 +200,7 @@ class ChatState(
         // Detect network mode on construction (non-blocking)
         refreshNetworkMode()
         // Load persisted auth token and apply to client
-        val stored = tokenStore?.loadToken() ?: ""
+        val stored = tokenStore.loadToken()
         if (stored.isNotBlank()) {
             authToken = stored
             (client as? HermesOkHttpClient)?.authToken = stored
@@ -202,16 +212,16 @@ class ChatState(
     /** Set the auth token, persist it, and push to the HTTP client. */
     fun updateAuthToken(token: String) {
         authToken = token
-        tokenStore?.saveToken(token)
+        tokenStore.saveToken(token)
         (client as? HermesOkHttpClient)?.authToken = token
     }
 
     /** Wipe the stored auth token from secure storage and the client. */
     fun clearAuthToken() {
         authToken = ""
-        tokenStore?.clearToken()
+        tokenStore.clearToken()
         (client as? HermesOkHttpClient)?.authToken = ""
-        addSystem("🗑️ Auth token cleared")
+        addSystem("\uD83D\uDDD1\uFE0F Auth token cleared")
     }
 
     /** Send a minimal test message to verify connectivity and auth. */
@@ -219,36 +229,35 @@ class ChatState(
         if (isTestingConnection) return
         isTestingConnection = true
         connectionTestResult = null
-        addSystem("🔄 Testing connection...")
+        addSystem("\uD83D\uDD04 Testing connection...")
 
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 try {
                     val httpClient = client as? HermesOkHttpClient
-                    if (httpClient == null) return@withContext "⚠️ Client not available"
+                    if (httpClient == null) return@withContext "\u26A0\uFE0F Client not available"
 
-                    // Minimal ping — empty messages list, expect 422 or 400 which means connected
+                    // Minimal ping
                     val testMsg = Message(role = "user", text = "ping")
                     val response = httpClient.sendMessage(listOf(testMsg))
 
-                    if (response.text.startsWith("⚠️")) {
-                        // Still counts as "reached server" for auth check
+                    if (response.text.startsWith("\u26A0\uFE0F")) {
                         val code = response.text.substringAfter("(").substringBefore(")")
                         if (code.contains("401") || code.contains("403"))
-                            "❌ ${response.text}"
+                            "\u274C ${response.text}"
                         else
-                            "✅ Server reached. ${response.text}"
+                            "\u2705 Server reached. ${response.text}"
                     } else {
-                        "✅ Connected and authenticated. Got response."
+                        "\u2705 Connected and authenticated. Got response."
                     }
                 } catch (e: Exception) {
-                    "❌ Connection failed: ${e.message ?: "unknown error"}"
+                    "\u274C Connection failed: ${e.message ?: "unknown error"}"
                 }
             }
             connectionTestResult = result
             isTestingConnection = false
             // Remove the "Testing..." message and replace with result
-            messages.removeAll { it.text == "🔄 Testing connection..." }
+            messages.removeAll { it.text == "\uD83D\uDD04 Testing connection..." }
             addSystem(result)
         }
     }
