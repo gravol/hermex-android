@@ -10,4 +10,5 @@ data class Message(
 ) {
     val isUser: Boolean get() = role == "user"
     val isAssistant: Boolean get() = role == "assistant"
+    val isSystem: Boolean get() = role == "system"
 }

@@ -1,6 +1,5 @@
 package com.hermes.chat.ui.screen
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,13 +33,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.hermes.chat.ChatState
 import com.hermes.chat.model.Message
 import kotlinx.coroutines.launch
 
 @Composable
-fun ChatScreen(chatState: ChatState = remember { ChatState() }) {
+fun ChatScreen(chatState: ChatState) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
@@ -56,7 +56,10 @@ fun ChatScreen(chatState: ChatState = remember { ChatState() }) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             items(items = chatState.messages, key = { it.id }) { message ->
-                MessageBubble(message = message)
+                when {
+                    message.isSystem -> SystemMessage(text = message.text)
+                    else -> MessageBubble(message = message)
+                }
             }
         }
 
@@ -114,6 +117,21 @@ fun ChatScreen(chatState: ChatState = remember { ChatState() }) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SystemMessage(text: String) {
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
