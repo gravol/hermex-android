@@ -13,7 +13,6 @@ import com.hermes.chat.model.NetworkMode
 import com.hermes.chat.model.NtfyConfig
 import com.hermes.chat.model.SettingsBackup
 import com.hermes.chat.network.HermesClient
-import com.hermes.chat.network.HermesEndpointResolver
 import com.hermes.chat.network.HermesOkHttpClient
 import com.hermes.chat.network.NetworkModeDetector
 import com.hermes.chat.network.NtfyPublisher
@@ -76,12 +75,24 @@ class ChatViewModel(
 
     // ── Network mode (home / away routing) ─────────────────────
 
-    /** Current detected network mode. */
-    var currentMode: NetworkMode by mutableStateOf(NetworkMode.HOME)
+    /** User-selected endpoint routing mode. Defaults to Tailscale-first auto. */
+    var currentMode: NetworkMode by mutableStateOf(NetworkMode.AUTO)
         private set
 
-    /** User-configured away (Tailscale) Hermes endpoint URL. */
+    /** User-configured Local/LAN Hermes endpoint URL. */
+    var localBaseUrl: String by mutableStateOf("")
+        private set
+
+    /** User-configured Tailscale Hermes endpoint URL. */
     var awayBaseUrl: String by mutableStateOf("")
+        private set
+
+    /** Actual endpoint currently applied to the HTTP client. */
+    var resolvedBaseUrl: String by mutableStateOf("")
+        private set
+
+    /** Human-readable endpoint status shown in Settings. */
+    var endpointStatus: String by mutableStateOf("Auto prefers Tailscale, then Local")
         private set
 
     // ── Hermes auth ────────────────────────────────────────────
@@ -297,20 +308,25 @@ class ChatViewModel(
 
     // ── Network mode helpers ───────────────────────────────────
 
-    /** Detect current network mode and update the client endpoint. */
+    /** Re-resolve endpoint routing and update the client endpoint. */
     fun refreshNetworkMode() {
-        scope.launch {
-            val mode = withContext(Dispatchers.IO) {
-                NetworkModeDetector.detect()
-            }
-            currentMode = mode
-            applyMode()
-            refreshModels(silent = true)
-            addSystem("\uD83D\uDCE1 Network: **${mode.displayName}**")
-        }
+        applyMode()
     }
 
-    /** Set the away (Tailscale) Hermes endpoint URL and re-apply routing. */
+    fun setNetworkMode(mode: NetworkMode) {
+        if (mode == currentMode) return
+        currentMode = mode
+        applyMode()
+    }
+
+    /** Set the Local/LAN Hermes endpoint URL and re-apply routing. */
+    fun setLocalUrl(url: String) {
+        localBaseUrl = url
+        applyMode()
+        refreshModels(silent = true)
+    }
+
+    /** Set the Tailscale Hermes endpoint URL and re-apply routing. */
     fun setAwayUrl(url: String) {
         awayBaseUrl = url
         applyMode()
@@ -319,8 +335,52 @@ class ChatViewModel(
 
     /** Update the Hermes client's base URL to match the current mode. */
     private fun applyMode() {
-        val url = HermesEndpointResolver.resolve(currentMode, awayBaseUrl)
-        (client as? HermesOkHttpClient)?.baseUrl = url
+        scope.launch {
+            val local = localBaseUrl.trim()
+            val tailscale = awayBaseUrl.trim()
+            val resolved = when (currentMode) {
+                NetworkMode.TAILSCALE -> {
+                    endpointStatus = if (tailscale.isBlank()) "⚠️ Tailscale selected but URL is blank" else "Using Tailscale endpoint"
+                    tailscale
+                }
+                NetworkMode.LOCAL -> {
+                    endpointStatus = if (local.isBlank()) "⚠️ Local selected but URL is blank" else "Using Local endpoint"
+                    local
+                }
+                NetworkMode.AUTO -> {
+                    endpointStatus = "Checking Tailscale, then Local..."
+                    val tailscaleReachable = withContext(Dispatchers.IO) {
+                        NetworkModeDetector.canReachEndpoint(tailscale)
+                    }
+                    if (tailscaleReachable) {
+                        endpointStatus = "✅ Auto selected Tailscale"
+                        tailscale
+                    } else {
+                        val localReachable = withContext(Dispatchers.IO) {
+                            NetworkModeDetector.canReachEndpoint(local)
+                        }
+                        if (localReachable) {
+                            endpointStatus = "✅ Auto selected Local"
+                            local
+                        } else {
+                            val fallback = tailscale.ifBlank { local }
+                            endpointStatus = if (fallback.isBlank()) {
+                                "⚠️ Add a Tailscale or Local endpoint"
+                            } else {
+                                "⚠️ Neither endpoint probed reachable; using configured fallback"
+                            }
+                            fallback
+                        }
+                    }
+                }
+            }
+            resolvedBaseUrl = resolved
+            (client as? HermesOkHttpClient)?.baseUrl = resolved
+            refreshModels(silent = true)
+            if (resolved.isNotBlank()) {
+                addSystem("\uD83D\uDCE1 Endpoint: **${currentMode.displayName}**")
+            }
+        }
     }
 
     init {
@@ -397,6 +457,8 @@ class ChatViewModel(
     fun exportSettings(): String {
         val backup = SettingsBackup(
             model = selectedModelId,
+            networkMode = currentMode.name,
+            localUrl = localBaseUrl,
             awayUrl = awayBaseUrl,
             ntfyTopic = ntfyConfig.topic,
             clerkMacAddress = clerkMacAddress,
@@ -413,13 +475,15 @@ class ChatViewModel(
         if (backupModelId.isNotBlank() && backupModelId != selectedModelId) {
             setModelId(backupModelId)
         }
-        // Apply away URL
+        // Apply endpoints/routing
+        currentMode = runCatching { NetworkMode.valueOf(backup.networkMode) }.getOrDefault(NetworkMode.AUTO)
+        if (backup.localUrl != localBaseUrl) {
+            localBaseUrl = backup.localUrl
+        }
         if (backup.awayUrl != awayBaseUrl) {
             awayBaseUrl = backup.awayUrl
-            (client as? HermesOkHttpClient)?.let {
-                it.baseUrl = HermesEndpointResolver.resolve(currentMode, awayBaseUrl)
-            }
         }
+        applyMode()
         // Apply ntfy topic
         if (backup.ntfyTopic != ntfyConfig.topic) {
             ntfyConfig = ntfyConfig.copy(topic = backup.ntfyTopic)

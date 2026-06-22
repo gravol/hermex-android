@@ -3,32 +3,27 @@ package com.hermes.chat.network
 import com.hermes.chat.model.NetworkMode
 
 /**
- * Resolves the Hermes API endpoint URL based on the current [NetworkMode].
+ * Resolves the Hermes API endpoint URL based on the user's routing mode.
  *
- * - [HOME] → localhost:8080 (dev default).
- * - [AWAY] → the user-configured [awayUrl] (typically a Tailscale address).
- *
- * If [awayUrl] is blank and mode is AWAY, falls back to the HOME URL.
+ * Auto mode is intentionally Tailscale-first because Jeff is normally connected
+ * to Tailscale and wants the least manual switching.
  */
 object HermesEndpointResolver {
 
-    /**
-     * Default local development base URL. Only meaningful when the app
-     * is running inside an emulator on the same machine as the Hermes server.
-     */
-    const val HOME_BASE_URL = "http://localhost:8080/v1/chat/completions"
+    /** Emulator/dev fallback only. Real phones should use configured Local/Tailscale URLs. */
+    const val DEBUG_LOCALHOST_URL = "http://localhost:8080/v1/chat/completions"
 
-    /**
-     * Resolve the Hermes API endpoint to use.
-     *
-     * - [HOME] → [HOME_BASE_URL] (localhost dev default).
-     * - [AWAY] → [awayUrl] if non-blank, otherwise returns empty string
-     *   (caller must handle the "no endpoint configured" case gracefully).
-     */
-    fun resolve(mode: NetworkMode, awayUrl: String): String {
+    fun resolve(
+        mode: NetworkMode,
+        localUrl: String,
+        tailscaleUrl: String,
+    ): String {
+        val local = localUrl.trim()
+        val tailscale = tailscaleUrl.trim()
         return when (mode) {
-            NetworkMode.HOME -> HOME_BASE_URL
-            NetworkMode.AWAY -> awayUrl.trim().ifEmpty { "" }
+            NetworkMode.AUTO -> tailscale.ifBlank { local }
+            NetworkMode.LOCAL -> local
+            NetworkMode.TAILSCALE -> tailscale
         }
     }
 }

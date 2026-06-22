@@ -6,23 +6,45 @@ import org.junit.jupiter.api.Test
 
 class HermesEndpointResolverTest {
 
-    private val homeUrl = "http://localhost:8080/v1/chat/completions"
+    private val localUrl = "http://192.168.1.50:8080/v1/chat/completions"
+    private val tailscaleUrl = "http://100.64.1.2:8080/v1/chat/completions"
 
     @Test
-    fun `HOME returns localhost URL regardless of awayUrl`() {
-        assertEquals(homeUrl, HermesEndpointResolver.resolve(NetworkMode.HOME, ""))
-        assertEquals(homeUrl, HermesEndpointResolver.resolve(NetworkMode.HOME, "https://remote:8080/path"))
+    fun `AUTO prefers Tailscale when configured`() {
+        assertEquals(
+            tailscaleUrl,
+            HermesEndpointResolver.resolve(NetworkMode.AUTO, localUrl, tailscaleUrl),
+        )
     }
 
     @Test
-    fun `AWAY with valid URL returns that URL`() {
-        val away = "https://tailscale-host:8080/v1/chat/completions"
-        assertEquals(away, HermesEndpointResolver.resolve(NetworkMode.AWAY, away))
+    fun `AUTO falls back to Local when Tailscale is blank`() {
+        assertEquals(
+            localUrl,
+            HermesEndpointResolver.resolve(NetworkMode.AUTO, localUrl, ""),
+        )
     }
 
     @Test
-    fun `AWAY with blank URL returns empty string`() {
-        assertEquals("", HermesEndpointResolver.resolve(NetworkMode.AWAY, ""))
-        assertEquals("", HermesEndpointResolver.resolve(NetworkMode.AWAY, "  "))
+    fun `LOCAL returns Local URL`() {
+        assertEquals(
+            localUrl,
+            HermesEndpointResolver.resolve(NetworkMode.LOCAL, localUrl, tailscaleUrl),
+        )
+    }
+
+    @Test
+    fun `TAILSCALE returns Tailscale URL`() {
+        assertEquals(
+            tailscaleUrl,
+            HermesEndpointResolver.resolve(NetworkMode.TAILSCALE, localUrl, tailscaleUrl),
+        )
+    }
+
+    @Test
+    fun `blank configured URLs return blank`() {
+        assertEquals("", HermesEndpointResolver.resolve(NetworkMode.AUTO, "", ""))
+        assertEquals("", HermesEndpointResolver.resolve(NetworkMode.LOCAL, "", tailscaleUrl))
+        assertEquals("", HermesEndpointResolver.resolve(NetworkMode.TAILSCALE, localUrl, ""))
     }
 }

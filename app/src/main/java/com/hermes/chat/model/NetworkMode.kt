@@ -1,14 +1,14 @@
 package com.hermes.chat.model
 
 /**
- * Network connectivity mode for Hermes endpoint routing.
+ * User-selected Hermes endpoint routing mode.
  *
- * - [HOME] — device is on the same local network as the Hermes server.
- *   Uses http://localhost:8080 (or LAN IP).
- * - [AWAY] — device is on a different network (e.g. mobile data / coffee shop).
- *   Uses a user-configured Tailscale (or public) base URL.
+ * - [AUTO] — prefer Tailscale when reachable, then fall back to Local/LAN.
+ * - [LOCAL] — force the configured Local/LAN endpoint.
+ * - [TAILSCALE] — force the configured Tailscale endpoint.
  */
 enum class NetworkMode(val displayName: String) {
-    HOME("Home"),
-    AWAY("Away"),
+    AUTO("Auto"),
+    LOCAL("Local"),
+    TAILSCALE("Tailscale"),
 }

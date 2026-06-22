@@ -20,6 +20,8 @@ data class SettingsBackup(
     val version: Int = 1,
     val exportedAt: String = Instant.now().toString(),
     val model: String = "",
+    val networkMode: String = "AUTO",
+    val localUrl: String = "",
     val awayUrl: String = "",
     val ntfyTopic: String = "",
     val clerkMacAddress: String = "",
@@ -29,6 +31,8 @@ data class SettingsBackup(
         put("version", version)
         put("exportedAt", exportedAt)
         put("model", model)
+        put("networkMode", networkMode)
+        put("localUrl", localUrl)
         put("awayUrl", awayUrl)
         put("ntfyTopic", ntfyTopic)
         put("clerkMacAddress", clerkMacAddress)
@@ -42,6 +46,8 @@ data class SettingsBackup(
                 version = obj.optInt("version", 1),
                 exportedAt = obj.optString("exportedAt", ""),
                 model = obj.optString("model", ""),
+                networkMode = obj.optString("networkMode", "AUTO"),
+                localUrl = obj.optString("localUrl", ""),
                 awayUrl = obj.optString("awayUrl", ""),
                 ntfyTopic = obj.optString("ntfyTopic", ""),
                 clerkMacAddress = obj.optString("clerkMacAddress", ""),

@@ -288,19 +288,54 @@ fun SettingsScreen(chatState: ChatViewModel) {
         )
         Spacer(Modifier.height(8.dp))
 
-        // Mode indicator
-        val modeColor = when (chatState.currentMode) {
-            NetworkMode.HOME -> MaterialTheme.colorScheme.primary
-            NetworkMode.AWAY -> MaterialTheme.colorScheme.error
+        // Mode selector
+        NetworkMode.entries.forEach { mode ->
+            val selected = chatState.currentMode == mode
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .selectable(
+                        selected = selected,
+                        onClick = { chatState.setNetworkMode(mode) },
+                    )
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(
+                    selected = selected,
+                    onClick = null,
+                    colors = RadioButtonDefaults.colors(
+                        selectedColor = MaterialTheme.colorScheme.primary,
+                        unselectedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    ),
+                )
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(
+                        text = mode.displayName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (mode == NetworkMode.AUTO) {
+                        Text(
+                            text = "Tries Tailscale first, then Local",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        )
+                    }
+                }
+            }
         }
+
+        Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "● ${chatState.currentMode.displayName}",
-                style = MaterialTheme.typography.bodyLarge,
-                color = modeColor,
+                text = chatState.endpointStatus,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (chatState.endpointStatus.startsWith("⚠️")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.weight(1f))
             Text(
@@ -314,18 +349,17 @@ fun SettingsScreen(chatState: ChatViewModel) {
         }
         Spacer(Modifier.height(8.dp))
 
-        // Away (Tailscale) endpoint field
-        var awayUrlInput by remember(chatState.awayBaseUrl) { mutableStateOf(chatState.awayBaseUrl) }
+        var tailscaleUrlInput by remember(chatState.awayBaseUrl) { mutableStateOf(chatState.awayBaseUrl) }
         OutlinedTextField(
-            value = awayUrlInput,
-            onValueChange = { awayUrlInput = it },
+            value = tailscaleUrlInput,
+            onValueChange = { tailscaleUrlInput = it },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Away Endpoint URL") },
-            placeholder = { Text("https://tailscale-ip:8080/v1/chat/completions") },
+            label = { Text("Tailscale Endpoint URL") },
+            placeholder = { Text("http://100.x.y.z:8080/v1/chat/completions") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
-                onDone = { chatState.setAwayUrl(awayUrlInput.trim()) },
+                onDone = { chatState.setAwayUrl(tailscaleUrlInput.trim()) },
             ),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -335,19 +369,51 @@ fun SettingsScreen(chatState: ChatViewModel) {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = if(chatState.currentMode == NetworkMode.AWAY && chatState.awayBaseUrl.isBlank())
-                "\u26A0\uFE0F Away mode active but endpoint URL is blank"
-            else if(chatState.awayBaseUrl.isNotBlank())
-                "\u2705 Away endpoint set: ${chatState.awayBaseUrl}"
+            text = if (chatState.awayBaseUrl.isNotBlank())
+                "✅ Tailscale set: ${chatState.awayBaseUrl}"
             else
-                "Set only if connecting over Tailscale / WAN",
+                "Recommended: add this once; Auto will prefer it whenever reachable",
             style = MaterialTheme.typography.bodySmall,
-            color = if(chatState.currentMode == NetworkMode.AWAY && chatState.awayBaseUrl.isBlank())
-                MaterialTheme.colorScheme.error
-            else if(chatState.awayBaseUrl.isNotBlank())
-                MaterialTheme.colorScheme.primary
+            color = if (chatState.awayBaseUrl.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        )
+
+        Spacer(Modifier.height(8.dp))
+        var localUrlInput by remember(chatState.localBaseUrl) { mutableStateOf(chatState.localBaseUrl) }
+        OutlinedTextField(
+            value = localUrlInput,
+            onValueChange = { localUrlInput = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Local/LAN Endpoint URL") },
+            placeholder = { Text("http://192.168.1.x:8080/v1/chat/completions") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = { chatState.setLocalUrl(localUrlInput.trim()) },
+            ),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                cursorColor = MaterialTheme.colorScheme.primary,
+            ),
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = if (chatState.localBaseUrl.isNotBlank())
+                "✅ Local set: ${chatState.localBaseUrl}"
             else
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                "Optional fallback for home Wi-Fi/LAN",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (chatState.localBaseUrl.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        )
+
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = if (chatState.resolvedBaseUrl.isNotBlank())
+                "Resolved endpoint: ${chatState.resolvedBaseUrl}"
+            else
+                "Resolved endpoint: none configured yet",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
         )
 
         // ── Clerk device section ───────────────────────────────────
