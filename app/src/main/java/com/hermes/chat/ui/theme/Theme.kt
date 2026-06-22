@@ -37,33 +37,33 @@ private val LightOnBackground = Color(0xFF1A1A2E)
 private val LightOnSurface = Color(0xFF1A1A2E)
 
 private val HermesDarkScheme = darkColorScheme(
-    primary = Amber,
-    onPrimary = OnAmber,
-    primaryContainer = AmberLight,
-    secondary = AmberLight,
-    onSecondary = OnAmber,
-    background = DarkNavy,
+    primary = TelegramChatColors.Blue,
+    onPrimary = Color.White,
+    primaryContainer = TelegramChatColors.BlueDark,
+    secondary = TelegramChatColors.Blue,
+    onSecondary = Color.White,
+    background = TelegramChatColors.DarkCanvas,
     onBackground = OnNavy,
-    surface = Navy,
+    surface = TelegramChatColors.DarkTopBar,
     onSurface = OnNavy,
-    surfaceVariant = SurfaceNavy,
+    surfaceVariant = TelegramChatColors.DarkComposerField,
     onSurfaceVariant = OnNavy,
-    outline = Amber.copy(alpha = 0.4f),
+    outline = TelegramChatColors.Blue.copy(alpha = 0.45f),
 )
 
 private val HermesLightScheme = lightColorScheme(
-    primary = Color(0xFF8B6F00),    // dark amber
+    primary = TelegramChatColors.BlueDark,
     onPrimary = Color.White,
-    primaryContainer = Amber,
-    secondary = AmberLight,
-    onSecondary = OnAmber,
-    background = LightBackground,
+    primaryContainer = TelegramChatColors.Blue,
+    secondary = TelegramChatColors.Blue,
+    onSecondary = Color.White,
+    background = TelegramChatColors.LightCanvas,
     onBackground = LightOnBackground,
-    surface = LightSurface,
+    surface = TelegramChatColors.LightIncomingBubble,
     onSurface = LightOnSurface,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = OnAmber,
-    outline = Color(0xFF8B6F00).copy(alpha = 0.4f),
+    surfaceVariant = Color(0xFFF4F7FA),
+    onSurfaceVariant = LightOnSurface,
+    outline = TelegramChatColors.BlueDark.copy(alpha = 0.35f),
 )
 
 @Composable

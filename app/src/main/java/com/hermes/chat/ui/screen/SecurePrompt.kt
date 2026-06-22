@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
 import com.hermes.chat.LocalAuthHelper
+import com.hermes.chat.ui.theme.TelegramChatColors
 
 /**
  * Full-screen or dialog prompt that requires biometric / device-credential
@@ -27,6 +28,7 @@ fun SecurePromptDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = TelegramChatColors.DarkIncomingBubble,
         title = {
             Text(
                 text = "🔒 Privileged Command",

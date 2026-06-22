@@ -38,6 +38,7 @@ import com.hermes.chat.ui.screen.LogsScreen
 import com.hermes.chat.ui.screen.SecurePromptDialog
 import com.hermes.chat.ui.screen.SettingsScreen
 import com.hermes.chat.ui.theme.HermesChatTheme
+import com.hermes.chat.ui.theme.TelegramChatColors
 
 data class BottomNavItem(
     val route: String,
@@ -64,7 +65,7 @@ fun AppNavigation() {
         Scaffold(
             bottomBar = {
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
+                containerColor = TelegramChatColors.DarkTopBar,
                 contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 bottomNavItems.forEach { item ->

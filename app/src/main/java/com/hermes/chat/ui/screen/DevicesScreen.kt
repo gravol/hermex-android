@@ -1,5 +1,6 @@
 package com.hermes.chat.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,6 +35,7 @@ import com.hermes.chat.ChatViewModel
 import com.hermes.chat.model.DeviceState
 import com.hermes.chat.network.DeviceStatusChecker
 import com.hermes.chat.network.WoLClient
+import com.hermes.chat.ui.theme.TelegramChatColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -53,6 +55,7 @@ fun DevicesScreen(chatState: ChatViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(TelegramChatColors.DarkCanvas)
             .padding(16.dp),
     ) {
         Text(
@@ -102,7 +105,7 @@ private fun DeviceCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = TelegramChatColors.DarkIncomingBubble,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

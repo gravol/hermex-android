@@ -12,6 +12,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -40,6 +41,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.hermes.chat.ChatViewModel
 import com.hermes.chat.model.ModelType
 import com.hermes.chat.model.NetworkMode
+import com.hermes.chat.ui.theme.TelegramChatColors
 
 @Composable
 fun SettingsScreen(chatState: ChatViewModel) {
@@ -49,6 +51,7 @@ fun SettingsScreen(chatState: ChatViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(TelegramChatColors.DarkCanvas)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
