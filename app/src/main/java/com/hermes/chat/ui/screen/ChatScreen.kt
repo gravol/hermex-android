@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +62,7 @@ import com.hermes.chat.ChatViewModel
 import com.hermes.chat.model.AttachmentType
 import com.hermes.chat.model.Message
 import com.hermes.chat.model.MessageAttachment
+import com.hermes.chat.ui.theme.TelegramChatColors
 import kotlinx.coroutines.launch
 
 @Composable
@@ -117,28 +119,49 @@ fun ChatScreen(chatState: ChatViewModel) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Header row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(TelegramChatColors.DarkCanvas),
+    ) {
+        Surface(
+            color = TelegramChatColors.DarkTopBar,
+            tonalElevation = 1.dp,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(
-                text = "Chat",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            IconButton(
-                onClick = { chatState.clearMessages() },
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Clear all messages",
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Hermes",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Online · ${chatState.currentModel.displayName}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TelegramChatColors.Blue,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(
+                    onClick = { chatState.clearMessages() },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "Clear all messages",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        modifier = Modifier.size(21.dp),
+                    )
+                }
             }
         }
 
@@ -207,8 +230,8 @@ fun ChatScreen(chatState: ChatViewModel) {
 
         // Input bar
         Surface(
-            tonalElevation = 2.dp,
-            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            color = TelegramChatColors.DarkComposer,
         ) {
             Row(
                 modifier = Modifier
@@ -224,7 +247,7 @@ fun ChatScreen(chatState: ChatViewModel) {
                     Icon(
                         Icons.Filled.Image,
                         contentDescription = "Attach image",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -236,7 +259,7 @@ fun ChatScreen(chatState: ChatViewModel) {
                     Icon(
                         Icons.Filled.Mic,
                         contentDescription = "Attach voice",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -248,13 +271,13 @@ fun ChatScreen(chatState: ChatViewModel) {
                         .weight(1f)
                         .heightIn(min = 40.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                        .background(TelegramChatColors.DarkComposerField)
                         .padding(horizontal = 14.dp, vertical = 9.dp),
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
                         color = MaterialTheme.colorScheme.onSurface,
                     ),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    cursorBrush = SolidColor(TelegramChatColors.Blue),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { send() }),
                     decorationBox = { innerTextField ->
@@ -280,7 +303,7 @@ fun ChatScreen(chatState: ChatViewModel) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = TelegramChatColors.Blue,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -311,9 +334,11 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
 
     val alignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
     val color = if (message.isUser)
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+        TelegramChatColors.DarkOutgoingBubble
     else
-        MaterialTheme.colorScheme.surfaceVariant
+        TelegramChatColors.DarkIncomingBubble
+
+    val textColor = MaterialTheme.colorScheme.onSurface
 
     Box(
         modifier = Modifier.fillMaxWidth(),
@@ -321,19 +346,19 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
     ) {
         Surface(
             shape = RoundedCornerShape(
-                topStart = 12.dp,
-                topEnd = 12.dp,
-                bottomStart = if (message.isUser) 12.dp else 4.dp,
-                bottomEnd = if (message.isUser) 4.dp else 12.dp,
+                topStart = 18.dp,
+                topEnd = 18.dp,
+                bottomStart = if (message.isUser) 18.dp else 6.dp,
+                bottomEnd = if (message.isUser) 6.dp else 18.dp,
             ),
             color = color,
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier.widthIn(max = 340.dp),
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 if (isPending) {
                     Text(
                         text = "\u23F3 Sending...",
-                        color = MaterialTheme.colorScheme.primary,
+                        color = TelegramChatColors.Blue,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 } else if (isFailed) {
@@ -356,7 +381,7 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                     if (message.text.isNotBlank()) {
                         Text(
                             text = message.text,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = textColor,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }

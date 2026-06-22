@@ -15,6 +15,20 @@ private val AmberLight = Color(0xFFFFD54F)
 private val OnNavy = Color(0xFFE0E0E0)
 private val OnAmber = Color(0xFF1A1A2E)
 
+object TelegramChatColors {
+    val Blue = Color(0xFF2AABEE)
+    val BlueDark = Color(0xFF168AC5)
+    val DarkCanvas = Color(0xFF0E1621)
+    val DarkTopBar = Color(0xFF17212B)
+    val DarkIncomingBubble = Color(0xFF182533)
+    val DarkOutgoingBubble = Color(0xFF2B5278)
+    val DarkComposer = Color(0xFF17212B)
+    val DarkComposerField = Color(0xFF242F3D)
+    val LightCanvas = Color(0xFFE7EBF0)
+    val LightIncomingBubble = Color(0xFFFFFFFF)
+    val LightOutgoingBubble = Color(0xFFD8F2C2)
+}
+
 // ── Light scheme ──────────────────────────────────────────────
 private val LightBackground = Color(0xFFFFF8E1) // warm cream
 private val LightSurface = Color(0xFFFFFDF5)
