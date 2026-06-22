@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -119,7 +117,7 @@ fun ChatScreen(chatState: ChatViewModel) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         // Header row
         Row(
             modifier = Modifier
@@ -211,7 +209,6 @@ fun ChatScreen(chatState: ChatViewModel) {
         Surface(
             tonalElevation = 2.dp,
             color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.imePadding(),
         ) {
             Row(
                 modifier = Modifier
