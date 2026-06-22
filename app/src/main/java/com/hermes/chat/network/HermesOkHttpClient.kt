@@ -9,6 +9,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -82,6 +83,28 @@ class HermesOkHttpClient : HermesClient {
 
     private val jsonMediaType = "application/json".toMediaType()
 
+    override suspend fun listModels(): List<String> = withContext(Dispatchers.IO) {
+        val modelsUrl = modelsUrl() ?: return@withContext emptyList()
+        val reqBuilder = Request.Builder()
+            .url(modelsUrl)
+            .get()
+        if (authToken.isNotBlank()) {
+            reqBuilder.addHeader("Authorization", "Bearer $authToken")
+        }
+
+        val response = try {
+            client.newCall(reqBuilder.build()).execute()
+        } catch (_: Exception) {
+            return@withContext emptyList()
+        }
+
+        response.use {
+            if (!it.isSuccessful) return@withContext emptyList()
+            val bodyString = it.body?.string() ?: return@withContext emptyList()
+            runCatching { HermesModelListResponse.fromJson(bodyString).ids }.getOrDefault(emptyList())
+        }
+    }
+
     override suspend fun sendMessage(conversation: List<Message>): Message = withContext(Dispatchers.IO) {
         if (baseUrl.isBlank()) {
             return@withContext Message(
@@ -142,6 +165,25 @@ class HermesOkHttpClient : HermesClient {
     }
 
     // ── Helpers ────────────────────────────────────────────────
+
+    /** Derive OpenAI-compatible `/v1/models` URL from the configured chat completions URL. */
+    private fun modelsUrl(): String? {
+        val parsed = baseUrl.toHttpUrlOrNull() ?: return null
+        val segments = parsed.encodedPathSegments
+        val v1Index = segments.indexOf("v1")
+        return if (v1Index >= 0) {
+            parsed.newBuilder().apply {
+                repeat(parsed.pathSize) { removePathSegment(0) }
+                segments.take(v1Index + 1).forEach { addPathSegment(it) }
+                addPathSegment("models")
+            }.build().toString()
+        } else {
+            parsed.newBuilder()
+                .encodedPath("/v1/models")
+                .build()
+                .toString()
+        }
+    }
 
     /** Extract hostname (no port) from a URL. Returns null on failure. */
     private fun extractHost(url: String): String? {

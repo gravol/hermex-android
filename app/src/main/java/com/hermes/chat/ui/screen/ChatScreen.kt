@@ -144,7 +144,7 @@ fun ChatScreen(chatState: ChatViewModel) {
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "Online · ${chatState.currentModel.displayName}",
+                        text = "Online · ${chatState.selectedModelLabel}",
                         style = MaterialTheme.typography.bodySmall,
                         color = TelegramChatColors.Blue,
                         maxLines = 1,

@@ -39,7 +39,6 @@ import androidx.compose.ui.semantics.testTag
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.hermes.chat.ChatViewModel
-import com.hermes.chat.model.ModelType
 import com.hermes.chat.model.NetworkMode
 import com.hermes.chat.ui.theme.TelegramChatColors
 
@@ -70,15 +69,16 @@ fun SettingsScreen(chatState: ChatViewModel) {
         )
         Spacer(Modifier.height(8.dp))
 
-        ModelType.entries.forEach { model ->
-            val selected = chatState.currentModel == model
+        chatState.displayedModelIds.forEach { modelId ->
+            val selected = chatState.selectedModelId == modelId
+            val label = com.hermes.chat.model.ModelType.entries.find { it.apiName == modelId }?.displayName ?: modelId
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
                     .selectable(
                         selected = selected,
-                        onClick = { chatState.setModel(model) },
+                        onClick = { chatState.setModelId(modelId) },
                     )
                     .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -91,22 +91,52 @@ fun SettingsScreen(chatState: ChatViewModel) {
                         unselectedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     ),
                 )
-                Text(
-                    text = model.displayName,
-                    modifier = Modifier.padding(start = 12.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (label != modelId) {
+                        Text(
+                            text = modelId,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        )
+                    }
+                }
             }
         }
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-        Text(
-            text = "Current: ${chatState.currentModel.displayName}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Current: ${chatState.selectedModelLabel}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = if (chatState.isRefreshingModels) "Refreshing..." else "Refresh models",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable(enabled = !chatState.isRefreshingModels) { chatState.refreshModels() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
+        chatState.modelRefreshStatus?.let { status ->
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (status.startsWith("✅")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+            )
+        }
 
         // ── Night mode toggle ──────────────────────────────────────
         Spacer(Modifier.height(24.dp))

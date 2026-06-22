@@ -12,4 +12,9 @@ interface HermesClient {
      * Implementations must be safe to call from any thread.
      */
     suspend fun sendMessage(conversation: List<Message>): Message
+
+    /**
+     * Return model IDs advertised by the Hermes/OpenAI-compatible `/v1/models` endpoint.
+     */
+    suspend fun listModels(): List<String>
 }

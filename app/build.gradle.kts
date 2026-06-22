@@ -95,6 +95,7 @@ dependencies {
     // ── Test ────────────────────────────────────────────────────
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test:1.9.22")
+    testImplementation("org.json:json:20240303")
 
     // ── Instrumentation test ────────────────────────────────────
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))

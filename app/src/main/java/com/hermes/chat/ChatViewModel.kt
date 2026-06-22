@@ -46,6 +46,23 @@ class ChatViewModel(
     var currentModel: ModelType by mutableStateOf(ModelType.FLASH)
         private set
 
+    var selectedModelId: String by mutableStateOf(ModelType.FLASH.apiName)
+        private set
+
+    val availableModelIds = mutableStateListOf<String>()
+
+    var isRefreshingModels: Boolean by mutableStateOf(false)
+        private set
+
+    var modelRefreshStatus: String? by mutableStateOf(null)
+        private set
+
+    val displayedModelIds: List<String>
+        get() = availableModelIds.ifEmpty { ModelType.entries.map { it.apiName } }
+
+    val selectedModelLabel: String
+        get() = ModelType.entries.find { it.apiName == selectedModelId }?.displayName ?: selectedModelId
+
     /** Non-null when a privileged command is waiting for biometric auth. */
     var pendingPrivilegedCommand: SlashCommand? by mutableStateOf(null)
         private set
@@ -107,11 +124,46 @@ class ChatViewModel(
 
     /** Switch model and show a confirmation message. */
     fun setModel(model: ModelType) {
-        if (model == currentModel) return
-        currentModel = model
-        (client as? HermesOkHttpClient)?.model = model.apiName
-        addSystem("\u2705 Switched to **${model.displayName}**")
-        publisher.send("Model Changed", "Switched to ${model.displayName}", listOf("hermes", "settings"))
+        setModelId(model.apiName)
+    }
+
+    /** Switch to any model ID advertised by Hermes/OpenAI-compatible `/v1/models`. */
+    fun setModelId(modelId: String) {
+        val trimmed = modelId.trim()
+        if (trimmed.isBlank() || trimmed == selectedModelId) return
+        selectedModelId = trimmed
+        ModelType.entries.find { it.apiName == trimmed }?.let { currentModel = it }
+        (client as? HermesOkHttpClient)?.model = trimmed
+        addSystem("\u2705 Switched to **${selectedModelLabel}**")
+        publisher.send("Model Changed", "Switched to $selectedModelLabel", listOf("hermes", "settings"))
+    }
+
+    /** Refresh model list from Hermes `/v1/models`, falling back to built-in defaults on failure. */
+    fun refreshModels(silent: Boolean = false) {
+        if (isRefreshingModels) return
+        isRefreshingModels = true
+        if (!silent) modelRefreshStatus = "Refreshing models..."
+
+        scope.launch {
+            val ids = withContext(Dispatchers.IO) { client.listModels() }
+                .distinct()
+                .sorted()
+            if (ids.isNotEmpty()) {
+                availableModelIds.clear()
+                availableModelIds.addAll(ids)
+                if (selectedModelId !in ids) {
+                    val first = ids.first()
+                    selectedModelId = first
+                    (client as? HermesOkHttpClient)?.model = first
+                }
+                modelRefreshStatus = "✅ ${ids.size} model(s) detected"
+                if (!silent) addSystem(modelRefreshStatus!!)
+            } else {
+                modelRefreshStatus = "⚠️ Could not detect models; using built-in defaults"
+                if (!silent) addSystem(modelRefreshStatus!!)
+            }
+            isRefreshingModels = false
+        }
     }
 
     /** Toggle between dark and light theme. */
@@ -253,6 +305,7 @@ class ChatViewModel(
             }
             currentMode = mode
             applyMode()
+            refreshModels(silent = true)
             addSystem("\uD83D\uDCE1 Network: **${mode.displayName}**")
         }
     }
@@ -261,6 +314,7 @@ class ChatViewModel(
     fun setAwayUrl(url: String) {
         awayBaseUrl = url
         applyMode()
+        refreshModels(silent = true)
     }
 
     /** Update the Hermes client's base URL to match the current mode. */
@@ -271,6 +325,7 @@ class ChatViewModel(
 
     init {
         // Detect network mode on construction (non-blocking)
+        (client as? HermesOkHttpClient)?.model = selectedModelId
         refreshNetworkMode()
         // Load persisted auth token and apply to client
         val stored = tokenStore.loadToken()
@@ -287,6 +342,7 @@ class ChatViewModel(
         authToken = token
         tokenStore.saveToken(token)
         (client as? HermesOkHttpClient)?.authToken = token
+        refreshModels(silent = true)
     }
 
     /** Wipe the stored auth token from secure storage and the client. */
@@ -340,7 +396,7 @@ class ChatViewModel(
     /** Export current settings (excluding API token) as a JSON string. */
     fun exportSettings(): String {
         val backup = SettingsBackup(
-            model = currentModel.displayName,
+            model = selectedModelId,
             awayUrl = awayBaseUrl,
             ntfyTopic = ntfyConfig.topic,
             clerkMacAddress = clerkMacAddress,
@@ -353,9 +409,9 @@ class ChatViewModel(
     fun importSettings(json: String): Boolean {
         val backup = SettingsBackup.fromJson(json) ?: return false
         // Apply model
-        val model = ModelType.entries.find { it.displayName == backup.model }
-        if (model != null && model != currentModel) {
-            setModel(model)
+        val backupModelId = ModelType.entries.find { it.displayName == backup.model }?.apiName ?: backup.model
+        if (backupModelId.isNotBlank() && backupModelId != selectedModelId) {
+            setModelId(backupModelId)
         }
         // Apply away URL
         if (backup.awayUrl != awayBaseUrl) {

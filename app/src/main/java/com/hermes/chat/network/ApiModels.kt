@@ -75,3 +75,21 @@ data class HermesResponse(
         }
     }
 }
+
+/**
+ * OpenAI-style `/v1/models` response body.
+ */
+data class HermesModelListResponse(
+    val ids: List<String>,
+) {
+    companion object {
+        fun fromJson(json: String): HermesModelListResponse {
+            val root = JSONObject(json)
+            val data = root.optJSONArray("data") ?: JSONArray()
+            val ids = (0 until data.length()).mapNotNull { i ->
+                data.optJSONObject(i)?.optString("id")?.takeIf { it.isNotBlank() }
+            }
+            return HermesModelListResponse(ids)
+        }
+    }
+}
