@@ -12,18 +12,23 @@ import com.hermes.chat.model.NetworkMode
  */
 object HermesEndpointResolver {
 
-    private const val HOME_BASE_URL = "http://localhost:8080/v1/chat/completions"
+    /**
+     * Default local development base URL. Only meaningful when the app
+     * is running inside an emulator on the same machine as the Hermes server.
+     */
+    const val HOME_BASE_URL = "http://localhost:8080/v1/chat/completions"
 
     /**
-     * Returns the full endpoint URL for the given [mode] and [awayUrl].
+     * Resolve the Hermes API endpoint to use.
      *
-     * @param awayUrl The user-configured away URL (full path expected).
-     *                If blank while in AWAY mode, falls back to HOME.
+     * - [HOME] → [HOME_BASE_URL] (localhost dev default).
+     * - [AWAY] → [awayUrl] if non-blank, otherwise returns empty string
+     *   (caller must handle the "no endpoint configured" case gracefully).
      */
     fun resolve(mode: NetworkMode, awayUrl: String): String {
         return when (mode) {
             NetworkMode.HOME -> HOME_BASE_URL
-            NetworkMode.AWAY -> awayUrl.ifBlank { HOME_BASE_URL }
+            NetworkMode.AWAY -> awayUrl.trim().ifEmpty { "" }
         }
     }
 }

@@ -21,8 +21,8 @@ class HermesEndpointResolverTest {
     }
 
     @Test
-    fun `AWAY with blank URL falls back to HOME`() {
-        assertEquals(homeUrl, HermesEndpointResolver.resolve(NetworkMode.AWAY, ""))
-        assertEquals(homeUrl, HermesEndpointResolver.resolve(NetworkMode.AWAY, "  "))
+    fun `AWAY with blank URL returns empty string`() {
+        assertEquals("", HermesEndpointResolver.resolve(NetworkMode.AWAY, ""))
+        assertEquals("", HermesEndpointResolver.resolve(NetworkMode.AWAY, "  "))
     }
 }

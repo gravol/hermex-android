@@ -83,6 +83,12 @@ class HermesOkHttpClient : HermesClient {
     private val jsonMediaType = "application/json".toMediaType()
 
     override suspend fun sendMessage(conversation: List<Message>): Message = withContext(Dispatchers.IO) {
+        if (baseUrl.isBlank()) {
+            return@withContext Message(
+                role = "assistant",
+                text = "⚠️ No endpoint configured. If you're away from home, set your Away Endpoint URL in Settings.",
+            )
+        }
         val requestBody = buildRequest(conversation)
         val reqBuilder = Request.Builder()
             .url(baseUrl)
