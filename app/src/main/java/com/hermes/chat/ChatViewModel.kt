@@ -37,8 +37,9 @@ import kotlinx.coroutines.withContext
  */
 class ChatViewModel(
     application: Application,
-    private val client: HermesClient = HermesOkHttpClient(),
 ) : AndroidViewModel(application) {
+
+    private val client: HermesClient = HermesOkHttpClient()
 
     val messages = mutableStateListOf<Message>()
 
