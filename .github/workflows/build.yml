@@ -75,6 +75,6 @@ jobs:
         with:
           tag: build-${{ github.run_number }}
           name: "APK Build #${{ github.run_number }}"
-          artifacts: "app/build/outputs/apk/debug/app-debug.apk"
+          artifacts: "app/build/outputs/apk/release/app-release.apk"
           token: ${{ secrets.GITHUB_TOKEN }}
           removeArtifacts: true
