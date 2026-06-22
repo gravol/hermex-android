@@ -7,12 +7,16 @@ android {
     namespace = "com.hermes.chat"
     compileSdk = 34
 
+    val ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+    val localVersionCode = 11
+    val resolvedVersionCode = ciRunNumber ?: localVersionCode
+
     defaultConfig {
         applicationId = "com.hermes.chat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = resolvedVersionCode
+        versionName = "0.1.$resolvedVersionCode"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
