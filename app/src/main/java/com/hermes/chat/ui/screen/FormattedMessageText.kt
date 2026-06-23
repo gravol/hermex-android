@@ -49,7 +49,7 @@ fun FormattedMessageText(
     val blocks = parseTelegramTextBlocks(text)
     Column(modifier = modifier) {
         blocks.forEachIndexed { index, block ->
-            if (index > 0) Spacer(Modifier.height(6.dp))
+            if (index > 0) Spacer(Modifier.height(4.dp))
             when (block) {
                 is TelegramTextBlock.Paragraph -> {
                     val annotated = formatInline(block.text, linkColor = TelegramChatColors.Blue)
