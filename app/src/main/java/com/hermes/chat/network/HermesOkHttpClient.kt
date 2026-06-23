@@ -7,12 +7,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.CertificatePinner
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -138,6 +141,49 @@ class HermesOkHttpClient : HermesClient {
         }
     }
 
+    suspend fun transcribeAudio(file: File): Result<String> = withContext(Dispatchers.IO) {
+        val transcribeUrl = transcribeUrl()
+            ?: return@withContext Result.failure(IllegalStateException("Endpoint URL is invalid"))
+        if (!file.exists() || file.length() == 0L) {
+            return@withContext Result.failure(IllegalArgumentException("Voice note file is empty"))
+        }
+
+        val body = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "audio",
+                file.name,
+                file.asRequestBody("audio/mp4".toMediaType()),
+            )
+            .build()
+
+        val reqBuilder = Request.Builder()
+            .url(transcribeUrl)
+            .post(body)
+        if (authToken.isNotBlank()) {
+            reqBuilder.addHeader("Authorization", "Bearer $authToken")
+        }
+
+        val response = try {
+            client.newCall(reqBuilder.build()).execute()
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
+        }
+
+        response.use {
+            val bodyString = it.body?.string() ?: ""
+            if (!it.isSuccessful) {
+                return@withContext Result.failure(IOException("HTTP ${it.code}: ${bodyString.take(200)}"))
+            }
+            runCatching {
+                val root = JSONObject(bodyString)
+                val transcript = root.optString("transcript", "").trim()
+                if (transcript.isBlank()) error(root.optString("error", "Empty transcript"))
+                transcript
+            }
+        }
+    }
+
     override suspend fun sendMessage(conversation: List<Message>): Message = withContext(Dispatchers.IO) {
         if (baseUrl.isBlank()) {
             return@withContext Message(
@@ -245,6 +291,16 @@ class HermesOkHttpClient : HermesClient {
     }
 
     // ── Helpers ────────────────────────────────────────────────
+
+    /** Derive Hermes `/api/transcribe` URL from the configured chat completions URL. */
+    private fun transcribeUrl(): String? {
+        val parsed = baseUrl.toHttpUrlOrNull() ?: return null
+        return parsed.newBuilder()
+            .encodedPath("/api/transcribe")
+            .query(null)
+            .build()
+            .toString()
+    }
 
     /** Derive OpenAI-compatible `/v1/models` URL from the configured chat completions URL. */
     private fun modelsUrl(): String? {

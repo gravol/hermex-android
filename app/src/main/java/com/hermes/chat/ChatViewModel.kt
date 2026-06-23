@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * ViewModel for the Hermes Chat screen.
@@ -302,16 +303,47 @@ class ChatViewModel(
 
     // ── Internal ────────────────────────────────────────────────
 
-    private fun prepareMessageAttachments(message: Message): Message {
+    private suspend fun prepareMessageAttachments(message: Message): Message {
         if (message.attachments.isEmpty()) return message
-        val prepared = message.attachments.map { attachment ->
-            if (attachment.type != AttachmentType.IMAGE || !attachment.dataUrl.isNullOrBlank()) {
-                attachment
-            } else {
-                attachment.copy(dataUrl = imageDataUrlOrNull(attachment))
+        var preparedText = message.text
+        val preparedAttachments = mutableListOf<MessageAttachment>()
+
+        message.attachments.forEach { attachment ->
+            when (attachment.type) {
+                AttachmentType.IMAGE -> {
+                    preparedAttachments.add(
+                        if (!attachment.dataUrl.isNullOrBlank()) attachment
+                        else attachment.copy(dataUrl = imageDataUrlOrNull(attachment))
+                    )
+                }
+                AttachmentType.VOICE -> {
+                    val transcript = transcribeVoiceAttachment(attachment)
+                    preparedText = buildString {
+                        append(preparedText)
+                        if (isNotBlank()) append("\n\n")
+                        append("Voice note transcript:\n")
+                        append(transcript)
+                    }.trim()
+                }
+                AttachmentType.FILE -> preparedAttachments.add(attachment)
             }
         }
-        return message.copy(attachments = prepared)
+
+        return message.copy(text = preparedText, attachments = preparedAttachments)
+    }
+
+    private suspend fun transcribeVoiceAttachment(attachment: MessageAttachment): String {
+        val httpClient = client as? HermesOkHttpClient
+            ?: return "[Could not transcribe voice note: Hermes HTTP client unavailable.]"
+        val uri = runCatching { Uri.parse(attachment.uri) }.getOrNull()
+            ?: return "[Could not transcribe voice note: invalid audio URI.]"
+        val path = uri.path
+            ?: return "[Could not transcribe voice note: missing audio path.]"
+        val file = File(path)
+        val result = httpClient.transcribeAudio(file)
+        return result.getOrElse { error ->
+            "[Could not transcribe voice note: ${error.message ?: "unknown error"}.]"
+        }
     }
 
     private fun imageDataUrlOrNull(attachment: MessageAttachment): String? {
