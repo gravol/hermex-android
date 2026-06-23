@@ -300,35 +300,51 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                    .padding(horizontal = 10.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Hermes",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "Online · ${chatState.selectedModelLabel}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TelegramChatColors.Blue,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                IconButton(
-                    onClick = { chatState.clearMessages() },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = "Clear all messages",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                        modifier = Modifier.size(21.dp),
-                    )
+                Text(
+                    text = "Hermes",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                // App menu moved from composer to top bar (Telegram style)
+                Box {
+                    IconButton(
+                        onClick = { appMenuExpanded = true },
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.Menu,
+                            contentDescription = "Open app menu",
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = appMenuExpanded,
+                        onDismissRequest = { appMenuExpanded = false },
+                        properties = PopupProperties(focusable = false),
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Settings") },
+                            onClick = { appMenuExpanded = false; onOpenSettings() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Devices") },
+                            onClick = { appMenuExpanded = false; onOpenDevices() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Logs") },
+                            onClick = { appMenuExpanded = false; onOpenLogs() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Clear chat") },
+                            onClick = { appMenuExpanded = false; chatState.clearMessages() },
+                        )
+                    }
                 }
             }
         }
@@ -451,7 +467,7 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
                 // Attachment paperclip: photo / voice / file
@@ -461,13 +477,13 @@ fun ChatScreen(
                             attachmentMenuExpanded = true
                             textFieldFocusRequester.requestFocus()
                         },
-                        modifier = Modifier.size(38.dp),
+                        modifier = Modifier.size(36.dp),
                     ) {
                         Icon(
                             Icons.Filled.AttachFile,
                             contentDescription = "Open attachment menu",
                             tint = TelegramChatColors.Blue,
-                            modifier = Modifier.size(21.dp),
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                     DropdownMenu(
@@ -512,57 +528,6 @@ fun ChatScreen(
                     }
                 }
 
-                // App menu: settings/devices/logs when bottom tabs are tucked away.
-                Box {
-                    IconButton(
-                        onClick = {
-                            appMenuExpanded = true
-                            textFieldFocusRequester.requestFocus()
-                        },
-                        modifier = Modifier.size(38.dp),
-                    ) {
-                        Icon(
-                            Icons.Filled.Menu,
-                            contentDescription = "Open app menu",
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = appMenuExpanded,
-                        onDismissRequest = {
-                            appMenuExpanded = false
-                            textFieldFocusRequester.requestFocus()
-                        },
-                        properties = PopupProperties(focusable = false),
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Settings") },
-                            onClick = {
-                                appMenuExpanded = false
-                                onOpenSettings()
-                                textFieldFocusRequester.requestFocus()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Devices") },
-                            onClick = {
-                                appMenuExpanded = false
-                                onOpenDevices()
-                                textFieldFocusRequester.requestFocus()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Logs") },
-                            onClick = {
-                                appMenuExpanded = false
-                                onOpenLogs()
-                                textFieldFocusRequester.requestFocus()
-                            },
-                        )
-                    }
-                }
-
                 val canSend = inputText.isNotBlank() || pendingAttachments.isNotEmpty()
 
                 BasicTextField(
@@ -571,10 +536,10 @@ fun ChatScreen(
                     modifier = Modifier
                         .focusRequester(textFieldFocusRequester)
                         .weight(1f)
-                        .heightIn(min = 38.dp, max = 110.dp)
-                        .clip(RoundedCornerShape(18.dp))
+                        .heightIn(min = 36.dp, max = 100.dp)
+                        .clip(RoundedCornerShape(16.dp))
                         .background(TelegramChatColors.DarkComposerField)
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                     singleLine = false,
                     maxLines = 5,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -599,30 +564,30 @@ fun ChatScreen(
                         }
                     },
                 )
-                val micBubbleSize by animateDpAsState(
-                    targetValue = if (isRecordingVoice) 80.dp else 38.dp,
-                    label = "micBubbleSize",
-                )
-                val micIconSize by animateDpAsState(
-                    targetValue = if (isRecordingVoice) 38.dp else 20.dp,
-                    label = "micIconSize",
-                )
                 if (canSend) {
                     IconButton(
                         onClick = { send() },
-                        modifier = Modifier.size(38.dp),
+                        modifier = Modifier.size(36.dp),
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send",
                             tint = TelegramChatColors.Blue,
-                            modifier = Modifier.size(21.dp),
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 } else {
+                    val micBubbleSize by animateDpAsState(
+                        targetValue = if (isRecordingVoice) 75.dp else 36.dp,
+                        label = "micBubbleSize",
+                    )
+                    val micIconSize by animateDpAsState(
+                        targetValue = if (isRecordingVoice) 36.dp else 19.dp,
+                        label = "micIconSize",
+                    )
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(36.dp)
                             .pointerInput(Unit) {
                                 detectTapGestures(
                                     onPress = {
@@ -638,7 +603,7 @@ fun ChatScreen(
                             Surface(
                                 modifier = Modifier
                                     .size(micBubbleSize)
-                                    .offset(y = (-26).dp),
+                                    .offset(y = (-24).dp),
                                 shape = RoundedCornerShape(44.dp),
                                 color = MaterialTheme.colorScheme.error,
                                 tonalElevation = 6.dp,
