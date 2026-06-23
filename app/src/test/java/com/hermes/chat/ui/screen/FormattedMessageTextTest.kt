@@ -14,7 +14,17 @@ class FormattedMessageTextTest {
         assertEquals(TelegramTextBlock.Paragraph("Before"), blocks[0])
         assertTrue(blocks[1] is TelegramTextBlock.Code)
         assertEquals("val x = 1", (blocks[1] as TelegramTextBlock.Code).text)
+        assertEquals("kotlin", (blocks[1] as TelegramTextBlock.Code).language)
         assertEquals(TelegramTextBlock.Paragraph("After"), blocks[2])
+    }
+
+    @Test
+    fun `parses quote blocks`() {
+        val blocks = parseTelegramTextBlocks("> Jeff\n> • Voice message\n\nReply text")
+
+        assertEquals(2, blocks.size)
+        assertEquals(TelegramTextBlock.Quote("Jeff", "• Voice message"), blocks[0])
+        assertEquals(TelegramTextBlock.Paragraph("Reply text"), blocks[1])
     }
 
     @Test

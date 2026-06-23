@@ -734,19 +734,40 @@ private fun ImageAttachment(attachment: MessageAttachment) {
 
 @Composable
 private fun VoiceAttachment(attachment: MessageAttachment) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = "🎤",
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(
-            text = attachment.displayName,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    Surface(
+        color = androidx.compose.ui.graphics.Color(0xFF3A2534).copy(alpha = 0.9f),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Spacer(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(34.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(androidx.compose.ui.graphics.Color(0xFFFF5F7E))
+            )
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = "Jeff",
+                    color = androidx.compose.ui.graphics.Color(0xFFFF8AA1),
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "• ${attachment.displayName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.ui.graphics.Color(0xFFFF8AA1),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
