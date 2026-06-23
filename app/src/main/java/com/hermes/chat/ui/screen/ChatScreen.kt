@@ -1,5 +1,8 @@
 package com.hermes.chat.ui.screen
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.media.MediaRecorder
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -52,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +74,7 @@ import com.hermes.chat.model.AttachmentType
 import com.hermes.chat.model.Message
 import com.hermes.chat.model.MessageAttachment
 import com.hermes.chat.ui.theme.TelegramChatColors
+import java.io.File
 import kotlinx.coroutines.launch
 
 @Composable
@@ -83,8 +89,20 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
     var appMenuExpanded by remember { mutableStateOf(false) }
+    var isRecordingVoice by remember { mutableStateOf(false) }
+    var activeRecorder by remember { mutableStateOf<MediaRecorder?>(null) }
+    var activeRecordingFile by remember { mutableStateOf<File?>(null) }
+    var recordingStartedAt by remember { mutableStateOf(0L) }
     val pendingAttachments = remember { mutableStateListOf<MessageAttachment>() }
     val context = LocalContext.current
+
+    val recordAudioPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            chatState.addSystem("Microphone permission is needed to record voice notes.")
+        }
+    }
 
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -96,24 +114,6 @@ fun ChatScreen(
                     uri = it.toString(),
                     displayName = "Image",
                     mimeType = context.contentResolver.getType(it) ?: "image/jpeg",
-                )
-            )
-        }
-    }
-
-    val audioPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            val name = context.contentResolver?.query(it, null, null, null, null)?.use { cursor ->
-                val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (idx >= 0) { cursor.moveToFirst(); cursor.getString(idx) } else null
-            } ?: "Voice"
-            pendingAttachments.add(
-                MessageAttachment(
-                    type = AttachmentType.VOICE,
-                    uri = it.toString(),
-                    displayName = name,
                 )
             )
         }
@@ -135,6 +135,69 @@ fun ChatScreen(
                 )
             )
         }
+    }
+
+    fun startVoiceRecording() {
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            recordAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        if (activeRecorder != null) return
+
+        val outputFile = File(context.cacheDir, "voice_${System.currentTimeMillis()}.m4a")
+        @Suppress("DEPRECATION")
+        val recorder = MediaRecorder()
+        runCatching {
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            recorder.setAudioEncodingBitRate(128_000)
+            recorder.setAudioSamplingRate(44_100)
+            recorder.setOutputFile(outputFile.absolutePath)
+            recorder.prepare()
+            recorder.start()
+            activeRecorder = recorder
+            activeRecordingFile = outputFile
+            recordingStartedAt = System.currentTimeMillis()
+            isRecordingVoice = true
+        }.onFailure {
+            runCatching { recorder.release() }
+            outputFile.delete()
+            activeRecorder = null
+            activeRecordingFile = null
+            isRecordingVoice = false
+            chatState.addSystem("Could not start voice recording.")
+        }
+    }
+
+    fun stopVoiceRecording() {
+        val recorder = activeRecorder ?: return
+        val outputFile = activeRecordingFile
+        val durationMs = System.currentTimeMillis() - recordingStartedAt
+        activeRecorder = null
+        activeRecordingFile = null
+        isRecordingVoice = false
+
+        val stopped = runCatching {
+            recorder.stop()
+            recorder.release()
+        }.isSuccess
+
+        if (!stopped || outputFile == null || durationMs < 600L || outputFile.length() == 0L) {
+            runCatching { recorder.release() }
+            outputFile?.delete()
+            chatState.addSystem("Voice note was too short to attach.")
+            return
+        }
+
+        pendingAttachments.add(
+            MessageAttachment(
+                type = AttachmentType.VOICE,
+                uri = Uri.fromFile(outputFile).toString(),
+                displayName = "Voice note ${durationMs / 1000}s",
+                mimeType = "audio/mp4",
+            )
+        )
     }
 
     fun send() {
@@ -264,6 +327,20 @@ fun ChatScreen(
             }
         }
 
+        if (isRecordingVoice) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "● Recording voice note — release mic to attach",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+            }
+        }
+
         // Input bar
         Surface(
             tonalElevation = 0.dp,
@@ -302,14 +379,6 @@ fun ChatScreen(
                                         ActivityResultContracts.PickVisualMedia.ImageOnly
                                     )
                                 )
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Voice") },
-                            leadingIcon = { Icon(Icons.Filled.Mic, contentDescription = null) },
-                            onClick = {
-                                attachmentMenuExpanded = false
-                                audioPicker.launch("audio/*")
                             },
                         )
                         DropdownMenuItem(
@@ -397,6 +466,27 @@ fun ChatScreen(
                         }
                     },
                 )
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onPress = {
+                                    startVoiceRecording()
+                                    tryAwaitRelease()
+                                    stopVoiceRecording()
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Mic,
+                        contentDescription = "Hold to record voice note",
+                        tint = if (isRecordingVoice) MaterialTheme.colorScheme.error else TelegramChatColors.Blue,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
                 IconButton(
                     onClick = { send() },
                     modifier = Modifier.size(40.dp),
