@@ -65,18 +65,19 @@ fun AppNavigation() {
     val currentRoute = currentDestination?.route
     val density = LocalDensity.current
     val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
-    val hideBottomBar = currentRoute == Routes.Chat.route && isKeyboardVisible
+    val hideSecondaryNavItems = currentRoute == Routes.Chat.route && isKeyboardVisible
     val chatViewModel: ChatViewModel = viewModel()
 
     HermesChatTheme(isDarkTheme = chatViewModel.isDarkTheme) {
         Scaffold(
             bottomBar = {
-            if (!hideBottomBar) {
-                NavigationBar(
-                    containerColor = TelegramChatColors.DarkTopBar,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ) {
-                    bottomNavItems.forEach { item ->
+            NavigationBar(
+                containerColor = TelegramChatColors.DarkTopBar,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ) {
+                bottomNavItems
+                    .filter { item -> !hideSecondaryNavItems || item.route == Routes.Chat.route }
+                    .forEach { item ->
                         val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
                         NavigationBarItem(
                             selected = selected,
@@ -106,7 +107,6 @@ fun AppNavigation() {
                         )
                     }
                 }
-            }
         },
     ) { innerPadding ->
         NavHost(
@@ -114,7 +114,14 @@ fun AppNavigation() {
             startDestination = Routes.Chat.route,
             modifier = Modifier.padding(innerPadding),
         ) {
-            composable(Routes.Chat.route) { ChatScreen(chatViewModel) }
+            composable(Routes.Chat.route) {
+                ChatScreen(
+                    chatState = chatViewModel,
+                    onOpenSettings = { navController.navigate(Routes.Settings.route) },
+                    onOpenDevices = { navController.navigate(Routes.Devices.route) },
+                    onOpenLogs = { navController.navigate(Routes.Logs.route) },
+                )
+            }
             composable(Routes.Settings.route) { SettingsScreen(chatViewModel) }
             composable(Routes.Devices.route) { DevicesScreen(chatViewModel) }
             composable(Routes.Logs.route) { LogsScreen() }

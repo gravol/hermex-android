@@ -2,7 +2,7 @@ package com.hermes.chat.model
 
 import java.util.UUID
 
-enum class AttachmentType { IMAGE, VOICE }
+enum class AttachmentType { IMAGE, VOICE, FILE }
 
 data class MessageAttachment(
     val id: String = UUID.randomUUID().toString(),

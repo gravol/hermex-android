@@ -69,11 +69,17 @@ import com.hermes.chat.ui.theme.TelegramChatColors
 import kotlinx.coroutines.launch
 
 @Composable
-fun ChatScreen(chatState: ChatViewModel) {
+fun ChatScreen(
+    chatState: ChatViewModel,
+    onOpenSettings: () -> Unit = {},
+    onOpenDevices: () -> Unit = {},
+    onOpenLogs: () -> Unit = {},
+) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
+    var appMenuExpanded by remember { mutableStateOf(false) }
     val pendingAttachments = remember { mutableStateListOf<MessageAttachment>() }
     val context = LocalContext.current
 
@@ -102,6 +108,24 @@ fun ChatScreen(chatState: ChatViewModel) {
             pendingAttachments.add(
                 MessageAttachment(
                     type = AttachmentType.VOICE,
+                    uri = it.toString(),
+                    displayName = name,
+                )
+            )
+        }
+    }
+
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val name = context.contentResolver?.query(it, null, null, null, null)?.use { cursor ->
+                val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0) { cursor.moveToFirst(); cursor.getString(idx) } else null
+            } ?: "File"
+            pendingAttachments.add(
+                MessageAttachment(
+                    type = AttachmentType.FILE,
                     uri = it.toString(),
                     displayName = name,
                 )
@@ -223,7 +247,11 @@ fun ChatScreen(chatState: ChatViewModel) {
                 ) {
                     pendingAttachments.forEach { att ->
                         Text(
-                            text = (if (att.type == AttachmentType.IMAGE) "🖼️ " else "🎤 ") + att.displayName,
+                            text = when (att.type) {
+                                AttachmentType.IMAGE -> "🖼️ ${att.displayName}"
+                                AttachmentType.VOICE -> "🎤 ${att.displayName}"
+                                AttachmentType.FILE -> "📎 ${att.displayName}"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         )
@@ -243,17 +271,17 @@ fun ChatScreen(chatState: ChatViewModel) {
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
-                // Attachment/menu button
+                // Attachment paperclip: photo / voice / file
                 Box {
                     IconButton(
                         onClick = { attachmentMenuExpanded = true },
                         modifier = Modifier.size(40.dp),
                     ) {
                         Icon(
-                            Icons.Filled.Menu,
+                            Icons.Filled.AttachFile,
                             contentDescription = "Open attachment menu",
                             tint = TelegramChatColors.Blue,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(23.dp),
                         )
                     }
                     DropdownMenu(
@@ -280,18 +308,56 @@ fun ChatScreen(chatState: ChatViewModel) {
                                 audioPicker.launch("audio/*")
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text("Upload file") },
+                            leadingIcon = { Icon(Icons.Filled.AttachFile, contentDescription = null) },
+                            onClick = {
+                                attachmentMenuExpanded = false
+                                filePicker.launch("*/*")
+                            },
+                        )
                     }
                 }
 
-                IconButton(
-                    onClick = { /* Emoji picker placeholder — keyboard emoji still works. */ },
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Text(
-                        text = "☺",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                    )
+                // App menu: settings/devices/logs when bottom tabs are tucked away.
+                Box {
+                    IconButton(
+                        onClick = { appMenuExpanded = true },
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.Menu,
+                            contentDescription = "Open app menu",
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = appMenuExpanded,
+                        onDismissRequest = { appMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Settings") },
+                            onClick = {
+                                appMenuExpanded = false
+                                onOpenSettings()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Devices") },
+                            onClick = {
+                                appMenuExpanded = false
+                                onOpenDevices()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Logs") },
+                            onClick = {
+                                appMenuExpanded = false
+                                onOpenLogs()
+                            },
+                        )
+                    }
                 }
 
                 BasicTextField(
@@ -405,6 +471,7 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                         when (att.type) {
                             AttachmentType.IMAGE -> ImageAttachment(att)
                             AttachmentType.VOICE -> VoiceAttachment(att)
+                            AttachmentType.FILE -> FileAttachment(att)
                         }
                         Spacer(Modifier.height(4.dp))
                     }
@@ -445,6 +512,24 @@ private fun VoiceAttachment(attachment: MessageAttachment) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = "🎤",
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = attachment.displayName,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun FileAttachment(attachment: MessageAttachment) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "📎",
             style = MaterialTheme.typography.bodyLarge,
         )
         Spacer(Modifier.width(4.dp))
