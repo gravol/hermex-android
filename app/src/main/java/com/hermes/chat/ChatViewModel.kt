@@ -21,6 +21,7 @@ import com.hermes.chat.network.NetworkModeDetector
 import com.hermes.chat.network.NtfyPublisher
 import com.hermes.chat.network.RetryPolicy
 import com.hermes.chat.network.retryWithBackoff
+import com.hermes.chat.storage.ChatHistoryStore
 import com.hermes.chat.storage.SecureTokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -135,6 +136,9 @@ class ChatViewModel(
     /** Encrypted token store backed by Android Keystore. */
     private val tokenStore = SecureTokenStore(application)
 
+    /** Durable local transcript store that survives app restarts and updates. */
+    private val historyStore = ChatHistoryStore(application)
+
     // ── Public API ──────────────────────────────────────────────
 
     /** Switch model and show a confirmation message. */
@@ -191,6 +195,7 @@ class ChatViewModel(
         val count = messages.size
         messages.clear()
         failedMessageIndices.clear()
+        historyStore.clear()
         addSystem("\uD83D\uDDD1\uFE0F Cleared $count message(s)")
     }
 
@@ -221,6 +226,7 @@ class ChatViewModel(
         // Normal message flow
         val userMsg = Message(role = "user", text = text.trim(), attachments = attachments)
         messages.add(userMsg)
+        saveChatHistory()
 
         val pendingIndex = messages.size
         messages.add(Message(role = "assistant", text = "..."))
@@ -264,6 +270,7 @@ class ChatViewModel(
             if (pendingIndex < messages.size) {
                 messages[pendingIndex] = response
             }
+            saveChatHistory()
             failedMessageIndices.remove(pendingIndex)
             // Notify via ntfy
             val isError = response.text.startsWith("\u26A0\uFE0F") // ⚠️
@@ -275,6 +282,7 @@ class ChatViewModel(
                 val text = "\u26A0\uFE0F Failed — tap to retry"
                 messages[pendingIndex] = Message(role = "assistant", text = text)
             }
+            saveChatHistory()
             if (!failedMessageIndices.contains(pendingIndex)) {
                 failedMessageIndices.add(pendingIndex)
             }
@@ -382,6 +390,10 @@ class ChatViewModel(
         messages.add(Message(role = "system", text = text))
     }
 
+    private fun saveChatHistory() {
+        historyStore.saveMessages(messages.toList())
+    }
+
     private fun handleCommand(command: SlashCommand) {
         when (command) {
             is SlashCommand.SetModel -> setModel(command.model)
@@ -467,6 +479,8 @@ class ChatViewModel(
     }
 
     init {
+        // Restore prior transcript before adding transient status/system banners.
+        messages.addAll(historyStore.loadMessages())
         // Detect network mode on construction (non-blocking)
         (client as? HermesOkHttpClient)?.model = selectedModelId
         refreshNetworkMode()
