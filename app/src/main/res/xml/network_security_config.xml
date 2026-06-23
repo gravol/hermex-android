@@ -24,6 +24,17 @@
     </base-config>
 
     <!--
+      Explicit cleartext exceptions for Jeff's private Hermes endpoints.
+      Android network security config does not support CIDR ranges, so keep this narrow.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain>100.80.204.66</domain>
+        <domain>192.168.68.105</domain>
+        <domain>localhost</domain>
+        <domain>10.0.2.2</domain>
+    </domain-config>
+
+    <!--
       Certificate pinning for the production Hermes domain.
       Pinning only applies to this specific domain.
       Hashes are SHA-256 of the SubjectPublicKeyInfo.
