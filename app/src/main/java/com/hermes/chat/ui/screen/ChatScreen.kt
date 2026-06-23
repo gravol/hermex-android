@@ -538,11 +538,11 @@ fun ChatScreen(
                     },
                 )
                 val micBubbleSize by animateDpAsState(
-                    targetValue = if (isRecordingVoice) 68.dp else 40.dp,
+                    targetValue = if (isRecordingVoice) 88.dp else 40.dp,
                     label = "micBubbleSize",
                 )
                 val micIconSize by animateDpAsState(
-                    targetValue = if (isRecordingVoice) 34.dp else 22.dp,
+                    targetValue = if (isRecordingVoice) 44.dp else 22.dp,
                     label = "micIconSize",
                 )
                 Box(
@@ -563,8 +563,8 @@ fun ChatScreen(
                         Surface(
                             modifier = Modifier
                                 .size(micBubbleSize)
-                                .offset(y = (-18).dp),
-                            shape = RoundedCornerShape(34.dp),
+                                .offset(y = (-30).dp),
+                            shape = RoundedCornerShape(44.dp),
                             color = MaterialTheme.colorScheme.error,
                             tonalElevation = 6.dp,
                             shadowElevation = 8.dp,
@@ -670,8 +670,8 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
             ) {
                 if (isPending) {
                     Text(
-                        text = "\u23F3 Sending...",
-                        color = TelegramChatColors.Blue,
+                        text = "•••",
+                        color = TelegramChatColors.Blue.copy(alpha = 0.75f),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 } else if (isFailed) {

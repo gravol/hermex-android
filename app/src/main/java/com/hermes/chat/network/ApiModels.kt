@@ -10,6 +10,7 @@ data class HermesRequest(
     val model: String = "hermes",
     val messages: List<RequestMessage>,
     val maxTokens: Int = 4096,
+    val stream: Boolean = false,
 ) {
     data class RequestMessage(
         val role: String,
@@ -19,6 +20,7 @@ data class HermesRequest(
     fun toJson(): String = JSONObject().apply {
         put("model", model)
         put("max_tokens", maxTokens)
+        put("stream", stream)
         put("messages", JSONArray().apply {
             messages.forEach { msg ->
                 put(JSONObject().apply {

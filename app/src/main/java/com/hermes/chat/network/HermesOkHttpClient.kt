@@ -231,7 +231,72 @@ class HermesOkHttpClient : HermesClient {
         }
     }
 
-    private fun buildRequest(conversation: List<Message>): okhttp3.RequestBody {
+    suspend fun streamMessage(
+        conversation: List<Message>,
+        onDelta: suspend (String) -> Unit,
+    ): Message = withContext(Dispatchers.IO) {
+        if (baseUrl.isBlank()) {
+            return@withContext Message(
+                role = "assistant",
+                text = "⚠️ No endpoint configured. If you're away from home, set your Away Endpoint URL in Settings.",
+            )
+        }
+        val reqBuilder = Request.Builder()
+            .url(baseUrl)
+            .post(buildRequest(conversation, stream = true))
+            .header("Accept", "text/event-stream")
+        if (authToken.isNotBlank()) {
+            reqBuilder.addHeader("Authorization", "Bearer $authToken")
+        }
+
+        val httpResponse = try {
+            client.newCall(reqBuilder.build()).execute()
+        } catch (e: Exception) {
+            return@withContext Message(
+                role = "assistant",
+                text = "⚠️ Connection failed: ${e.message ?: "unknown error"}",
+            )
+        }
+
+        httpResponse.use { response ->
+            if (!response.isSuccessful) {
+                val bodyString = response.body?.string() ?: ""
+                val message = when (response.code) {
+                    401 -> "⚠️ Auth failed (HTTP 401). Check your API token."
+                    403 -> "⚠️ Forbidden (HTTP 403). Token may lack permissions."
+                    404 -> "⚠️ Endpoint not found (HTTP 404). Check your URL."
+                    else -> "⚠️ HTTP ${response.code}: ${bodyString.take(200)}"
+                }
+                return@withContext Message(role = "assistant", text = message)
+            }
+
+            val fullText = StringBuilder()
+            val reader = response.body?.byteStream()?.bufferedReader()
+                ?: return@withContext Message(role = "assistant", text = "⚠️ Empty stream response")
+            reader.useLines { lines ->
+                lines.forEach { rawLine ->
+                    val line = rawLine.trim()
+                    if (!line.startsWith("data:")) return@forEach
+                    val data = line.removePrefix("data:").trim()
+                    if (data == "[DONE]") return@forEach
+                    val delta = runCatching {
+                        val root = JSONObject(data)
+                        val choices = root.optJSONArray("choices")
+                        val first = choices?.optJSONObject(0)
+                        val deltaObj = first?.optJSONObject("delta")
+                        deltaObj?.optString("content", "").orEmpty()
+                    }.getOrDefault("")
+                    if (delta.isNotEmpty()) {
+                        fullText.append(delta)
+                        onDelta(delta)
+                    }
+                }
+            }
+            Message(role = "assistant", text = fullText.toString().ifEmpty { "(empty response)" })
+        }
+    }
+
+    private fun buildRequest(conversation: List<Message>, stream: Boolean = false): okhttp3.RequestBody {
         val apiMessages = conversation.map { msg ->
             HermesRequest.RequestMessage(role = msg.role, content = contentForMessage(msg))
         }
@@ -239,6 +304,7 @@ class HermesOkHttpClient : HermesClient {
             model = model,
             messages = apiMessages,
             maxTokens = maxTokens,
+            stream = stream,
         )
         return request.toJson().toRequestBody(jsonMediaType)
     }
