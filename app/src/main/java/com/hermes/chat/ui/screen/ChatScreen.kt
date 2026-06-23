@@ -31,7 +31,10 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -70,6 +73,7 @@ fun ChatScreen(chatState: ChatViewModel) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
+    var attachmentMenuExpanded by remember { mutableStateOf(false) }
     val pendingAttachments = remember { mutableStateListOf<MessageAttachment>() }
     val context = LocalContext.current
 
@@ -237,30 +241,56 @@ fun ChatScreen(chatState: ChatViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Bottom,
             ) {
-                // Image picker button
-                IconButton(
-                    onClick = { imagePicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.Image,
-                        contentDescription = "Attach image",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                        modifier = Modifier.size(22.dp),
-                    )
+                // Attachment/menu button
+                Box {
+                    IconButton(
+                        onClick = { attachmentMenuExpanded = true },
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.Menu,
+                            contentDescription = "Open attachment menu",
+                            tint = TelegramChatColors.Blue,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = attachmentMenuExpanded,
+                        onDismissRequest = { attachmentMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Photo") },
+                            leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null) },
+                            onClick = {
+                                attachmentMenuExpanded = false
+                                imagePicker.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Voice") },
+                            leadingIcon = { Icon(Icons.Filled.Mic, contentDescription = null) },
+                            onClick = {
+                                attachmentMenuExpanded = false
+                                audioPicker.launch("audio/*")
+                            },
+                        )
+                    }
                 }
-                // Audio picker button
+
                 IconButton(
-                    onClick = { audioPicker.launch("audio/*") },
-                    modifier = Modifier.size(40.dp),
+                    onClick = { /* Emoji picker placeholder — keyboard emoji still works. */ },
+                    modifier = Modifier.size(36.dp),
                 ) {
-                    Icon(
-                        Icons.Filled.Mic,
-                        contentDescription = "Attach voice",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                        modifier = Modifier.size(22.dp),
+                    Text(
+                        text = "☺",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                     )
                 }
 
@@ -269,11 +299,12 @@ fun ChatScreen(chatState: ChatViewModel) {
                     onValueChange = { inputText = it },
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 40.dp)
+                        .heightIn(min = 40.dp, max = 128.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(TelegramChatColors.DarkComposerField)
                         .padding(horizontal = 14.dp, vertical = 9.dp),
-                    singleLine = true,
+                    singleLine = false,
+                    maxLines = 5,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
                         color = MaterialTheme.colorScheme.onSurface,
                     ),
