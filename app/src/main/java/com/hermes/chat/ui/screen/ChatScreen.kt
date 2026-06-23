@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
@@ -345,16 +346,45 @@ fun ChatScreen(
                         .padding(horizontal = 12.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    pendingAttachments.forEach { att ->
-                        Text(
-                            text = when (att.type) {
-                                AttachmentType.IMAGE -> "🖼️ ${att.displayName}"
-                                AttachmentType.VOICE -> "🎤 ${att.displayName}"
-                                AttachmentType.FILE -> "📎 ${att.displayName}"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        )
+                    pendingAttachments.toList().forEach { att ->
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = TelegramChatColors.DarkComposerField,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 3.dp, bottom = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = when (att.type) {
+                                        AttachmentType.IMAGE -> "🖼️ ${att.displayName}"
+                                        AttachmentType.VOICE -> "🎤 ${att.displayName}"
+                                        AttachmentType.FILE -> "📎 ${att.displayName}"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 220.dp),
+                                )
+                                IconButton(
+                                    onClick = {
+                                        pendingAttachments.remove(att)
+                                        if (att.type == AttachmentType.VOICE) {
+                                            runCatching { Uri.parse(att.uri).path?.let { File(it).delete() } }
+                                        }
+                                    },
+                                    modifier = Modifier.size(28.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = "Remove attachment",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
