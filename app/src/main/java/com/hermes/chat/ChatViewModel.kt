@@ -243,8 +243,21 @@ class ChatViewModel(
                 .map { message -> prepareMessageAttachments(message) }
         }
 
+        val httpClient = client as? HermesOkHttpClient
         val result = retryWithBackoff(retryPolicy) {
-            client.sendMessage(conversation)
+            if (httpClient != null) {
+                httpClient.streamMessage(conversation) { delta ->
+                    withContext(Dispatchers.Main) {
+                        if (pendingIndex < messages.size) {
+                            val current = messages[pendingIndex]
+                            val nextText = if (current.text == "...") delta else current.text + delta
+                            messages[pendingIndex] = current.copy(text = nextText)
+                        }
+                    }
+                }
+            } else {
+                client.sendMessage(conversation)
+            }
         }
 
         result.onSuccess { response ->
