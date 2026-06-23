@@ -6,7 +6,12 @@ import android.media.MediaRecorder
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -283,20 +289,20 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Hermes",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         text = "Online · ${chatState.selectedModelLabel}",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                         color = TelegramChatColors.Blue,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -322,8 +328,8 @@ fun ChatScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             items(items = chatState.messages, key = { it.id }) { message ->
                 val index = chatState.messages.indexOf(message)
@@ -365,7 +371,7 @@ fun ChatScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     pendingAttachments.toList().forEach { att ->
@@ -419,9 +425,9 @@ fun ChatScreen(
             ) {
                 Text(
                     text = "● Recording voice note — release mic to attach",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
                 )
             }
         }
@@ -434,7 +440,7 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
                 // Attachment paperclip: photo / voice / file
@@ -444,13 +450,13 @@ fun ChatScreen(
                             attachmentMenuExpanded = true
                             textFieldFocusRequester.requestFocus()
                         },
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(38.dp),
                     ) {
                         Icon(
                             Icons.Filled.AttachFile,
                             contentDescription = "Open attachment menu",
                             tint = TelegramChatColors.Blue,
-                            modifier = Modifier.size(23.dp),
+                            modifier = Modifier.size(21.dp),
                         )
                     }
                     DropdownMenu(
@@ -502,13 +508,13 @@ fun ChatScreen(
                             appMenuExpanded = true
                             textFieldFocusRequester.requestFocus()
                         },
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(38.dp),
                     ) {
                         Icon(
                             Icons.Filled.Menu,
                             contentDescription = "Open app menu",
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                     DropdownMenu(
@@ -554,10 +560,10 @@ fun ChatScreen(
                     modifier = Modifier
                         .focusRequester(textFieldFocusRequester)
                         .weight(1f)
-                        .heightIn(min = 40.dp, max = 128.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .heightIn(min = 38.dp, max = 110.dp)
+                        .clip(RoundedCornerShape(18.dp))
                         .background(TelegramChatColors.DarkComposerField)
-                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
                     singleLine = false,
                     maxLines = 5,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -574,7 +580,7 @@ fun ChatScreen(
                             if (inputText.isBlank()) {
                                 Text(
                                     text = "Message",
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                                 )
                             }
@@ -583,29 +589,29 @@ fun ChatScreen(
                     },
                 )
                 val micBubbleSize by animateDpAsState(
-                    targetValue = if (isRecordingVoice) 88.dp else 40.dp,
+                    targetValue = if (isRecordingVoice) 80.dp else 38.dp,
                     label = "micBubbleSize",
                 )
                 val micIconSize by animateDpAsState(
-                    targetValue = if (isRecordingVoice) 44.dp else 22.dp,
+                    targetValue = if (isRecordingVoice) 38.dp else 20.dp,
                     label = "micIconSize",
                 )
                 if (canSend) {
                     IconButton(
                         onClick = { send() },
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(38.dp),
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send",
                             tint = TelegramChatColors.Blue,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(21.dp),
                         )
                     }
                 } else {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .pointerInput(Unit) {
                                 detectTapGestures(
                                     onPress = {
@@ -621,7 +627,7 @@ fun ChatScreen(
                             Surface(
                                 modifier = Modifier
                                     .size(micBubbleSize)
-                                    .offset(y = (-30).dp),
+                                    .offset(y = (-26).dp),
                                 shape = RoundedCornerShape(44.dp),
                                 color = MaterialTheme.colorScheme.error,
                                 tonalElevation = 6.dp,
@@ -696,13 +702,13 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
     ) {
         Surface(
             shape = RoundedCornerShape(
-                topStart = 18.dp,
-                topEnd = 18.dp,
-                bottomStart = if (message.isUser) 18.dp else 6.dp,
-                bottomEnd = if (message.isUser) 6.dp else 18.dp,
+                topStart = 16.dp,
+                topEnd = 16.dp,
+                bottomStart = if (message.isUser) 16.dp else 5.dp,
+                bottomEnd = if (message.isUser) 5.dp else 16.dp,
             ),
             color = color,
-            modifier = Modifier.widthIn(max = 340.dp),
+            modifier = Modifier.widthIn(max = 320.dp),
         ) {
             Column(
                 modifier = Modifier
@@ -714,27 +720,15 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                             }
                         else Modifier
                     )
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                if (message.isUser || message.isAssistant) {
-                    Text(
-                        text = if (message.isUser) "Jeff" else "Hermes",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = if (message.isUser) TelegramChatColors.Blue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                        modifier = Modifier.padding(bottom = 3.dp),
-                    )
-                }
                 if (isPending) {
-                    Text(
-                        text = "Hermes is typing…",
-                        color = TelegramChatColors.Blue.copy(alpha = 0.78f),
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    )
+                    TypingIndicator()
                 } else if (isFailed) {
                     Text(
                         text = "\u26A0\uFE0F Failed \u2014 tap to retry",
                         color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.clickable { chatState.retryMessage(index) },
                     )
                 } else {
@@ -764,6 +758,57 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TypingIndicator() {
+    val transition = rememberInfiniteTransition(label = "typing")
+    val dot1 by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "dot1",
+    )
+    val dot2 by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, delayMillis = 150),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "dot2",
+    )
+    val dot3 by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, delayMillis = 300),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "dot3",
+    )
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "Hermes is typing",
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            color = TelegramChatColors.Blue.copy(alpha = 0.82f),
+        )
+        Spacer(Modifier.width(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf(dot1, dot2, dot3).forEach { alpha ->
+                Box(
+                    modifier = Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(TelegramChatColors.Blue.copy(alpha = alpha))
+                )
             }
         }
     }
