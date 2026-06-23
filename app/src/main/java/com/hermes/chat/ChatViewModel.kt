@@ -67,6 +67,10 @@ class ChatViewModel(
     val selectedModelLabel: String
         get() = ModelType.entries.find { it.apiName == selectedModelId }?.displayName ?: selectedModelId
 
+    /** True while the assistant response is actively streaming. */
+    var isAssistantStreaming: Boolean by mutableStateOf(false)
+        private set
+
     /** Non-null when a privileged command is waiting for biometric auth. */
     var pendingPrivilegedCommand: SlashCommand? by mutableStateOf(null)
         private set
@@ -231,6 +235,7 @@ class ChatViewModel(
 
         val pendingIndex = messages.size
         messages.add(Message(role = "assistant", text = "..."))
+        isAssistantStreaming = true
 
         scope.launch {
             performSend(pendingIndex)
@@ -274,6 +279,7 @@ class ChatViewModel(
             saveChatHistory()
             syncMessageToObsidian(response)
             failedMessageIndices.remove(pendingIndex)
+            isAssistantStreaming = false
             // Notify via ntfy
             val isError = response.text.startsWith("\u26A0\uFE0F") // ⚠️
             if (isError) {
@@ -288,6 +294,7 @@ class ChatViewModel(
             if (!failedMessageIndices.contains(pendingIndex)) {
                 failedMessageIndices.add(pendingIndex)
             }
+            isAssistantStreaming = false
             publisher.send("Chat Error", "Message queued for retry: ${exception.message?.take(100) ?: "unknown"}",
                 listOf("hermes", "error"))
         }

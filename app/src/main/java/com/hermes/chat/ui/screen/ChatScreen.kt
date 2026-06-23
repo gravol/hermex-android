@@ -57,7 +57,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -96,25 +95,13 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val textFieldFocusRequester = remember { FocusRequester() }
-    var isNearBottom by remember { mutableStateOf(true) }
 
     // Auto-scroll to bottom when new messages arrive or the last message updates
     // (streaming), but only if the user hasn't scrolled up to read history.
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            val layoutInfo = listState.layoutInfo
-            val totalItems = layoutInfo.totalItemsCount
-            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            totalItems == 0 || lastVisible >= totalItems - 2
-        }.collect { nearBottom ->
-            isNearBottom = nearBottom
-        }
-    }
-
-    LaunchedEffect(chatState.messages.lastOrNull()?.id, chatState.messages.lastOrNull()?.text) {
+    LaunchedEffect(chatState.messages.lastOrNull()?.id, chatState.messages.lastOrNull()?.text, chatState.isAssistantStreaming) {
         if (chatState.messages.isNotEmpty()) {
             val last = chatState.messages.last()
-            if (isNearBottom || last.isAssistant || last.isUser) {
+            if (chatState.isAssistantStreaming || last.isAssistant || last.isUser) {
                 kotlinx.coroutines.delay(16)
                 listState.animateScrollToItem(chatState.messages.lastIndex)
             }
@@ -559,6 +546,8 @@ fun ChatScreen(
                     }
                 }
 
+                val canSend = inputText.isNotBlank() || pendingAttachments.isNotEmpty()
+
                 BasicTextField(
                     value = inputText,
                     onValueChange = { inputText = it },
@@ -601,60 +590,63 @@ fun ChatScreen(
                     targetValue = if (isRecordingVoice) 44.dp else 22.dp,
                     label = "micIconSize",
                 )
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    startVoiceRecording()
-                                    tryAwaitRelease()
-                                    stopVoiceRecording()
-                                }
-                            )
-                        },
-                    contentAlignment = Alignment.BottomCenter,
-                ) {
-                    if (isRecordingVoice) {
-                        Surface(
-                            modifier = Modifier
-                                .size(micBubbleSize)
-                                .offset(y = (-30).dp),
-                            shape = RoundedCornerShape(44.dp),
-                            color = MaterialTheme.colorScheme.error,
-                            tonalElevation = 6.dp,
-                            shadowElevation = 8.dp,
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Filled.Mic,
-                                    contentDescription = "Recording voice note",
-                                    tint = MaterialTheme.colorScheme.onError,
-                                    modifier = Modifier.size(micIconSize),
-                                )
-                            }
-                        }
-                    } else {
+                if (canSend) {
+                    IconButton(
+                        onClick = { send() },
+                        modifier = Modifier.size(40.dp),
+                    ) {
                         Icon(
-                            imageVector = Icons.Filled.Mic,
-                            contentDescription = "Hold to record voice note",
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
                             tint = TelegramChatColors.Blue,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .size(micIconSize),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
-                }
-                IconButton(
-                    onClick = { send() },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = TelegramChatColors.Blue,
-                        modifier = Modifier.size(22.dp),
-                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        startVoiceRecording()
+                                        tryAwaitRelease()
+                                        stopVoiceRecording()
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        if (isRecordingVoice) {
+                            Surface(
+                                modifier = Modifier
+                                    .size(micBubbleSize)
+                                    .offset(y = (-30).dp),
+                                shape = RoundedCornerShape(44.dp),
+                                color = MaterialTheme.colorScheme.error,
+                                tonalElevation = 6.dp,
+                                shadowElevation = 8.dp,
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Mic,
+                                        contentDescription = "Recording voice note",
+                                        tint = MaterialTheme.colorScheme.onError,
+                                        modifier = Modifier.size(micIconSize),
+                                    )
+                                }
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Mic,
+                                contentDescription = "Hold to record voice note",
+                                tint = TelegramChatColors.Blue,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .size(micIconSize),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -734,9 +726,9 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                 }
                 if (isPending) {
                     Text(
-                        text = "•••",
-                        color = TelegramChatColors.Blue.copy(alpha = 0.75f),
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Hermes is typing…",
+                        color = TelegramChatColors.Blue.copy(alpha = 0.78f),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                     )
                 } else if (isFailed) {
                     Text(
