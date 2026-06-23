@@ -12,9 +12,9 @@ import kotlin.random.Random
  * @property maxDelayMs Maximum delay cap (backoff won't exceed this).
  */
 data class RetryPolicy(
-    val maxAttempts: Int = 3,
-    val baseDelayMs: Long = 1_000,
-    val maxDelayMs: Long = 30_000,
+    val maxAttempts: Int = 2,
+    val baseDelayMs: Long = 500,
+    val maxDelayMs: Long = 10_000,
 )
 
 /**

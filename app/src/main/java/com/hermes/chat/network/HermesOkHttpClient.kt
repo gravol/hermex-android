@@ -59,9 +59,9 @@ class HermesOkHttpClient : HermesClient {
 
     private val client: OkHttpClient by lazy {
         val builder = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
 
         if (isPinningEnabled) {
             val host = extractHost(baseUrl)
