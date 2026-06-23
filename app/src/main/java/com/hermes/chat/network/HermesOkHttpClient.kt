@@ -184,6 +184,32 @@ class HermesOkHttpClient : HermesClient {
         }
     }
 
+    suspend fun syncMessageToObsidian(message: Message): Boolean = withContext(Dispatchers.IO) {
+        if (message.isSystem || message.text.isBlank() || message.text == "...") return@withContext false
+        val url = obsidianChatUrl() ?: return@withContext false
+        val body = JSONObject().apply {
+            put("id", message.id)
+            put("role", message.role)
+            put("text", message.text)
+            put("timestamp", message.timestamp)
+            put("source", "Hermes Chat Android")
+        }.toString().toRequestBody(jsonMediaType)
+
+        val reqBuilder = Request.Builder()
+            .url(url)
+            .post(body)
+        if (authToken.isNotBlank()) {
+            reqBuilder.addHeader("Authorization", "Bearer $authToken")
+        }
+
+        val response = try {
+            client.newCall(reqBuilder.build()).execute()
+        } catch (_: Exception) {
+            return@withContext false
+        }
+        response.use { it.isSuccessful }
+    }
+
     override suspend fun sendMessage(conversation: List<Message>): Message = withContext(Dispatchers.IO) {
         if (baseUrl.isBlank()) {
             return@withContext Message(
@@ -363,6 +389,16 @@ class HermesOkHttpClient : HermesClient {
         val parsed = baseUrl.toHttpUrlOrNull() ?: return null
         return parsed.newBuilder()
             .encodedPath("/api/transcribe")
+            .query(null)
+            .build()
+            .toString()
+    }
+
+    /** Derive Hermes `/api/obsidian/chat` URL from the configured chat completions URL. */
+    private fun obsidianChatUrl(): String? {
+        val parsed = baseUrl.toHttpUrlOrNull() ?: return null
+        return parsed.newBuilder()
+            .encodedPath("/api/obsidian/chat")
             .query(null)
             .build()
             .toString()

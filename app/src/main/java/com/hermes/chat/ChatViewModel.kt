@@ -227,6 +227,7 @@ class ChatViewModel(
         val userMsg = Message(role = "user", text = text.trim(), attachments = attachments)
         messages.add(userMsg)
         saveChatHistory()
+        syncMessageToObsidian(userMsg)
 
         val pendingIndex = messages.size
         messages.add(Message(role = "assistant", text = "..."))
@@ -271,6 +272,7 @@ class ChatViewModel(
                 messages[pendingIndex] = response
             }
             saveChatHistory()
+            syncMessageToObsidian(response)
             failedMessageIndices.remove(pendingIndex)
             // Notify via ntfy
             val isError = response.text.startsWith("\u26A0\uFE0F") // ⚠️
@@ -392,6 +394,14 @@ class ChatViewModel(
 
     private fun saveChatHistory() {
         historyStore.saveMessages(messages.toList())
+    }
+
+    private fun syncMessageToObsidian(message: Message) {
+        val httpClient = client as? HermesOkHttpClient ?: return
+        if (message.isSystem || message.text.isBlank() || message.text == "...") return
+        scope.launch(Dispatchers.IO) {
+            httpClient.syncMessageToObsidian(message)
+        }
     }
 
     private fun handleCommand(command: SlashCommand) {
