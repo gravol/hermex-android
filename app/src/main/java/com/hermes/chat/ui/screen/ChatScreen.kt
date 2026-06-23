@@ -379,10 +379,9 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                     }
 
                     if (message.text.isNotBlank()) {
-                        Text(
+                        FormattedMessageText(
                             text = message.text,
                             color = textColor,
-                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 }
