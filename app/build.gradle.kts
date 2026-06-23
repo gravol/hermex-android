@@ -20,8 +20,16 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
-        // ── Network hardening ─────────────────────────────────
-        // Production Hermes endpoint. Override by setting HERMES_BASE_URL env var.
+        // ── Network defaults ──────────────────────────────────
+        // Real-phone defaults for Jeff's Hermes host. Settings can still override them.
+        val defaultTailscaleUrl = System.getenv("HERMES_DEFAULT_TAILSCALE_URL")
+            ?: "http://100.80.204.66:8080/v1/chat/completions"
+        val defaultLocalUrl = System.getenv("HERMES_DEFAULT_LOCAL_URL")
+            ?: "http://192.168.68.105:8080/v1/chat/completions"
+        buildConfigField("String", "DEFAULT_TAILSCALE_BASE_URL", "\"$defaultTailscaleUrl\"")
+        buildConfigField("String", "DEFAULT_LOCAL_BASE_URL", "\"$defaultLocalUrl\"")
+
+        // Production placeholder retained for future non-Jeff deployments.
         buildConfigField("String", "PRODUCTION_BASE_URL",
             "\"https://hermes.internal.example.com/v1/chat/completions\"")
     }

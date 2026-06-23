@@ -80,11 +80,11 @@ class ChatViewModel(
         private set
 
     /** User-configured Local/LAN Hermes endpoint URL. */
-    var localBaseUrl: String by mutableStateOf("")
+    var localBaseUrl: String by mutableStateOf(BuildConfig.DEFAULT_LOCAL_BASE_URL)
         private set
 
     /** User-configured Tailscale Hermes endpoint URL. */
-    var awayBaseUrl: String by mutableStateOf("")
+    var awayBaseUrl: String by mutableStateOf(BuildConfig.DEFAULT_TAILSCALE_BASE_URL)
         private set
 
     /** Actual endpoint currently applied to the HTTP client. */
