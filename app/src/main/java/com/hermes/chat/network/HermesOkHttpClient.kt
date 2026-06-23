@@ -105,6 +105,36 @@ class HermesOkHttpClient : HermesClient {
         }
     }
 
+    /**
+     * Test endpoint + API key without sending a chat completion request.
+     * Uses `/v1/models`, which Hermes protects with the same Bearer API key.
+     */
+    suspend fun testApiKey(): String = withContext(Dispatchers.IO) {
+        val modelsUrl = modelsUrl() ?: return@withContext "❌ Endpoint URL is invalid"
+        val reqBuilder = Request.Builder()
+            .url(modelsUrl)
+            .get()
+        if (authToken.isNotBlank()) {
+            reqBuilder.addHeader("Authorization", "Bearer $authToken")
+        }
+
+        val response = try {
+            client.newCall(reqBuilder.build()).execute()
+        } catch (e: Exception) {
+            return@withContext "❌ Connection failed: ${e.message ?: "unknown error"}"
+        }
+
+        response.use {
+            when (it.code) {
+                in 200..299 -> "✅ API key accepted"
+                401 -> "⚠️ API key required or invalid"
+                403 -> "⚠️ API key rejected"
+                404 -> "⚠️ Endpoint reached, but /v1/models was not found"
+                else -> "⚠️ HTTP ${it.code}: ${(it.body?.string() ?: "").take(120)}"
+            }
+        }
+    }
+
     override suspend fun sendMessage(conversation: List<Message>): Message = withContext(Dispatchers.IO) {
         if (baseUrl.isBlank()) {
             return@withContext Message(

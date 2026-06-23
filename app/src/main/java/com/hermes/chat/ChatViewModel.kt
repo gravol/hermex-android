@@ -413,40 +413,22 @@ class ChatViewModel(
         addSystem("\uD83D\uDDD1\uFE0F Auth token cleared")
     }
 
-    /** Send a minimal test message to verify connectivity and auth. */
+    /** Test endpoint + API key without spending a chat request. */
     fun testConnection() {
         if (isTestingConnection) return
         isTestingConnection = true
         connectionTestResult = null
-        addSystem("\uD83D\uDD04 Testing connection...")
+        addSystem("\uD83D\uDD04 Testing API key...")
 
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                try {
-                    val httpClient = client as? HermesOkHttpClient
-                    if (httpClient == null) return@withContext "\u26A0\uFE0F Client not available"
-
-                    // Minimal ping
-                    val testMsg = Message(role = "user", text = "ping")
-                    val response = httpClient.sendMessage(listOf(testMsg))
-
-                    if (response.text.startsWith("\u26A0\uFE0F")) {
-                        val code = response.text.substringAfter("(").substringBefore(")")
-                        if (code.contains("401") || code.contains("403"))
-                            "\u274C ${response.text}"
-                        else
-                            "\u2705 Server reached. ${response.text}"
-                    } else {
-                        "\u2705 Connected and authenticated. Got response."
-                    }
-                } catch (e: Exception) {
-                    "\u274C Connection failed: ${e.message ?: "unknown error"}"
-                }
+                val httpClient = client as? HermesOkHttpClient
+                    ?: return@withContext "\u26A0\uFE0F Client not available"
+                httpClient.testApiKey()
             }
             connectionTestResult = result
             isTestingConnection = false
-            // Remove the "Testing..." message and replace with result
-            messages.removeAll { it.text == "\uD83D\uDD04 Testing connection..." }
+            messages.removeAll { it.text == "\uD83D\uDD04 Testing API key..." }
             addSystem(result)
         }
     }

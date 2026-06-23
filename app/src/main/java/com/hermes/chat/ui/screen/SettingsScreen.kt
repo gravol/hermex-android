@@ -180,8 +180,8 @@ fun SettingsScreen(chatState: ChatViewModel) {
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics { testTag = "apiTokenField" },
-            label = { Text("API Token") },
-            placeholder = { Text("sk-... or Bearer token") },
+            label = { Text("Hermes API Server Key") },
+            placeholder = { Text("Paste API_SERVER_KEY") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
@@ -195,7 +195,7 @@ fun SettingsScreen(chatState: ChatViewModel) {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = if (chatState.authToken.isNotBlank()) "✅ Token set" else "Leave blank for anonymous access",
+            text = if (chatState.authToken.isNotBlank()) "✅ API Server key saved" else "Required: paste your Hermes API_SERVER_KEY. Stored encrypted on device; not included in backups.",
             style = MaterialTheme.typography.bodySmall,
             color = if (chatState.authToken.isNotBlank())
                 MaterialTheme.colorScheme.primary
@@ -210,11 +210,14 @@ fun SettingsScreen(chatState: ChatViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = if (chatState.isTestingConnection) "⏳ Testing..." else "Test Connection",
+                text = if (chatState.isTestingConnection) "⏳ Testing..." else "Test API key",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .clickable(enabled = !chatState.isTestingConnection) { chatState.testConnection() }
+                    .clickable(enabled = !chatState.isTestingConnection) {
+                        chatState.updateAuthToken(authTokenInput.trim())
+                        chatState.testConnection()
+                    }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             )
             Spacer(Modifier.weight(1f))
