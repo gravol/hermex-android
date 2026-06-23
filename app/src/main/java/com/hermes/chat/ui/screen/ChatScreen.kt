@@ -112,9 +112,12 @@ fun ChatScreen(
     }
 
     LaunchedEffect(chatState.messages.lastOrNull()?.id, chatState.messages.lastOrNull()?.text) {
-        if (chatState.messages.isNotEmpty() && isNearBottom) {
-            kotlinx.coroutines.delay(16)
-            listState.animateScrollToItem(chatState.messages.lastIndex)
+        if (chatState.messages.isNotEmpty()) {
+            val last = chatState.messages.last()
+            if (isNearBottom || last.isAssistant || last.isUser) {
+                kotlinx.coroutines.delay(16)
+                listState.animateScrollToItem(chatState.messages.lastIndex)
+            }
         }
     }
 
@@ -721,6 +724,14 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                     )
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
+                if (message.isUser || message.isAssistant) {
+                    Text(
+                        text = if (message.isUser) "Jeff" else "Hermes",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = if (message.isUser) TelegramChatColors.Blue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                        modifier = Modifier.padding(bottom = 3.dp),
+                    )
+                }
                 if (isPending) {
                     Text(
                         text = "•••",
