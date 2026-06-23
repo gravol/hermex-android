@@ -8,7 +8,7 @@ android {
     compileSdk = 34
 
     val ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
-    val localVersionCode = 11
+    val localVersionCode = 12
     val resolvedVersionCode = ciRunNumber ?: localVersionCode
 
     defaultConfig {

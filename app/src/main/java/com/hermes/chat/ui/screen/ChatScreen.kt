@@ -91,6 +91,20 @@ fun ChatScreen(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+
+    // Auto-scroll to bottom when new messages arrive or the last message updates
+    // (streaming), but only if the user hasn't scrolled up to read history.
+    LaunchedEffect(chatState.messages.size, chatState.messages.lastOrNull()?.text) {
+        if (chatState.messages.isNotEmpty()) {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            if (totalItems == 0 || lastVisible >= totalItems - 2) {
+                listState.animateScrollToItem(chatState.messages.lastIndex)
+            }
+        }
+    }
+
     var inputText by remember { mutableStateOf("") }
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
     var appMenuExpanded by remember { mutableStateOf(false) }
