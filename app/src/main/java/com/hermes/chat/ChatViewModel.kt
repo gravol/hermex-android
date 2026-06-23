@@ -489,9 +489,6 @@ class ChatViewModel(
             resolvedBaseUrl = resolved
             (client as? HermesOkHttpClient)?.baseUrl = resolved
             refreshModels(silent = true)
-            if (resolved.isNotBlank()) {
-                addSystem("\uD83D\uDCE1 Endpoint: **${currentMode.displayName}**")
-            }
         }
     }
 

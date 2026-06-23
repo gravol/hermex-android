@@ -708,7 +708,7 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                 bottomEnd = if (message.isUser) 5.dp else 16.dp,
             ),
             color = color,
-            modifier = Modifier.widthIn(max = 320.dp),
+            modifier = Modifier.widthIn(max = 286.dp),
         ) {
             Column(
                 modifier = Modifier
