@@ -95,6 +95,7 @@ fun ChatScreen(
                     type = AttachmentType.IMAGE,
                     uri = it.toString(),
                     displayName = "Image",
+                    mimeType = context.contentResolver.getType(it) ?: "image/jpeg",
                 )
             )
         }

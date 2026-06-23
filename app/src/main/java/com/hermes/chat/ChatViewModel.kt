@@ -1,11 +1,14 @@
 package com.hermes.chat
 
 import android.app.Application
+import android.net.Uri
+import android.util.Base64
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
+import com.hermes.chat.model.AttachmentType
 import com.hermes.chat.model.Message
 import com.hermes.chat.model.MessageAttachment
 import com.hermes.chat.model.ModelType
@@ -231,8 +234,12 @@ class ChatViewModel(
      * Called from [sendMessage] and [retryMessage].
      */
     private suspend fun performSend(pendingIndex: Int) {
-        val conversation = messages.toList().filterIndexed { i, m ->
-            i != pendingIndex && m.text != "..." && !m.isSystem
+        val conversation = withContext(Dispatchers.IO) {
+            messages.toList()
+                .filterIndexed { i, m ->
+                    i != pendingIndex && m.text != "..." && !m.isSystem
+                }
+                .map { message -> prepareMessageAttachments(message) }
         }
 
         val result = retryWithBackoff(retryPolicy) {
@@ -294,6 +301,37 @@ class ChatViewModel(
     }
 
     // ── Internal ────────────────────────────────────────────────
+
+    private fun prepareMessageAttachments(message: Message): Message {
+        if (message.attachments.isEmpty()) return message
+        val prepared = message.attachments.map { attachment ->
+            if (attachment.type != AttachmentType.IMAGE || !attachment.dataUrl.isNullOrBlank()) {
+                attachment
+            } else {
+                attachment.copy(dataUrl = imageDataUrlOrNull(attachment))
+            }
+        }
+        return message.copy(attachments = prepared)
+    }
+
+    private fun imageDataUrlOrNull(attachment: MessageAttachment): String? {
+        val uri = runCatching { Uri.parse(attachment.uri) }.getOrNull() ?: return null
+        val resolver = getApplication<Application>().contentResolver
+        val mimeType = attachment.mimeType
+            ?: resolver.getType(uri)
+            ?: "image/jpeg"
+        if (!mimeType.startsWith("image/")) return null
+
+        return runCatching {
+            resolver.openInputStream(uri)?.use { input ->
+                val bytes = input.readBytes()
+                val maxBytes = 4 * 1024 * 1024
+                if (bytes.size > maxBytes) return null
+                val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                "data:$mimeType;base64,$encoded"
+            }
+        }.getOrNull()
+    }
 
     fun addSystem(text: String) {
         messages.add(Message(role = "system", text = text))

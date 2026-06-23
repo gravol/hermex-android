@@ -1,6 +1,7 @@
 package com.hermes.chat.network
 
 import com.hermes.chat.BuildConfig
+import com.hermes.chat.model.AttachmentType
 import com.hermes.chat.model.Message
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,6 +11,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -184,7 +187,7 @@ class HermesOkHttpClient : HermesClient {
 
     private fun buildRequest(conversation: List<Message>): okhttp3.RequestBody {
         val apiMessages = conversation.map { msg ->
-            HermesRequest.RequestMessage(role = msg.role, content = msg.text)
+            HermesRequest.RequestMessage(role = msg.role, content = contentForMessage(msg))
         }
         val request = HermesRequest(
             model = model,
@@ -192,6 +195,53 @@ class HermesOkHttpClient : HermesClient {
             maxTokens = maxTokens,
         )
         return request.toJson().toRequestBody(jsonMediaType)
+    }
+
+    private fun contentForMessage(message: Message): Any {
+        if (message.attachments.isEmpty()) return message.text
+
+        val parts = JSONArray()
+        val text = buildString {
+            append(message.text)
+            val unsupported = message.attachments.filter { it.type != AttachmentType.IMAGE || it.dataUrl.isNullOrBlank() }
+            if (unsupported.isNotEmpty()) {
+                if (isNotBlank()) append("\n\n")
+                append("Attachments not sent to Hermes yet:\n")
+                unsupported.forEach { att ->
+                    val label = when (att.type) {
+                        AttachmentType.IMAGE -> "image"
+                        AttachmentType.VOICE -> "voice note"
+                        AttachmentType.FILE -> "file"
+                    }
+                    append("- ${att.displayName} ($label)\n")
+                }
+            }
+        }.trim()
+
+        if (text.isNotBlank()) {
+            parts.put(JSONObject().apply {
+                put("type", "text")
+                put("text", text)
+            })
+        }
+
+        message.attachments
+            .filter { it.type == AttachmentType.IMAGE && !it.dataUrl.isNullOrBlank() }
+            .forEach { att ->
+                parts.put(JSONObject().apply {
+                    put("type", "image_url")
+                    put("image_url", JSONObject().apply {
+                        put("url", att.dataUrl)
+                        put("detail", "auto")
+                    })
+                })
+            }
+
+        return if (parts.length() == 1 && message.attachments.none { it.type == AttachmentType.IMAGE && !it.dataUrl.isNullOrBlank() }) {
+            text
+        } else {
+            parts
+        }
     }
 
     // ── Helpers ────────────────────────────────────────────────

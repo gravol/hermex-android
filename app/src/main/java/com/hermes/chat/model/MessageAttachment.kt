@@ -9,4 +9,6 @@ data class MessageAttachment(
     val type: AttachmentType,
     val uri: String,
     val displayName: String,
+    val mimeType: String? = null,
+    val dataUrl: String? = null,
 )

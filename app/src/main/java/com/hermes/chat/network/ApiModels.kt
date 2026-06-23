@@ -13,7 +13,7 @@ data class HermesRequest(
 ) {
     data class RequestMessage(
         val role: String,
-        val content: String,
+        val content: Any,
     )
 
     fun toJson(): String = JSONObject().apply {
@@ -23,7 +23,11 @@ data class HermesRequest(
             messages.forEach { msg ->
                 put(JSONObject().apply {
                     put("role", msg.role)
-                    put("content", msg.content)
+                    put("content", when (val content = msg.content) {
+                        is JSONArray -> content
+                        is JSONObject -> content
+                        else -> content.toString()
+                    })
                 })
             }
         })
