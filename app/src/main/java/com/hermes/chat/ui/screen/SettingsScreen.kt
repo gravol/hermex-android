@@ -355,7 +355,7 @@ fun SettingsScreen(chatState: ChatViewModel) {
             onValueChange = { tailscaleUrlInput = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Tailscale Endpoint URL") },
-            placeholder = { Text("http://100.x.y.z:8080/v1/chat/completions") },
+            placeholder = { Text("http://100.x.y.z:8650/v1/chat/completions") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
@@ -384,7 +384,7 @@ fun SettingsScreen(chatState: ChatViewModel) {
             onValueChange = { localUrlInput = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Local/LAN Endpoint URL") },
-            placeholder = { Text("http://192.168.1.x:8080/v1/chat/completions") },
+            placeholder = { Text("http://192.168.1.x:8650/v1/chat/completions") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
