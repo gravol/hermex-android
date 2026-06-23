@@ -42,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,7 +53,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -428,6 +431,15 @@ private fun SystemMessage(text: String) {
 private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int) {
     val isFailed = index in chatState.failedMessageIndices
     val isPending = message.isAssistant && message.text == "..." && message.attachments.isEmpty()
+    val clipboardManager = LocalClipboardManager.current
+    var showCopied by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showCopied) {
+        if (showCopied) {
+            kotlinx.coroutines.delay(1500)
+            showCopied = false
+        }
+    }
 
     val alignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
     val color = if (message.isUser)
@@ -451,7 +463,18 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
             color = color,
             modifier = Modifier.widthIn(max = 340.dp),
         ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column(
+                modifier = Modifier
+                    .then(
+                        if (!isFailed && !isPending && message.text.isNotBlank())
+                            Modifier.clickable {
+                                clipboardManager.setText(AnnotatedString(message.text))
+                                showCopied = true
+                            }
+                        else Modifier
+                    )
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
                 if (isPending) {
                     Text(
                         text = "\u23F3 Sending...",
@@ -482,6 +505,15 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                             color = textColor,
                         )
                     }
+                }
+
+                if (showCopied) {
+                    Text(
+                        text = "Copied",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TelegramChatColors.Blue,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
             }
         }
