@@ -6,6 +6,7 @@ import android.media.MediaRecorder
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
@@ -67,6 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.hermes.chat.ChatViewModel
@@ -94,6 +98,7 @@ fun ChatScreen(
     var activeRecordingFile by remember { mutableStateOf<File?>(null) }
     var recordingStartedAt by remember { mutableStateOf(0L) }
     val pendingAttachments = remember { mutableStateListOf<MessageAttachment>() }
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     val context = LocalContext.current
 
     val recordAudioPermission = rememberLauncherForActivityResult(
@@ -117,6 +122,34 @@ fun ChatScreen(
                 )
             )
         }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { captured: Boolean ->
+        val uri = pendingCameraUri
+        pendingCameraUri = null
+        if (captured && uri != null) {
+            pendingAttachments.add(
+                MessageAttachment(
+                    type = AttachmentType.IMAGE,
+                    uri = uri.toString(),
+                    displayName = "Camera photo",
+                    mimeType = "image/jpeg",
+                )
+            )
+        }
+    }
+
+    fun launchCamera() {
+        val photoFile = File(context.cacheDir, "photo_${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            photoFile,
+        )
+        pendingCameraUri = uri
+        cameraLauncher.launch(uri)
     }
 
     val filePicker = rememberLauncherForActivityResult(
@@ -370,7 +403,7 @@ fun ChatScreen(
                         onDismissRequest = { attachmentMenuExpanded = false },
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Photo") },
+                            text = { Text("Choose photo") },
                             leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null) },
                             onClick = {
                                 attachmentMenuExpanded = false
@@ -379,6 +412,14 @@ fun ChatScreen(
                                         ActivityResultContracts.PickVisualMedia.ImageOnly
                                     )
                                 )
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Take picture") },
+                            leadingIcon = { Icon(Icons.Filled.CameraAlt, contentDescription = null) },
+                            onClick = {
+                                attachmentMenuExpanded = false
+                                launchCamera()
                             },
                         )
                         DropdownMenuItem(
@@ -466,6 +507,14 @@ fun ChatScreen(
                         }
                     },
                 )
+                val micBubbleSize by animateDpAsState(
+                    targetValue = if (isRecordingVoice) 68.dp else 40.dp,
+                    label = "micBubbleSize",
+                )
+                val micIconSize by animateDpAsState(
+                    targetValue = if (isRecordingVoice) 34.dp else 22.dp,
+                    label = "micIconSize",
+                )
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -478,14 +527,37 @@ fun ChatScreen(
                                 }
                             )
                         },
-                    contentAlignment = Alignment.Center,
+                    contentAlignment = Alignment.BottomCenter,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Mic,
-                        contentDescription = "Hold to record voice note",
-                        tint = if (isRecordingVoice) MaterialTheme.colorScheme.error else TelegramChatColors.Blue,
-                        modifier = Modifier.size(22.dp),
-                    )
+                    if (isRecordingVoice) {
+                        Surface(
+                            modifier = Modifier
+                                .size(micBubbleSize)
+                                .offset(y = (-18).dp),
+                            shape = RoundedCornerShape(34.dp),
+                            color = MaterialTheme.colorScheme.error,
+                            tonalElevation = 6.dp,
+                            shadowElevation = 8.dp,
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Mic,
+                                    contentDescription = "Recording voice note",
+                                    tint = MaterialTheme.colorScheme.onError,
+                                    modifier = Modifier.size(micIconSize),
+                                )
+                            }
+                        }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = "Hold to record voice note",
+                            tint = TelegramChatColors.Blue,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .size(micIconSize),
+                        )
+                    }
                 }
                 IconButton(
                     onClick = { send() },
