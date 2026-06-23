@@ -57,9 +57,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -71,6 +74,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -91,17 +95,26 @@ fun ChatScreen(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val textFieldFocusRequester = remember { FocusRequester() }
+    var isNearBottom by remember { mutableStateOf(true) }
 
     // Auto-scroll to bottom when new messages arrive or the last message updates
     // (streaming), but only if the user hasn't scrolled up to read history.
-    LaunchedEffect(chatState.messages.size, chatState.messages.lastOrNull()?.text) {
-        if (chatState.messages.isNotEmpty()) {
+    LaunchedEffect(listState) {
+        snapshotFlow {
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
-            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            if (totalItems == 0 || lastVisible >= totalItems - 2) {
-                listState.animateScrollToItem(chatState.messages.lastIndex)
-            }
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            totalItems == 0 || lastVisible >= totalItems - 2
+        }.collect { nearBottom ->
+            isNearBottom = nearBottom
+        }
+    }
+
+    LaunchedEffect(chatState.messages.lastOrNull()?.id, chatState.messages.lastOrNull()?.text) {
+        if (chatState.messages.isNotEmpty() && isNearBottom) {
+            kotlinx.coroutines.delay(16)
+            listState.animateScrollToItem(chatState.messages.lastIndex)
         }
     }
 
@@ -137,6 +150,7 @@ fun ChatScreen(
                 )
             )
         }
+        textFieldFocusRequester.requestFocus()
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -154,6 +168,7 @@ fun ChatScreen(
                 )
             )
         }
+        textFieldFocusRequester.requestFocus()
     }
 
     fun launchCamera() {
@@ -183,6 +198,7 @@ fun ChatScreen(
                 )
             )
         }
+        textFieldFocusRequester.requestFocus()
     }
 
     fun startVoiceRecording() {
@@ -256,6 +272,8 @@ fun ChatScreen(
         inputText = ""
         pendingAttachments.clear()
         scope.launch {
+            textFieldFocusRequester.requestFocus()
+            kotlinx.coroutines.delay(16)
             if (chatState.messages.isNotEmpty()) {
                 listState.animateScrollToItem(chatState.messages.lastIndex)
             }
@@ -432,7 +450,10 @@ fun ChatScreen(
                 // Attachment paperclip: photo / voice / file
                 Box {
                     IconButton(
-                        onClick = { attachmentMenuExpanded = true },
+                        onClick = {
+                            attachmentMenuExpanded = true
+                            textFieldFocusRequester.requestFocus()
+                        },
                         modifier = Modifier.size(40.dp),
                     ) {
                         Icon(
@@ -444,7 +465,11 @@ fun ChatScreen(
                     }
                     DropdownMenu(
                         expanded = attachmentMenuExpanded,
-                        onDismissRequest = { attachmentMenuExpanded = false },
+                        onDismissRequest = {
+                            attachmentMenuExpanded = false
+                            textFieldFocusRequester.requestFocus()
+                        },
+                        properties = PopupProperties(focusable = false),
                     ) {
                         DropdownMenuItem(
                             text = { Text("Choose photo") },
@@ -456,6 +481,7 @@ fun ChatScreen(
                                         ActivityResultContracts.PickVisualMedia.ImageOnly
                                     )
                                 )
+                                textFieldFocusRequester.requestFocus()
                             },
                         )
                         DropdownMenuItem(
@@ -464,6 +490,7 @@ fun ChatScreen(
                             onClick = {
                                 attachmentMenuExpanded = false
                                 launchCamera()
+                                textFieldFocusRequester.requestFocus()
                             },
                         )
                         DropdownMenuItem(
@@ -472,6 +499,7 @@ fun ChatScreen(
                             onClick = {
                                 attachmentMenuExpanded = false
                                 filePicker.launch("*/*")
+                                textFieldFocusRequester.requestFocus()
                             },
                         )
                     }
@@ -480,7 +508,10 @@ fun ChatScreen(
                 // App menu: settings/devices/logs when bottom tabs are tucked away.
                 Box {
                     IconButton(
-                        onClick = { appMenuExpanded = true },
+                        onClick = {
+                            appMenuExpanded = true
+                            textFieldFocusRequester.requestFocus()
+                        },
                         modifier = Modifier.size(40.dp),
                     ) {
                         Icon(
@@ -492,13 +523,18 @@ fun ChatScreen(
                     }
                     DropdownMenu(
                         expanded = appMenuExpanded,
-                        onDismissRequest = { appMenuExpanded = false },
+                        onDismissRequest = {
+                            appMenuExpanded = false
+                            textFieldFocusRequester.requestFocus()
+                        },
+                        properties = PopupProperties(focusable = false),
                     ) {
                         DropdownMenuItem(
                             text = { Text("Settings") },
                             onClick = {
                                 appMenuExpanded = false
                                 onOpenSettings()
+                                textFieldFocusRequester.requestFocus()
                             },
                         )
                         DropdownMenuItem(
@@ -506,6 +542,7 @@ fun ChatScreen(
                             onClick = {
                                 appMenuExpanded = false
                                 onOpenDevices()
+                                textFieldFocusRequester.requestFocus()
                             },
                         )
                         DropdownMenuItem(
@@ -513,6 +550,7 @@ fun ChatScreen(
                             onClick = {
                                 appMenuExpanded = false
                                 onOpenLogs()
+                                textFieldFocusRequester.requestFocus()
                             },
                         )
                     }
@@ -522,6 +560,7 @@ fun ChatScreen(
                     value = inputText,
                     onValueChange = { inputText = it },
                     modifier = Modifier
+                        .focusRequester(textFieldFocusRequester)
                         .weight(1f)
                         .heightIn(min = 40.dp, max = 128.dp)
                         .clip(RoundedCornerShape(20.dp))
