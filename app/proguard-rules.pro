@@ -1,8 +1,11 @@
-# Hermes Chat — ProGuard / R8 rules
-# Add project-specific keep rules below.
+# Hermes Chat WebView APK - ProGuard rules
 -keepattributes *Annotation*
 
-# security-crypto: suppress warnings about error_prone annotations
--dontwarn com.google.errorprone.annotations.**
--dontwarn javax.annotation.**
--keep class com.google.errorprone.** { *; }
+# Keep WebView class
+-keep class android.webkit.** { *; }
+
+# Keep appcompat
+-keep class androidx.appcompat.** { *; }
+
+# Keep our activity
+-keep class com.hermes.chat.** { *; }

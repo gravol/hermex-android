@@ -1,22 +1,12 @@
-# Android
-android/.gradle/
-android/build/
-android/app/build/
-android/app/.cxx/
-android/local.properties
-*.apk
-*.aab
-*.keystore
-*.jks
-app/keystore/*.env
-
-# Gradle
-.gradle/
-build/
-
-# macOS
-.DS_Store
-
-# IDE
-.idea/
 *.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+app/build/
+app/keystore/

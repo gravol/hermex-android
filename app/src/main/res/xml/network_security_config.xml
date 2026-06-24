@@ -1,58 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Hermes Chat — Network Security Configuration
-
-  Base config (release):
-  - Cleartext (HTTP) traffic is DENIED by default.
-  - Certificate pinning is enforced for the production Hermes domain.
-
-  Debug variant overrides these restrictions via src/debug/res/xml/
-  to allow localhost and private-IP development traffic.
-
-  TODO: Replace placeholder pin hashes with real production cert SHA-256 values
-  before shipping a release build.
--->
 <network-security-config>
-    <!--
-      Base cleartext policy: deny all HTTP traffic.
-      Debug overrides re-enable it for local networks.
-    -->
+    <!-- Allow cleartext for local/Tailscale traffic -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">100.80.204.66</domain>
+        <domain includeSubdomains="true">192.168.68.105</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">bigred.tail776582.ts.net</domain>
+    </domain-config>
+    <!-- Default: HTTPS only -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-
-    <!--
-      Explicit cleartext exceptions for Jeff's private Hermes endpoints.
-      Android network security config does not support CIDR ranges, so keep this narrow.
-    -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">100.80.204.66</domain>
-        <domain includeSubdomains="false">192.168.68.105</domain>
-        <domain includeSubdomains="false">localhost</domain>
-        <domain includeSubdomains="false">10.0.2.2</domain>
-    </domain-config>
-
-    <!--
-      Certificate pinning for the production Hermes domain.
-      Pinning only applies to this specific domain.
-      Hashes are SHA-256 of the SubjectPublicKeyInfo.
-    -->
-    <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">hermes.internal.example.com</domain>
-        <!--
-          TODO: Replace with real production cert hashes.
-          Generate with: openssl s_client -connect your-domain:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64
-        -->
-        <pin digest="SHA-256">CHANGE_ME_TO_REAL_HASH_1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
-        <pin digest="SHA-256">CHANGE_ME_TO_REAL_BACKUP_HASH_2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
-        <!-- Trust system anchors as fallback if pinning fails (for transition) -->
-        <trust-anchors>
-            <certificates src="system" />
-        </trust-anchors>
-    </domain-config>
-
-    <!-- Debug overrides are loaded from src/debug/res/xml/ -->
-    <debug-overrides />
 </network-security-config>
