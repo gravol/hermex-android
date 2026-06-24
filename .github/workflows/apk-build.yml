@@ -47,9 +47,10 @@ jobs:
         with:
           name: Hermes Chat ${{ github.ref_name }}
           body: |
-            Hermes Chat WebView APK
+            Hermes Desktop for Android
 
-            - Loads https://bigred.tail776582.ts.net/ (Hermes Chat webapp)
+            - Loads https://hermes-agent.nousresearch.com/ (Official Hermes Desktop UI)
+            - Configure gateway Settings → Remote: http://100.80.204.66:9119
             - Requires Tailscale active on device
             - Min SDK 26, Target SDK 34
             - Edge-to-edge with proper keyboard handling

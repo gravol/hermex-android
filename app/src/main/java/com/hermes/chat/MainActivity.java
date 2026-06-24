@@ -17,7 +17,7 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
     private ProgressBar progressBar;
-    private static final String APP_URL = "https://bigred.tail776582.ts.net/";
+    private static final String APP_URL = "https://hermes-agent.nousresearch.com/";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
