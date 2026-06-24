@@ -464,7 +464,7 @@ fun ChatScreen(
             }
         }
 
-        // Input bar
+        // Input bar — Telegram-style: paperclip → pill input → mic/send
         Surface(
             tonalElevation = 0.dp,
             color = TelegramChatColors.DarkComposer,
@@ -472,8 +472,8 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 5.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.Bottom,
+                    .padding(start = 2.dp, end = 2.dp, top = 3.dp, bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Attachment paperclip: photo / voice / file
                 Box {
@@ -488,7 +488,7 @@ fun ChatScreen(
                             Icons.Filled.AttachFile,
                             contentDescription = "Open attachment menu",
                             tint = TelegramChatColors.Blue,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                     DropdownMenu(
@@ -541,13 +541,13 @@ fun ChatScreen(
                     modifier = Modifier
                         .focusRequester(textFieldFocusRequester)
                         .weight(1f)
-                        .heightIn(min = 36.dp, max = 100.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .heightIn(min = 32.dp, max = 100.dp)
+                        .clip(RoundedCornerShape(22.dp))
                         .background(TelegramChatColors.DarkComposerField)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
                     singleLine = false,
                     maxLines = 5,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
                         color = MaterialTheme.colorScheme.onSurface,
                     ),
                     cursorBrush = SolidColor(TelegramChatColors.Blue),
@@ -578,16 +578,16 @@ fun ChatScreen(
                             imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send",
                             tint = TelegramChatColors.Blue,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 } else {
                     val micBubbleSize by animateDpAsState(
-                        targetValue = if (isRecordingVoice) 75.dp else 36.dp,
+                        targetValue = if (isRecordingVoice) 90.dp else 36.dp,
                         label = "micBubbleSize",
                     )
                     val micIconSize by animateDpAsState(
-                        targetValue = if (isRecordingVoice) 36.dp else 19.dp,
+                        targetValue = if (isRecordingVoice) 40.dp else 19.dp,
                         label = "micIconSize",
                     )
                     Box(
@@ -602,17 +602,17 @@ fun ChatScreen(
                                     }
                                 )
                             },
-                        contentAlignment = Alignment.BottomCenter,
+                        contentAlignment = Alignment.Center,
                     ) {
                         if (isRecordingVoice) {
                             Surface(
                                 modifier = Modifier
                                     .size(micBubbleSize)
-                                    .offset(y = (-24).dp),
-                                shape = RoundedCornerShape(44.dp),
+                                    .offset(y = (-36).dp),
+                                shape = RoundedCornerShape(50.dp),
                                 color = MaterialTheme.colorScheme.error,
-                                tonalElevation = 6.dp,
-                                shadowElevation = 8.dp,
+                                tonalElevation = 8.dp,
+                                shadowElevation = 12.dp,
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
@@ -628,9 +628,7 @@ fun ChatScreen(
                                 imageVector = Icons.Filled.Mic,
                                 contentDescription = "Hold to record voice note",
                                 tint = TelegramChatColors.Blue,
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .size(micIconSize),
+                                modifier = Modifier.size(22.dp),
                             )
                         }
                     }
