@@ -106,20 +106,25 @@ fun ChatScreen(
     // (streaming), but only if the user hasn't scrolled up to read history.
     LaunchedEffect(chatState.messages.lastOrNull()?.id, chatState.messages.lastOrNull()?.text, chatState.isAssistantStreaming) {
         if (chatState.messages.isNotEmpty()) {
-            val last = chatState.messages.last()
-            if (chatState.isAssistantStreaming || last.isAssistant || last.isUser) {
-                // Check if user is near the bottom — don't steal scroll when reading history
-                val layoutInfo = listState.layoutInfo
-                val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
-                val nearBottom = lastVisible == null ||
-                    lastVisible.index >= layoutInfo.totalItemsCount - 2 ||
-                    lastVisible.offset + lastVisible.size >= layoutInfo.viewportEndOffset - 300
-
-                if (nearBottom) {
-                    // Longer settle delay after streaming finishes (code blocks resize)
-                    val delay = if (chatState.isAssistantStreaming) 16L else 120L
-                    kotlinx.coroutines.delay(delay)
-                    listState.animateScrollToItem(chatState.messages.lastIndex)
+            val lastIndex = chatState.messages.lastIndex
+            if (chatState.isAssistantStreaming) {
+                // During streaming: snap to bottom immediately, no animation
+                // This keeps the latest text visible as it arrives
+                listState.scrollToItem(lastIndex)
+            } else {
+                val last = chatState.messages.last()
+                if (last.isAssistant || last.isUser) {
+                    // Check if user is near the bottom — don't steal scroll when reading history
+                    val layoutInfo = listState.layoutInfo
+                    val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
+                    val nearBottom = lastVisible == null ||
+                        lastVisible.index >= layoutInfo.totalItemsCount - 2 ||
+                        lastVisible.offset + lastVisible.size >= layoutInfo.viewportEndOffset - 300
+                    if (nearBottom) {
+                        // Longer settle delay after streaming finishes (code blocks resize)
+                        kotlinx.coroutines.delay(120)
+                        listState.animateScrollToItem(lastIndex)
+                    }
                 }
             }
         }
