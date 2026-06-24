@@ -719,8 +719,11 @@ private fun MessageBubble(message: Message, chatState: ChatViewModel, index: Int
                     }
 
                     if (message.text.isNotBlank()) {
+                        val isStreaming = chatState.isAssistantStreaming &&
+                            index == chatState.messages.lastIndex
+                        val displayText = if (isStreaming) message.text + "▊" else message.text
                         FormattedMessageText(
-                            text = message.text,
+                            text = displayText,
                             color = textColor,
                         )
                     }
