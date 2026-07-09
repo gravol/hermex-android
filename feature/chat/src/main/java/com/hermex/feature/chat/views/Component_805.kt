@@ -1,0 +1,15 @@
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.compose.ui:ui:1.7.6")
+    implementation("androidx.compose.ui:ui-graphics:1.7.6")
+    implementation("androidx.compose.ui:ui-tooling:1.7.6")
+    implementation("androidx.compose.material3:material3:1.3.1")
+    implementation("androidx.compose.material:material-icons-extended:1.7.6")
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.insert-koin:koin-android:3.5.6")
+    implementation("io.github.knft:markwon:4.6.2")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("io.github.knft:markwon-ext-mathjax:4.6.2")
+}
