@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
+import okhttp3.CertificatePinner
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -14,12 +15,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 object ApiClient {
 
@@ -41,21 +37,14 @@ object ApiClient {
             .cookieJar(cookieJar)
             .apply { if (authenticator != null) authenticator(authenticator) }
             .apply {
-                // Trust self-signed certs (Hermes servers commonly use them on port 8443)
-                try {
-                    val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                        override fun checkClientTrusted(c: Array<X509Certificate>, a: String) {}
-                        override fun checkServerTrusted(c: Array<X509Certificate>, a: String) {}
-                        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-                    })
-                    val sslContext = SSLContext.getInstance("TLS")
-                    sslContext.init(null, trustAllCerts, SecureRandom())
-                    sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-                    hostnameVerifier { _, _ -> true }
-                    Log.d("Hermex", "ApiClient.init: SSL trust-all enabled for self-signed certs")
-                } catch (e: Exception) {
-                    Log.w("Hermex", "ApiClient.init: SSL trust-all setup failed, using defaults", e)
-                }
+                // Certificate pinning for self-hosted Hermes server.
+                // Pin is tied to the server's self-signed cert — if the cert
+                // is regenerated or the server IP changes, the pin must be updated.
+                // See DEVELOPMENT.md.
+                certificatePinner(CertificatePinner.Builder()
+                    .add("100.80.204.66", "sha256/jOIJfSaEOx0W1RLGrwSG/gIH4c2I5Nz2y193EoWi2+Q=")
+                    .build()
+                )
             }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
