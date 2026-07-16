@@ -2,6 +2,9 @@ package com.hermex.android.feature.chat
 
 import android.app.Application
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.core.network.ApiClient
@@ -11,9 +14,6 @@ import com.hermex.core.network.NetworkResult
 import com.hermex.core.network.SseEvent
 import com.hermex.core.network.SseParser
 import com.hermex.core.network.ToolCallData
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.Response
 import okhttp3.sse.EventSource
@@ -63,8 +63,9 @@ data class ChatUiState(
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val _uiState = MutableStateFlow(ChatUiState())
-    val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+    // Compose snapshot state — no StateFlow conflation, every write feeds the next frame
+    var uiState by mutableStateOf(ChatUiState())
+        private set
 
     private var sessionId: String = ""
     private var sessionTitle: String = ""
@@ -78,31 +79,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (this.sessionId == sessionId) return
         this.sessionId = sessionId
         this.sessionTitle = title ?: sessionId.take(16)
-        _uiState.value = ChatUiState(sessionTitle = this.sessionTitle)
+        uiState = ChatUiState(sessionTitle = this.sessionTitle)
         loadMessages()
     }
 
     fun loadMessages() {
         if (sessionId.isEmpty()) return
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            uiState = uiState.copy(isLoading = true, error = null)
             when (val result = ApiClient.sessionMessages(sessionId)) {
                 is NetworkResult.Success -> {
                     val messages = result.data.data.map { it.toUiMessage() }
-                    _uiState.value = _uiState.value.copy(
+                    uiState = uiState.copy(
                         isLoading = false,
                         messages = messages,
                         error = null,
                     )
                 }
                 is NetworkResult.HttpError -> {
-                    _uiState.value = _uiState.value.copy(
+                    uiState = uiState.copy(
                         isLoading = false,
                         error = "Server error (${result.code})",
                     )
                 }
                 is NetworkResult.Error -> {
-                    _uiState.value = _uiState.value.copy(
+                    uiState = uiState.copy(
                         isLoading = false,
                         error = result.exception.message ?: "Failed to load messages",
                     )
@@ -124,14 +125,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         // Add user message immediately
         val userMsg = UiMessage(id = userMsgId, role = "user", content = text, timestamp = now)
-        val current = _uiState.value.messages.toMutableList()
+        val current = uiState.messages.toMutableList()
         current.add(userMsg)
 
         // Add empty streaming assistant message placeholder
         val asstMsg = UiMessage(id = assistantMsgId, role = "assistant", isStreaming = true, timestamp = now)
         current.add(asstMsg)
 
-        _uiState.value = _uiState.value.copy(
+        uiState = uiState.copy(
             messages = current,
             isStreaming = true,
             error = null,
@@ -165,12 +166,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         code != null -> "Server error ($code)"
                         else -> "Stream connection lost"
                     }
-                    val msgs = _uiState.value.messages.toMutableList()
+                    val msgs = uiState.messages.toMutableList()
                     val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                     if (idx >= 0) {
                         msgs[idx] = msgs[idx].copy(isStreaming = false)
                     }
-                    _uiState.value = _uiState.value.copy(
+                    uiState = uiState.copy(
                         messages = msgs,
                         isStreaming = false,
                         error = errMsg,
@@ -179,12 +180,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 override fun onClosed(eventSource: EventSource) {
                     Log.d("Hermex", "SSE stream closed")
-                    val msgs = _uiState.value.messages.toMutableList()
+                    val msgs = uiState.messages.toMutableList()
                     val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                     if (idx >= 0) {
                         msgs[idx] = msgs[idx].copy(isStreaming = false)
                     }
-                    _uiState.value = _uiState.value.copy(messages = msgs, isStreaming = false)
+                    uiState = uiState.copy(messages = msgs, isStreaming = false)
                 }
             },
         )
@@ -193,15 +194,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun stopStreaming() {
         activeEventSource?.cancel()
         activeEventSource = null
-        _uiState.value = _uiState.value.copy(isStreaming = false)
+        uiState = uiState.copy(isStreaming = false)
     }
 
     fun toggleThinking(messageId: String) {
-        val msgs = _uiState.value.messages.toMutableList()
+        val msgs = uiState.messages.toMutableList()
         val idx = msgs.indexOfFirst { it.id == messageId }
         if (idx >= 0) {
             msgs[idx] = msgs[idx].copy(thinkingExpanded = !msgs[idx].thinkingExpanded)
-            _uiState.value = _uiState.value.copy(messages = msgs)
+            uiState = uiState.copy(messages = msgs)
         }
     }
 
@@ -213,7 +214,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     // ── SSE event handler ──
 
     private fun handleSseEvent(event: SseEvent) {
-        val msgs = _uiState.value.messages.toMutableList()
+        val msgs = uiState.messages.toMutableList()
 
         when (event) {
             is SseEvent.RunStarted -> { /* no UI change needed */ }
@@ -233,10 +234,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val idx = msgs.indexOfLast { it.role == "assistant" }
                     if (idx >= 0) {
                         val cur = msgs[idx]
+                        // Create NEW immutable copy with updated content —
+                        // Compose detects the new instance and recomposes the bubble
                         msgs[idx] = cur.copy(
                             id = if (cur.id.startsWith("asst_")) msgId else cur.id,
                             content = cur.content + (event.delta ?: ""),
-                            thinkingHasContent = true,  // first real content → collapse thinking
+                            thinkingHasContent = true,
                         )
                         DebugLog.sse("Handler", "delta → msg[$idx] content now ${msgs[idx].content.length} chars")
                     } else {
@@ -306,24 +309,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         content = finalContent,
                         toolCalls = finalTools,
                         isStreaming = false,
-                        thinkingExpanded = false,   // collapse thinking when done
+                        thinkingExpanded = false,
                         thinkingHasContent = true,
                         usage = usage,
                     )
                 }
-                _uiState.value = _uiState.value.copy(
+                uiState = uiState.copy(
                     messages = msgs,
                     isStreaming = false,
                 )
-                return  // already set _uiState below
+                return  // already set uiState above
             }
 
             is SseEvent.RunCompleted -> {
-                _uiState.value = _uiState.value.copy(isStreaming = false)
+                uiState = uiState.copy(isStreaming = false)
             }
 
             is SseEvent.Done -> {
-                _uiState.value = _uiState.value.copy(isStreaming = false)
+                uiState = uiState.copy(isStreaming = false)
             }
 
             is SseEvent.Unknown -> {
@@ -332,7 +335,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        _uiState.value = _uiState.value.copy(messages = msgs)
+        // Emit updated state — mutableStateOf writes to Compose's snapshot,
+        // triggering recomposition in the next frame. No conflation.
+        uiState = uiState.copy(messages = msgs)
     }
 
     // ── Mapping ──
@@ -341,7 +346,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         id = id.toString(),
         role = role,
         content = content,
-        thinkingExpanded = false,   // collapsed by default for loaded messages
+        thinkingExpanded = false,
         thinkingHasContent = true,
         toolCalls = toolCalls?.map {
             UiToolCall(id = it.id ?: "tc", toolName = it.function?.name ?: "unknown", completed = true)

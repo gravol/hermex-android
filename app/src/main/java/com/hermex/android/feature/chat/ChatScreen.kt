@@ -29,6 +29,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -52,7 +53,7 @@ fun ChatScreen(
         viewModel.init(sessionId, sessionTitle)
     }
 
-    val state by viewModel.uiState.collectAsState()
+    val state = viewModel.uiState
     val listState = rememberLazyListState()
     var composerText by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
@@ -61,6 +62,15 @@ fun ChatScreen(
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.content) {
         if (state.messages.isNotEmpty()) {
+            listState.animateScrollToItem(state.messages.lastIndex)
+        }
+    }
+
+    // Auto-scroll when keyboard opens
+    val density = LocalDensity.current
+    val imeBottom = WindowInsets.ime.getBottom(density)
+    LaunchedEffect(imeBottom) {
+        if (imeBottom > 0 && state.messages.isNotEmpty()) {
             listState.animateScrollToItem(state.messages.lastIndex)
         }
     }
@@ -103,8 +113,14 @@ fun ChatScreen(
                             .weight(1f)
                             .focusRequester(focusRequester),
                         maxLines = 4,
-                        // Never disable — keep focus after send
                         enabled = true,
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        ),
                     )
                     Spacer(Modifier.width(8.dp))
                     if (state.isStreaming) {
