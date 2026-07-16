@@ -35,7 +35,7 @@ android {
         }
         debug {
             isMinifyEnabled = false
-            applicationIdSuffix = ".debug"
+            // Keep same app ID as release for Obtanium updates
         }
     }
 
