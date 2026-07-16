@@ -1,134 +1,26 @@
 package com.hermex.core.network
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
 
-// ── Chat ──
+// ── Empty body for POST with no fields ──
 
 @Serializable
-data class ChatStartRequest(
-    val sessionId: String,
-    val message: String,
-    val workspace: String? = null,
-    val model: String? = null,
-    val modelProvider: String? = null,
-    val profile: String? = null,
-    val explicitModelPick: Boolean? = null,
-    val attachments: List<JsonElement>? = null,
+object EmptyBody
+
+// ── Health ──
+
+@Serializable
+data class StatusResponse(
+    val status: String = "",
+    val platform: String? = null,
+    val version: String? = null,
 )
 
-@Serializable data class ChatStartResponse(val success: Boolean = false)
-@Serializable data class ChatCancelResponse(val success: Boolean = false)
-@Serializable data class ChatStreamStatusResponse(val status: String = "")
-@Serializable data class ChatSteerResponse(val success: Boolean = false)
+// ── Sessions (Hermes API Server v0.18.0) ──
 
+/** GET /api/sessions */
 @Serializable
-data class ChatSteerRequest(val sessionId: String, val text: String)
-
-// ── Goal ──
-
-@Serializable
-data class GoalSubmissionRequest(
-    val sessionId: String,
-    val args: String,
-    val workspace: String? = null,
-    val model: String? = null,
-    val modelProvider: String? = null,
-    val profile: String? = null,
-)
-
-@Serializable data class GoalSubmissionResponse(val success: Boolean = false)
-
-// ── Approval ──
-
-@Serializable
-data class ApprovalRespondRequest(
-    val sessionId: String,
-    val choice: String,
-    val approvalId: String? = null,
-)
-
-@Serializable data class ApprovalPendingResponse(val pending: Boolean = false)
-@Serializable data class ApprovalRespondResponse(val success: Boolean = false)
-
-// ── Clarification ──
-
-@Serializable
-data class ClarificationRespondRequest(
-    val sessionId: String,
-    val response: String,
-    val clarifyId: String? = null,
-)
-
-@Serializable data class ClarificationPendingResponse(val pending: Boolean = false)
-@Serializable data class ClarificationRespondResponse(val success: Boolean = false)
-
-// ── BTW / Background ──
-
-@Serializable
-data class BtwRequest(val sessionId: String, val question: String)
-
-@Serializable data class BtwStartResponse(val success: Boolean = false)
-
-@Serializable
-data class BackgroundRequest(val sessionId: String, val prompt: String)
-
-@Serializable data class BackgroundStartResponse(val success: Boolean = false)
-@Serializable data class BackgroundStatusResponse(val status: String = "")
-
-// ── Sessions ──
-
-@Serializable
-data class NewSessionRequest(
-    val workspace: String? = null,
-    val model: String? = null,
-    val modelProvider: String? = null,
-    val profile: String? = null,
-)
-
-@Serializable
-data class RenameSessionRequest(val sessionId: String, val title: String)
-
-@Serializable
-data class SessionIDRequest(val sessionId: String)
-
-@Serializable
-data class PinSessionRequest(val sessionId: String, val pinned: Boolean)
-
-@Serializable
-data class ArchiveSessionRequest(val sessionId: String, val archived: Boolean)
-
-@Serializable
-data class BranchSessionRequest(
-    val sessionId: String,
-    val keepCount: Int? = null,
-    val title: String? = null,
-)
-
-@Serializable
-data class CompressSessionRequest(
-    val sessionId: String,
-    val focusTopic: String? = null,
-)
-
-@Serializable
-data class TruncateSessionRequest(val sessionId: String, val keepCount: Int)
-
-@Serializable
-data class UpdateSessionRequest(
-    val sessionId: String,
-    val workspace: String? = null,
-    val model: String? = null,
-    val modelProvider: String? = null,
-)
-
-@Serializable
-data class MoveSessionRequest(val sessionId: String, val projectId: String? = null)
-
-@Serializable
-data class SessionYoloRequest(val sessionId: String, val enabled: Boolean)
-
-@Serializable data class SessionsResponse(
+data class SessionsResponse(
     val `object`: String = "list",
     val data: List<Session> = emptyList(),
 )
@@ -149,64 +41,62 @@ data class Session(
     val lastActive: Double? = null,
     val preview: String? = null,
 )
-@Serializable data class SessionSearchResponse(val sessions: List<Session> = emptyList())
-@Serializable data class SessionResponse(val session: Session? = null)
-@Serializable data class SessionStatusResponse(val status: String = "")
-@Serializable data class SessionMutationResponse(val success: Boolean = false)
-@Serializable data class SessionBranchResponse(val newSessionId: String = "")
-@Serializable data class SessionCompressResponse(val success: Boolean = false)
-@Serializable data class SessionUndoResponse(val success: Boolean = false)
-@Serializable data class SessionRetryResponse(val success: Boolean = false)
-@Serializable data class SessionYoloResponse(val enabled: Boolean = false)
 
-// ── Cron ──
-
+/** GET /api/sessions/{id} */
 @Serializable
-data class CronCreateRequest(
-    val prompt: String,
-    val schedule: String,
-    val name: String? = null,
-    val deliver: String? = null,
-    val skills: List<String> = emptyList(),
+data class SessionResponse(
+    val session: Session? = null,
+)
+
+/** DELETE /api/sessions/{id} */
+@Serializable
+data class SessionDeleteResponse(
+    val success: Boolean = false,
+)
+
+/** POST /api/sessions — create */
+@Serializable
+data class NewSessionRequest(
+    val workspace: String? = null,
     val model: String? = null,
+    val modelProvider: String? = null,
     val profile: String? = null,
-    val toastNotifications: Boolean = false,
+)
+
+/** PATCH /api/sessions/{id} — update metadata */
+@Serializable
+data class PatchSessionRequest(
+    val title: String? = null,
+)
+
+// ── Messages ──
+
+/** GET /api/sessions/{id}/messages */
+@Serializable
+data class SessionMessagesResponse(
+    val messages: List<Message> = emptyList(),
 )
 
 @Serializable
-data class CronUpdateRequest(
-    val jobId: String,
-    val prompt: String? = null,
-    val schedule: String? = null,
-    val name: String? = null,
-    val deliver: String? = null,
-    val skills: List<String>? = null,
-    val model: String? = null,
-    val profile: String? = null,
-    val toastNotifications: Boolean? = null,
+data class Message(
+    val id: Int? = null,
+    val role: String = "",
+    val content: String = "",
+    val createdAt: String? = null,
+)
+
+// ── Chat ──
+
+/** POST /api/sessions/{id}/chat */
+@Serializable
+data class ChatRequest(
+    val message: String,
+    val workspace: String? = null,
 )
 
 @Serializable
-data class CronJobIDRequest(val jobId: String, val reason: String? = null)
-
-@Serializable data class CronJobsResponse(val jobs: List<CronJob> = emptyList())
-@Serializable data class CronMutationResponse(val success: Boolean = false)
-
-// ── Connection Test ──
-
-@Serializable
-data class StatusResponse(
+data class ChatStreamResponse(
+    val streamId: String = "",
+    val sessionId: String = "",
     val status: String = "",
-    val platform: String? = null,
-    val version: String? = null,
-)
-
-// ── Cron ──
-
-@Serializable
-data class CronJob(
-    val id: String = "",
-    val prompt: String = "",
-    val schedule: String = "",
-    val name: String? = null,
 )
