@@ -50,6 +50,37 @@ object ApiClient {
 
     private fun sseUrl(path: String) = "$baseUrl$path"
 
+    // ── Auth ──
+
+    /** Health-check a server URL without configuring the client. */
+    suspend fun health(serverUrl: String): NetworkResult<HealthResponse> =
+        withContext(Dispatchers.IO) {
+            val url = serverUrl.trimEnd('/') + "/health"
+            OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+                .newCall(Request.Builder().url(url).get().build())
+                .execute()
+                .handleResult(json, HealthResponse.serializer())
+        }
+
+    /** Login to a server, returning the token. Stores the authenticated session
+     *  cookie in the client's CookieJar once configure() has been called. */
+    suspend fun login(serverUrl: String, password: String): NetworkResult<LoginResponse> =
+        withContext(Dispatchers.IO) {
+            val url = serverUrl.trimEnd('/') + "/api/auth/login"
+            val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(password))
+            // Use the shared client so cookies persist
+            client.newCall(
+                Request.Builder().url(url)
+                    .post(bodyStr.toRequestBody(mediaTypeJson))
+                    .build()
+            ).execute().handleResult(json, LoginResponse.serializer())
+        }
+
+    val isConfigured: Boolean get() = baseUrl.isNotEmpty()
+
     // ── Chat ──
 
     suspend fun startChat(req: ChatStartRequest) =

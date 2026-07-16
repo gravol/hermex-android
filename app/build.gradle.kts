@@ -111,6 +111,10 @@ dependencies {
 
     // Testing
     testImplementation("junit:junit:4.13.2")
+
+    // Project modules
+    implementation(project(":core:network"))
+    implementation(project(":core:data"))
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(platform(libs.androidx.compose.bom))

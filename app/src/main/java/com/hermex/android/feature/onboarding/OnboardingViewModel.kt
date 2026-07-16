@@ -1,0 +1,117 @@
+package com.hermex.android.feature.onboarding
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.hermex.core.data.auth.KeychainStore
+import com.hermex.core.network.ApiClient
+import com.hermex.core.network.HealthResponse
+import com.hermex.core.network.LoginResponse
+import com.hermex.core.network.NetworkResult
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+data class OnboardingUiState(
+    val serverUrl: String = "",
+    val password: String = "",
+    val isLoading: Boolean = false,
+    val connectionTested: Boolean = false,
+    val authEnabled: Boolean = false,
+    val passwordAuthEnabled: Boolean = false,
+    val loginSuccess: Boolean = false,
+    val error: String? = null,
+)
+
+class OnboardingViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val _uiState = MutableStateFlow(OnboardingUiState())
+    val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
+
+    fun updateServerUrl(url: String) {
+        _uiState.value = _uiState.value.copy(serverUrl = url, error = null)
+    }
+
+    fun updatePassword(pw: String) {
+        _uiState.value = _uiState.value.copy(password = pw, error = null)
+    }
+
+    fun testConnection() {
+        val url = _uiState.value.serverUrl.trim()
+        if (url.isBlank()) {
+            _uiState.value = _uiState.value.copy(error = "Server URL is required")
+            return
+        }
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            when (val result = ApiClient.health(url)) {
+                is NetworkResult.Success -> {
+                    val health = result.data
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        connectionTested = true,
+                        authEnabled = health.authEnabled,
+                        passwordAuthEnabled = health.passwordAuthEnabled == true,
+                        error = null,
+                    )
+                }
+                is NetworkResult.HttpError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Server returned ${result.code}: ${result.message}",
+                    )
+                }
+                is NetworkResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = result.exception.message ?: "Connection failed",
+                    )
+                }
+            }
+        }
+    }
+
+    fun login() {
+        val state = _uiState.value
+        val url = state.serverUrl.trim()
+        val pw = state.password.trim()
+        if (url.isBlank() || pw.isBlank()) {
+            _uiState.value = state.copy(error = "Server URL and password are required")
+            return
+        }
+        viewModelScope.launch {
+            _uiState.value = state.copy(isLoading = true, error = null)
+            when (val result = ApiClient.login(url, pw)) {
+                is NetworkResult.Success -> {
+                    val loginResp = result.data
+                    if (loginResp.ok) {
+                        KeychainStore.save(getApplication(), url, loginResp.token ?: "")
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            loginSuccess = true,
+                            error = null,
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Login failed: unauthorized",
+                        )
+                    }
+                }
+                is NetworkResult.HttpError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Login failed (${result.code})",
+                    )
+                }
+                is NetworkResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = result.exception.message ?: "Login failed",
+                    )
+                }
+            }
+        }
+    }
+}
