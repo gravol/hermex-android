@@ -66,6 +66,7 @@ fun ChatScreen(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         topBar = {
             TopAppBar(
                 title = {
@@ -134,10 +135,10 @@ fun ChatScreen(
     ) { padding ->
         Column(
             modifier = Modifier
-                .padding(padding)
-                .imePadding(),
+                .fillMaxSize()
+                .padding(padding),
         ) {
-            // Error banner for send failures
+            // Error banner for send failures (wrap_content height)
             if (state.error != null) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -162,7 +163,9 @@ fun ChatScreen(
             when {
                 state.isLoading && state.messages.isEmpty() -> {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
                         CircularProgressIndicator()
@@ -170,7 +173,9 @@ fun ChatScreen(
                 }
                 state.error != null && state.messages.isEmpty() -> {
                     Column(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
@@ -184,7 +189,9 @@ fun ChatScreen(
                 else -> {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
                         contentPadding = PaddingValues(vertical = 8.dp),
                     ) {
                         itemsIndexed(state.messages, key = { _, msg -> msg.id }) { index, msg ->
