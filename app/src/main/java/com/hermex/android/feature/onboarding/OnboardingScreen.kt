@@ -48,7 +48,7 @@ fun OnboardingScreen(
                 value = state.serverUrl,
                 onValueChange = viewModel::updateServerUrl,
                 label = { Text("Server URL") },
-                placeholder = { Text("https://your-server.com") },
+                placeholder = { Text("http://100.80.204.66:9119") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),

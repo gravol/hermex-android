@@ -177,12 +177,16 @@ data class CronJobIDRequest(val jobId: String, val reason: String? = null)
 @Serializable
 data class HealthResponse(
     val status: String = "",
-    val authEnabled: Boolean = false,
-    val passwordAuthEnabled: Boolean? = null,
+    val user: String? = null,
+    val error: String? = null,
 )
 
 @Serializable
-data class LoginRequest(val username: String, val password: String)
+data class LoginRequest(
+    val provider: String = "basic",
+    val username: String,
+    val password: String,
+)
 
 @Serializable
 data class LoginResponse(

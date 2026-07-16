@@ -53,22 +53,24 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 when (val result = ApiClient.health(url)) {
                     is NetworkResult.Success -> {
                         val health = result.data
+                        // Server reachable — if user field is present, already authenticated
+                        val isAuth = health.user != null
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             connectionTested = true,
-                            authEnabled = health.authEnabled,
-                            passwordAuthEnabled = health.passwordAuthEnabled == true,
+                            authEnabled = !isAuth,
+                            passwordAuthEnabled = !isAuth,
                             error = null,
                         )
                     }
                     is NetworkResult.HttpError -> {
                         if (result.code == 401) {
-                            // Server alive but requires auth — treat as successful detection
+                            // Server alive but requires auth — treat as successful discovery
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 connectionTested = true,
                                 authEnabled = true,
-                                passwordAuthEnabled = false,
+                                passwordAuthEnabled = true,
                                 error = null,
                             )
                         } else {

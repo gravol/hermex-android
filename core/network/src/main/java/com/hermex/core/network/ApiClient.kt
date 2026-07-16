@@ -7,8 +7,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
-import okhttp3.CertificatePinner
-import okhttp3.internal.tls.OkHostnameVerifier
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -37,23 +35,6 @@ object ApiClient {
         client = OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .apply { if (authenticator != null) authenticator(authenticator) }
-            .apply {
-                // Certificate pinning for self-hosted Hermes server.
-                // Pin is tied to the server's self-signed cert — if the cert
-                // is regenerated or the server IP changes, the pin must be updated.
-                // See DEVELOPMENT.md.
-                certificatePinner(CertificatePinner.Builder()
-                    .add("100.80.204.66", "sha256/jOIJfSaEOx0W1RLGrwSG/gIH4c2I5Nz2y193EoWi2+Q=")
-                    .build()
-                )
-                // Scoped hostname verifier: the self-signed cert's SANs don't include
-                // the Tailscale IP (they're container-internal addresses).  Allow the
-                // mismatch ONLY for 100.80.204.66 and ONLY because CertificatePinner
-                // already cryptographically verifies the server's public key.
-                hostnameVerifier { hostname, session ->
-                    hostname == "100.80.204.66" || OkHostnameVerifier.verify(hostname, session)
-                }
-            }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -88,10 +69,12 @@ object ApiClient {
 
     // ── Auth ──
 
-    /** Health-check a server URL. Uses the shared client so cookies are captured. */
+    /** Health-check a server URL. Returns 401 with {"error":"authentication required"}
+     *  when the server is reachable but requires login — this is success for discovery.
+     *  Uses the shared client so cookies are captured. */
     suspend fun health(serverUrl: String): NetworkResult<HealthResponse> =
         withContext(Dispatchers.IO) {
-            val url = serverUrl.trimEnd('/') + "/api/health"
+            val url = serverUrl.trimEnd('/') + "/api/status"
             Log.d("Hermex", "ApiClient.health() → $url")
             client.newCall(Request.Builder().url(url).get().build())
                 .execute()
@@ -103,9 +86,9 @@ object ApiClient {
      *  shared client's CookieJar. Call [setBaseUrl] after success. */
     suspend fun login(serverUrl: String, username: String, password: String): NetworkResult<LoginResponse> =
         withContext(Dispatchers.IO) {
-            val url = serverUrl.trimEnd('/') + "/api/auth/login"
+            val url = serverUrl.trimEnd('/') + "/auth/password-login"
             Log.d("Hermex", "ApiClient.login() → $url")
-            val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(username, password))
+            val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(username = username, password = password))
             client.newCall(
                 Request.Builder().url(url)
                     .post(bodyStr.toRequestBody(mediaTypeJson))
