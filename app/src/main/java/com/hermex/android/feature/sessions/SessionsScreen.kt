@@ -14,7 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.hermex.core.network.Session
+import com.hermex.core.network.SessionSummary
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -27,7 +27,7 @@ private val dateFormat = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionsScreen(
-    onSessionTap: (Session) -> Unit = {},
+    onSessionTap: (SessionSummary) -> Unit = {},
     viewModel: SessionsViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -90,7 +90,7 @@ fun SessionsScreen(
 }
 
 @Composable
-private fun SessionRow(session: Session, onClick: () -> Unit) {
+private fun SessionRow(session: SessionSummary, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()

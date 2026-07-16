@@ -6,14 +6,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.core.network.ApiClient
 import com.hermex.core.network.NetworkResult
-import com.hermex.core.network.Session
+import com.hermex.core.network.SessionSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class SessionsUiState(
-    val sessions: List<Session> = emptyList(),
+    val sessions: List<SessionSummary> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
 )

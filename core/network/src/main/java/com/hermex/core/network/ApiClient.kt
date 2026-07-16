@@ -11,6 +11,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.sse.EventSource
+import okhttp3.sse.EventSourceListener
+import okhttp3.sse.EventSources
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
@@ -24,6 +27,12 @@ object ApiClient {
 
     val isConfigured: Boolean get() = baseUrl.isNotEmpty() && apiKey.isNotEmpty()
 
+    /** Expose the OkHttpClient for SSE stream connections. */
+    fun httpClient(): OkHttpClient = client
+
+    /** Expose baseUrl for constructing SSE URLs. */
+    fun baseUrl(): String = baseUrl
+
     /** Initialize the shared OkHttpClient. Call once during app startup. */
     fun init(context: Context) {
         val cookieJar = NetworkCookieJar(context)
@@ -31,7 +40,7 @@ object ApiClient {
             .cookieJar(cookieJar)
             .addInterceptor(BearerInterceptor())
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.MILLISECONDS)  // no read timeout for SSE
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
         Log.d("Hermex", "ApiClient.init: OkHttpClient ready")
@@ -106,37 +115,53 @@ object ApiClient {
                 .handleResult(json, StatusResponse.serializer())
         }
 
-    // ── Sessions (Hermes API Server v0.18.0: all under /api/sessions) ──
+    // ── Sessions ──
 
     /** GET /api/sessions — list sessions. */
     suspend fun sessions() =
         get("/api/sessions", SessionsResponse.serializer())
 
-    /** GET /api/sessions/{id}?includeMessages= — get one session. */
+    /** GET /api/sessions/{id}?includeMessages= — get one session with optional messages. */
     suspend fun session(id: String, includeMessages: Boolean = true) =
-        get("/api/sessions/$id?includeMessages=$includeMessages", SessionResponse.serializer())
+        get("/api/sessions/$id?includeMessages=$includeMessages", SessionDetail.serializer())
 
     /** GET /api/sessions/{id}/messages — message history for a session. */
     suspend fun sessionMessages(id: String) =
-        get("/api/sessions/$id/messages", SessionMessagesResponse.serializer())
+        get("/api/sessions/$id/messages", MessagesResponse.serializer())
 
-    /** POST /api/sessions — create a new session. */
+    /** POST /api/sessions — create a new session. Returns the session directly. */
     suspend fun createSession(req: NewSessionRequest) =
-        post("/api/sessions", req, NewSessionRequest.serializer(), SessionResponse.serializer())
+        post("/api/sessions", req, NewSessionRequest.serializer(), SessionDetail.serializer())
 
     /** POST /api/sessions/{id}/fork — branch a session. */
     suspend fun forkSession(sessionId: String) =
-        post("/api/sessions/$sessionId/fork", EmptyBody, EmptyBody.serializer(), SessionResponse.serializer())
-
-    /** POST /api/sessions/{id}/chat — send a chat message. */
-    suspend fun chatWithSession(sessionId: String, req: ChatRequest) =
-        post("/api/sessions/$sessionId/chat", req, ChatRequest.serializer(), ChatStreamResponse.serializer())
+        post("/api/sessions/$sessionId/fork", EmptyBody, EmptyBody.serializer(), SessionDetail.serializer())
 
     /** PATCH /api/sessions/{id} — update session metadata. */
     suspend fun updateSession(sessionId: String, req: PatchSessionRequest) =
-        patch("/api/sessions/$sessionId", req, PatchSessionRequest.serializer(), SessionResponse.serializer())
+        patch("/api/sessions/$sessionId", req, PatchSessionRequest.serializer(), SessionDetail.serializer())
 
     /** DELETE /api/sessions/{id} — delete a session. */
     suspend fun deleteSession(sessionId: String) =
         delete("/api/sessions/$sessionId", SessionDeleteResponse.serializer())
+
+    // ── SSE streaming ──
+
+    /** Open an SSE stream for POST /api/sessions/{id}/chat/stream. Returns the EventSource. */
+    fun openChatStream(
+        sessionId: String,
+        message: String,
+        workspace: String? = null,
+        model: String? = null,
+        modelProvider: String? = null,
+        listener: EventSourceListener,
+    ): EventSource {
+        val req = ChatRequest(message = message, workspace = workspace, model = model, modelProvider = modelProvider)
+        val bodyStr = json.encodeToString(ChatRequest.serializer(), req)
+        val request = Request.Builder()
+            .url("$baseUrl/api/sessions/$sessionId/chat/stream")
+            .post(bodyStr.toRequestBody(mediaTypeJson))
+            .build()
+        return EventSources.createFactory(client).newEventSource(request, listener)
+    }
 }

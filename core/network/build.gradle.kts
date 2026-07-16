@@ -23,13 +23,13 @@ android {
 }
 
 dependencies {
-    // OkHttp (raw — no Retrofit)
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    // OkHttp (raw — no Retrofit) — api so downstream modules can use SSE
+    api("com.squareup.okhttp3:okhttp:4.12.0")
+    api("com.squareup.okhttp3:okhttp-sse:4.12.0")
+    api("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // Kotlinx Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    // Kotlinx Serialization — api so downstream modules can use JsonElement
+    api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
