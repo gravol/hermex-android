@@ -4,16 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.hermex.android.feature.onboarding.SetupScreen
+import com.hermex.android.feature.sessions.SessionsScreen
+import com.hermex.core.network.ApiClient
 import com.hermex.android.ui.theme.HermexTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,8 +28,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HermexNavGraph() {
     val navController = rememberNavController()
+    val startDest = if (ApiClient.isConfigured) "home" else "setup"
 
-    NavHost(navController = navController, startDestination = "setup") {
+    NavHost(navController = navController, startDestination = startDest) {
         composable("setup") {
             SetupScreen(
                 onDone = {
@@ -43,22 +41,7 @@ fun HermexNavGraph() {
             )
         }
         composable("home") {
-            HomePlaceholder()
-        }
-    }
-}
-
-@Composable
-fun HomePlaceholder() {
-    Scaffold {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(it),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "Logged in! Sessions coming soon.",
-                style = MaterialTheme.typography.headlineSmall,
-            )
+            SessionsScreen()
         }
     }
 }

@@ -128,7 +128,27 @@ data class MoveSessionRequest(val sessionId: String, val projectId: String? = nu
 @Serializable
 data class SessionYoloRequest(val sessionId: String, val enabled: Boolean)
 
-@Serializable data class SessionsResponse(val sessions: List<Session> = emptyList())
+@Serializable data class SessionsResponse(
+    val `object`: String = "list",
+    val data: List<Session> = emptyList(),
+)
+
+@Serializable
+data class Session(
+    val id: String = "",
+    val title: String? = null,
+    val source: String? = null,
+    val model: String? = null,
+    val startedAt: Double? = null,
+    val endedAt: Double? = null,
+    val endReason: String? = null,
+    val messageCount: Int = 0,
+    val toolCallCount: Int = 0,
+    val inputTokens: Long = 0,
+    val outputTokens: Long = 0,
+    val lastActive: Double? = null,
+    val preview: String? = null,
+)
 @Serializable data class SessionSearchResponse(val sessions: List<Session> = emptyList())
 @Serializable data class SessionResponse(val session: Session? = null)
 @Serializable data class SessionStatusResponse(val status: String = "")
@@ -181,15 +201,7 @@ data class StatusResponse(
     val version: String? = null,
 )
 
-// ── Placeholder types (to be replaced with real models) ──
-
-@Serializable
-data class Session(
-    val id: String = "",
-    val title: String? = null,
-    val createdAt: String? = null,
-    val status: String? = null,
-)
+// ── Cron ──
 
 @Serializable
 data class CronJob(
