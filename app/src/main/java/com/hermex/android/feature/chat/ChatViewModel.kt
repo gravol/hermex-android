@@ -144,15 +144,33 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                     Log.e("Hermex", "SSE stream failure", t)
+                    val code = response?.code
+                    val errMsg = when {
+                        t != null -> t.message ?: "Stream connection lost"
+                        code != null -> "Server error ($code)"
+                        else -> "Stream connection lost"
+                    }
+                    // Finalize the in-flight assistant message
+                    val msgs = _uiState.value.messages.toMutableList()
+                    val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+                    if (idx >= 0) {
+                        msgs[idx] = msgs[idx].copy(isStreaming = false)
+                    }
                     _uiState.value = _uiState.value.copy(
+                        messages = msgs,
                         isStreaming = false,
-                        error = t?.message ?: "Stream connection lost",
+                        error = errMsg,
                     )
                 }
 
                 override fun onClosed(eventSource: EventSource) {
                     Log.d("Hermex", "SSE stream closed")
-                    _uiState.value = _uiState.value.copy(isStreaming = false)
+                    val msgs = _uiState.value.messages.toMutableList()
+                    val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+                    if (idx >= 0) {
+                        msgs[idx] = msgs[idx].copy(isStreaming = false)
+                    }
+                    _uiState.value = _uiState.value.copy(messages = msgs, isStreaming = false)
                 }
             },
         )

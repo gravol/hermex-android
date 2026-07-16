@@ -51,6 +51,7 @@ fun ChatScreen(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         topBar = {
             TopAppBar(
                 title = {
@@ -71,6 +72,7 @@ fun ChatScreen(
             Surface(
                 shadowElevation = 8.dp,
                 color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.navigationBarsPadding(),
             ) {
                 Row(
                     modifier = Modifier
@@ -113,7 +115,29 @@ fun ChatScreen(
             }
         },
     ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
+        Column(modifier = Modifier.padding(padding)) {
+            // Error banner for send failures (visible even when messages exist)
+            if (state.error != null) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = state.error!!,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { viewModel.loadMessages() }, modifier = Modifier.size(24.dp)) {
+                            Text("Retry", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
             when {
                 state.isLoading && state.messages.isEmpty() -> {
                     Box(
