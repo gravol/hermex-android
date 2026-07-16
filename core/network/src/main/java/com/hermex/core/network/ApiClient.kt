@@ -1,6 +1,7 @@
 package com.hermex.core.network
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
@@ -71,8 +72,10 @@ object ApiClient {
     suspend fun health(serverUrl: String): NetworkResult<HealthResponse> =
         withContext(Dispatchers.IO) {
             val url = serverUrl.trimEnd('/') + "/health"
+            Log.d("Hermex", "ApiClient.health() → $url")
             client.newCall(Request.Builder().url(url).get().build())
                 .execute()
+                .also { Log.d("Hermex", "ApiClient.health() ← ${it.code}") }
                 .handleResult(json, HealthResponse.serializer())
         }
 
@@ -81,14 +84,16 @@ object ApiClient {
     suspend fun login(serverUrl: String, password: String): NetworkResult<LoginResponse> =
         withContext(Dispatchers.IO) {
             val url = serverUrl.trimEnd('/') + "/api/auth/login"
+            Log.d("Hermex", "ApiClient.login() → $url")
             val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(password))
             client.newCall(
                 Request.Builder().url(url)
                     .post(bodyStr.toRequestBody(mediaTypeJson))
                     .build()
-            ).execute().handleResult(json, LoginResponse.serializer())
+            ).execute()
+                .also { Log.d("Hermex", "ApiClient.login() ← ${it.code}") }
+                .handleResult(json, LoginResponse.serializer())
         }
-
     // ── Chat ──
 
     suspend fun startChat(req: ChatStartRequest) =

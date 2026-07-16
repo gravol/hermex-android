@@ -2,6 +2,7 @@ package com.hermex.core.network
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 import okhttp3.Cookie
@@ -31,9 +32,11 @@ class CookiePersistor(context: Context) {
         val json = prefs.getString(host, null) ?: return emptyList()
         return try {
             val arr = JSONArray(json)
-            (0 until arr.length()).mapNotNull { i ->
+            val cookies = (0 until arr.length()).mapNotNull { i ->
                 cookieFromJson(arr.getJSONObject(i))
             }
+            Log.d("Hermex", "CookiePersistor.load($host) → ${cookies.size} cookies: ${cookies.map { "${it.name}=${it.value.take(12)}..." }}")
+            cookies
         } catch (_: Exception) {
             emptyList()
         }
@@ -43,6 +46,7 @@ class CookiePersistor(context: Context) {
     fun save(host: String, cookies: List<Cookie>) {
         if (cookies.isEmpty()) {
             prefs.edit().remove(host).apply()
+            Log.d("Hermex", "CookiePersistor.save($host) → cleared")
             return
         }
         val arr = JSONArray()
@@ -50,6 +54,7 @@ class CookiePersistor(context: Context) {
             arr.put(cookieToJson(cookie))
         }
         prefs.edit().putString(host, arr.toString()).apply()
+        Log.d("Hermex", "CookiePersistor.save($host) → ${cookies.size} cookies: ${cookies.map { "${it.name}=${it.value.take(12)}..." }}")
     }
 
     /** Remove all persisted cookies. */

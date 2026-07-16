@@ -1,6 +1,7 @@
 package com.hermex.core.data.auth
 
 import android.content.Context
+import android.util.Log
 import com.hermex.core.network.ApiClient
 import com.hermex.core.network.NetworkResult
 import kotlinx.coroutines.runBlocking
@@ -19,30 +20,43 @@ import okhttp3.Route
 class ReloginAuthenticator(private val context: Context) : Authenticator {
 
     override fun authenticate(route: Route?, response: Response): Request? {
+        Log.w("Hermex", "ReloginAuthenticator: 401 on ${response.request.url} (code=${response.code})")
+
         // Don't retry if we just tried to log in (prevents infinite loop)
-        if (response.request.url.encodedPath == "/api/auth/login") return null
+        if (response.request.url.encodedPath == "/api/auth/login") {
+            Log.w("Hermex", "ReloginAuthenticator: already on /login, not retrying")
+            return null
+        }
 
         // Only retry once per 401 chain
         if (responseCount(response) > 1) return null
 
         val password = KeychainStore.getPassword(context) ?: return null
 
+        Log.i("Hermex", "ReloginAuthenticator: attempting auto-relogin...")
         return try {
-            // Blocking call is acceptable here — Authenticator runs on OkHttp's
-            // background thread, and the login is a single fast HTTP call.
             runBlocking {
                 when (val result = ApiClient.login(
                     serverUrl = KeychainStore.getServerUrl(context) ?: return@runBlocking null,
                     password = password,
                 )) {
                     is NetworkResult.Success -> {
-                        if (result.data.ok) response.request
-                        else null
+                        if (result.data.ok) {
+                            Log.i("Hermex", "ReloginAuthenticator: auto-relogin SUCCESS — retrying original request")
+                            response.request
+                        } else {
+                            Log.e("Hermex", "ReloginAuthenticator: auto-relogin FAILED — login returned ok=false")
+                            null
+                        }
                     }
-                    else -> null
+                    else -> {
+                        Log.e("Hermex", "ReloginAuthenticator: auto-relogin FAILED — ${result::class.simpleName}")
+                        null
+                    }
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e("Hermex", "ReloginAuthenticator: auto-relogin exception: ${e.message}", e)
             null
         }
     }
