@@ -16,7 +16,7 @@ import org.json.JSONObject
  */
 class CookiePersistor(context: Context) {
 
-    private val prefs: SharedPreferences = run {
+    private val prefs: SharedPreferences = try {
         val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
         EncryptedSharedPreferences.create(
             "hermex_cookies",
@@ -25,6 +25,9 @@ class CookiePersistor(context: Context) {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
+    } catch (e: Exception) {
+        Log.e("Hermex", "CookiePersistor: EncryptedSharedPreferences failed, falling back to plain SP", e)
+        context.applicationContext.getSharedPreferences("hermex_cookies", Context.MODE_PRIVATE)
     }
 
     /** Load all persisted cookies for a given host. */

@@ -1,6 +1,7 @@
 package com.hermex.android.feature.onboarding
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.core.data.auth.KeychainStore
@@ -43,29 +44,37 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            when (val result = ApiClient.health(url)) {
-                is NetworkResult.Success -> {
-                    val health = result.data
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        connectionTested = true,
-                        authEnabled = health.authEnabled,
-                        passwordAuthEnabled = health.passwordAuthEnabled == true,
-                        error = null,
-                    )
+            try {
+                when (val result = ApiClient.health(url)) {
+                    is NetworkResult.Success -> {
+                        val health = result.data
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            connectionTested = true,
+                            authEnabled = health.authEnabled,
+                            passwordAuthEnabled = health.passwordAuthEnabled == true,
+                            error = null,
+                        )
+                    }
+                    is NetworkResult.HttpError -> {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Server returned ${result.code}: ${result.message}",
+                        )
+                    }
+                    is NetworkResult.Error -> {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = result.exception.message ?: "Connection failed",
+                        )
+                    }
                 }
-                is NetworkResult.HttpError -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Server returned ${result.code}: ${result.message}",
-                    )
-                }
-                is NetworkResult.Error -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = result.exception.message ?: "Connection failed",
-                    )
-                }
+            } catch (e: Exception) {
+                Log.e("Hermex", "testConnection crashed", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "App error: ${e.message}",
+                )
             }
         }
     }
@@ -80,39 +89,44 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             _uiState.value = state.copy(isLoading = true, error = null)
-            when (val result = ApiClient.login(url, pw)) {
-                is NetworkResult.Success -> {
-                    val loginResp = result.data
-                    if (loginResp.ok) {
-                        // Auth is cookie-based — the session cookie was captured
-                        // automatically by the shared OkHttpClient's CookieJar.
-                        // We store the password for auto-relogin on 401.
-                        KeychainStore.savePassword(getApplication(), url, pw)
-                        ApiClient.setBaseUrl(url)
+            try {
+                when (val result = ApiClient.login(url, pw)) {
+                    is NetworkResult.Success -> {
+                        val loginResp = result.data
+                        if (loginResp.ok) {
+                            KeychainStore.savePassword(getApplication(), url, pw)
+                            ApiClient.setBaseUrl(url)
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                loginSuccess = true,
+                                error = null,
+                            )
+                        } else {
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                error = "Login failed: unauthorized",
+                            )
+                        }
+                    }
+                    is NetworkResult.HttpError -> {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
-                            loginSuccess = true,
-                            error = null,
+                            error = "Login failed (${result.code})",
                         )
-                    } else {
+                    }
+                    is NetworkResult.Error -> {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
-                            error = "Login failed: unauthorized",
+                            error = result.exception.message ?: "Login failed",
                         )
                     }
                 }
-                is NetworkResult.HttpError -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Login failed (${result.code})",
-                    )
-                }
-                is NetworkResult.Error -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = result.exception.message ?: "Login failed",
-                    )
-                }
+            } catch (e: Exception) {
+                Log.e("Hermex", "login crashed", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "App error: ${e.message}",
+                )
             }
         }
     }

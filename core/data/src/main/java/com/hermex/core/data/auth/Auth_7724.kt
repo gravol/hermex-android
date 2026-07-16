@@ -18,7 +18,7 @@ class AuthManager(
     private val cookieJar: CookieJar = NetworkCookieJar(context)
 ) {
     companion object {
-        private const val HEALTH_PATH = "/health"
+        private const val HEALTH_PATH = "/api/health"
         private const val LOGIN_PATH = "/api/auth/login"
         private const val PASSKEY_ONLY_MESSAGE = "This server signs in with passkeys, which App doesn't support yet."
         private const val ENTER_PASSWORD_MESSAGE = "Enter the server password."

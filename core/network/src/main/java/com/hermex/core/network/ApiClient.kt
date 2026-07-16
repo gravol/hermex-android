@@ -14,7 +14,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 object ApiClient {
 
@@ -35,10 +40,28 @@ object ApiClient {
         client = OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .apply { if (authenticator != null) authenticator(authenticator) }
+            .apply {
+                // Trust self-signed certs (Hermes servers commonly use them on port 8443)
+                try {
+                    val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                        override fun checkClientTrusted(c: Array<X509Certificate>, a: String) {}
+                        override fun checkServerTrusted(c: Array<X509Certificate>, a: String) {}
+                        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                    })
+                    val sslContext = SSLContext.getInstance("TLS")
+                    sslContext.init(null, trustAllCerts, SecureRandom())
+                    sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
+                    hostnameVerifier { _, _ -> true }
+                    Log.d("Hermex", "ApiClient.init: SSL trust-all enabled for self-signed certs")
+                } catch (e: Exception) {
+                    Log.w("Hermex", "ApiClient.init: SSL trust-all setup failed, using defaults", e)
+                }
+            }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
+        Log.d("Hermex", "ApiClient.init: OkHttpClient ready (baseUrl empty until login)")
     }
 
     /** Set the base URL after successful login. */
@@ -71,7 +94,7 @@ object ApiClient {
     /** Health-check a server URL. Uses the shared client so cookies are captured. */
     suspend fun health(serverUrl: String): NetworkResult<HealthResponse> =
         withContext(Dispatchers.IO) {
-            val url = serverUrl.trimEnd('/') + "/health"
+            val url = serverUrl.trimEnd('/') + "/api/health"
             Log.d("Hermex", "ApiClient.health() → $url")
             client.newCall(Request.Builder().url(url).get().build())
                 .execute()
