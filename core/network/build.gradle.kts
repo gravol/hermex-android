@@ -33,4 +33,7 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // AndroidX Security Crypto (encrypted cookie storage)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

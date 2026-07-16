@@ -2,19 +2,29 @@ package com.hermex.core.network
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKeys
 import okhttp3.Cookie
-import okhttp3.HttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Persists OkHttp cookies to SharedPreferences so session cookies
- * survive app restarts. Used by [NetworkCookieJar] as its backing store.
+ * Persists OkHttp session cookies to EncryptedSharedPreferences (AES-256 GCM).
+ * Used by [NetworkCookieJar] as its backing store. Session cookies are live
+ * credentials — they get the same encryption as KeychainStore passwords.
  */
 class CookiePersistor(context: Context) {
 
-    private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences("hermex_cookies", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = run {
+        val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+        EncryptedSharedPreferences.create(
+            "hermex_cookies",
+            masterKeyAlias,
+            context.applicationContext,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
 
     /** Load all persisted cookies for a given host. */
     fun load(host: String): List<Cookie> {
