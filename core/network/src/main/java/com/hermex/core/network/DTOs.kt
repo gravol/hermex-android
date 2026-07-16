@@ -172,26 +172,13 @@ data class CronJobIDRequest(val jobId: String, val reason: String? = null)
 @Serializable data class CronJobsResponse(val jobs: List<CronJob> = emptyList())
 @Serializable data class CronMutationResponse(val success: Boolean = false)
 
-// ── Auth ──
+// ── Connection Test ──
 
 @Serializable
-data class HealthResponse(
+data class StatusResponse(
     val status: String = "",
-    val user: String? = null,
-    val error: String? = null,
-)
-
-@Serializable
-data class LoginRequest(
-    val provider: String = "basic",
-    val username: String,
-    val password: String,
-)
-
-@Serializable
-data class LoginResponse(
-    val ok: Boolean = false,
-    val token: String? = null,
+    val platform: String? = null,
+    val version: String? = null,
 )
 
 // ── Placeholder types (to be replaced with real models) ──

@@ -6,7 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
-import okhttp3.Authenticator
+import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -22,29 +22,47 @@ object ApiClient {
     private val mediaTypeJson = "application/json".toMediaType()
 
     private var baseUrl: String = ""
+    private var apiKey: String = ""
     private lateinit var client: OkHttpClient
 
-    val isConfigured: Boolean get() = baseUrl.isNotEmpty()
+    val isConfigured: Boolean get() = baseUrl.isNotEmpty() && apiKey.isNotEmpty()
 
     /**
-     * Initialize the shared OkHttpClient with a persistent CookieJar and
-     * optional 401 auto-relogin Authenticator. Call once during app startup.
+     * Initialize the shared OkHttpClient. Call once during app startup.
+     * Includes a Bearer token interceptor that attaches the API key to every request.
      */
-    fun init(context: Context, authenticator: Authenticator? = null) {
+    fun init(context: Context) {
         val cookieJar = NetworkCookieJar(context)
         client = OkHttpClient.Builder()
             .cookieJar(cookieJar)
-            .apply { if (authenticator != null) authenticator(authenticator) }
+            .addInterceptor(BearerInterceptor())
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
-        Log.d("Hermex", "ApiClient.init: OkHttpClient ready (baseUrl empty until login)")
+        Log.d("Hermex", "ApiClient.init: OkHttpClient ready")
     }
 
-    /** Set the base URL after successful login. */
+    /** Set the base URL (e.g. http://100.80.204.66:8650). */
     fun setBaseUrl(url: String) {
-        this.baseUrl = url.trimEnd('/')
+        baseUrl = url.trimEnd('/')
+    }
+
+    /** Set the API Server bearer key. */
+    fun setApiKey(key: String) {
+        apiKey = key
+    }
+
+    /** Interceptor that adds Authorization: Bearer header to every request. */
+    private class BearerInterceptor : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
+            val original = chain.request()
+            if (apiKey.isEmpty()) return chain.proceed(original)
+            val request = original.newBuilder()
+                .header("Authorization", "Bearer $apiKey")
+                .build()
+            return chain.proceed(request)
+        }
     }
 
     // ── helpers ──
@@ -67,35 +85,18 @@ object ApiClient {
 
     private fun sseUrl(path: String) = "$baseUrl$path"
 
-    // ── Auth ──
+    // ── Connection Test ──
 
-    /** Health-check a server URL. Returns 401 with {"error":"authentication required"}
-     *  when the server is reachable but requires login — this is success for discovery.
-     *  Uses the shared client so cookies are captured. */
-    suspend fun health(serverUrl: String): NetworkResult<HealthResponse> =
+    /** Test connectivity + auth by hitting /health with the Bearer token.
+     *  Returns the raw status response on success. */
+    suspend fun testConnection(): NetworkResult<StatusResponse> =
         withContext(Dispatchers.IO) {
-            val url = serverUrl.trimEnd('/') + "/api/status"
-            Log.d("Hermex", "ApiClient.health() → $url")
+            val url = "$baseUrl/health"
+            Log.d("Hermex", "ApiClient.testConnection() → $url")
             client.newCall(Request.Builder().url(url).get().build())
                 .execute()
-                .also { Log.d("Hermex", "ApiClient.health() ← ${it.code}") }
-                .handleResult(json, HealthResponse.serializer())
-        }
-
-    /** Login to a server. The session cookie is captured automatically by the
-     *  shared client's CookieJar. Call [setBaseUrl] after success. */
-    suspend fun login(serverUrl: String, username: String, password: String): NetworkResult<LoginResponse> =
-        withContext(Dispatchers.IO) {
-            val url = serverUrl.trimEnd('/') + "/auth/password-login"
-            Log.d("Hermex", "ApiClient.login() → $url")
-            val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(provider = "basic", username = username, password = password))
-            client.newCall(
-                Request.Builder().url(url)
-                    .post(bodyStr.toRequestBody(mediaTypeJson))
-                    .build()
-            ).execute()
-                .also { Log.d("Hermex", "ApiClient.login() ← ${it.code}") }
-                .handleResult(json, LoginResponse.serializer())
+                .also { Log.d("Hermex", "ApiClient.testConnection() ← ${it.code}") }
+                .handleResult(json, StatusResponse.serializer())
         }
     // ── Chat ──
 
