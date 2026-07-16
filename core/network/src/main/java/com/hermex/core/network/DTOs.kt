@@ -182,7 +182,7 @@ data class HealthResponse(
 )
 
 @Serializable
-data class LoginRequest(val password: String)
+data class LoginRequest(val username: String, val password: String)
 
 @Serializable
 data class LoginResponse(

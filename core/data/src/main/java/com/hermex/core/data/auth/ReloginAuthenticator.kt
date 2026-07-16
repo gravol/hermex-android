@@ -32,12 +32,14 @@ class ReloginAuthenticator(private val context: Context) : Authenticator {
         if (responseCount(response) > 1) return null
 
         val password = KeychainStore.getPassword(context) ?: return null
+        val username = KeychainStore.getUsername(context) ?: return null
 
-        Log.i("Hermex", "ReloginAuthenticator: attempting auto-relogin...")
+        Log.i("Hermex", "ReloginAuthenticator: attempting auto-relogin with user=$username...")
         return try {
             runBlocking {
                 when (val result = ApiClient.login(
                     serverUrl = KeychainStore.getServerUrl(context) ?: return@runBlocking null,
+                    username = username,
                     password = password,
                 )) {
                     is NetworkResult.Success -> {

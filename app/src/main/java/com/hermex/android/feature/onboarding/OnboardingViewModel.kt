@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 
 data class OnboardingUiState(
     val serverUrl: String = "",
+    val username: String = "",
     val password: String = "",
     val isLoading: Boolean = false,
     val connectionTested: Boolean = false,
@@ -30,6 +31,10 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
 
     fun updateServerUrl(url: String) {
         _uiState.value = _uiState.value.copy(serverUrl = url, error = null)
+    }
+
+    fun updateUsername(u: String) {
+        _uiState.value = _uiState.value.copy(username = u, error = null)
     }
 
     fun updatePassword(pw: String) {
@@ -57,10 +62,21 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                         )
                     }
                     is NetworkResult.HttpError -> {
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            error = "Server returned ${result.code}: ${result.message}",
-                        )
+                        if (result.code == 401) {
+                            // Server alive but requires auth — treat as successful detection
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                connectionTested = true,
+                                authEnabled = true,
+                                passwordAuthEnabled = false,
+                                error = null,
+                            )
+                        } else {
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                error = "Server returned ${result.code}: ${result.message}",
+                            )
+                        }
                     }
                     is NetworkResult.Error -> {
                         _uiState.value = _uiState.value.copy(
@@ -82,19 +98,20 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     fun login() {
         val state = _uiState.value
         val url = state.serverUrl.trim()
+        val user = state.username.trim()
         val pw = state.password.trim()
-        if (url.isBlank() || pw.isBlank()) {
-            _uiState.value = state.copy(error = "Server URL and password are required")
+        if (url.isBlank() || user.isBlank() || pw.isBlank()) {
+            _uiState.value = state.copy(error = "Server URL, username, and password are required")
             return
         }
         viewModelScope.launch {
             _uiState.value = state.copy(isLoading = true, error = null)
             try {
-                when (val result = ApiClient.login(url, pw)) {
+                when (val result = ApiClient.login(url, user, pw)) {
                     is NetworkResult.Success -> {
                         val loginResp = result.data
                         if (loginResp.ok) {
-                            KeychainStore.savePassword(getApplication(), url, pw)
+                            KeychainStore.saveCredentials(getApplication(), url, user, pw)
                             ApiClient.setBaseUrl(url)
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,

@@ -19,6 +19,8 @@ object KeychainStore {
     private const val KEY_SERVER_URL = "server_url"
     private const val KEY_PASSWORD = "password"
 
+    private const val KEY_USERNAME = "username"
+
     private val prefsMap = mutableMapOf<Context, SharedPreferences>()
 
     @Synchronized
@@ -40,7 +42,16 @@ object KeychainStore {
         }
     }
 
-    /** Persist server URL + password after successful login. */
+    /** Persist server URL + credentials after successful login. */
+    fun saveCredentials(context: Context, serverUrl: String, username: String, password: String) {
+        getPrefs(context).edit()
+            .putString(KEY_SERVER_URL, serverUrl)
+            .putString(KEY_USERNAME, username)
+            .putString(KEY_PASSWORD, password)
+            .apply()
+    }
+
+    /** @deprecated Use [saveCredentials] instead. */
     fun savePassword(context: Context, serverUrl: String, password: String) {
         getPrefs(context).edit()
             .putString(KEY_SERVER_URL, serverUrl)
@@ -48,8 +59,19 @@ object KeychainStore {
             .apply()
     }
 
+    /** @deprecated Use [saveCredentials] instead. */
+    fun saveUsername(context: Context, serverUrl: String, username: String) {
+        getPrefs(context).edit()
+            .putString(KEY_SERVER_URL, serverUrl)
+            .putString(KEY_USERNAME, username)
+            .apply()
+    }
+
     fun getServerUrl(context: Context): String? =
         getPrefs(context).getString(KEY_SERVER_URL, null)
+
+    fun getUsername(context: Context): String? =
+        getPrefs(context).getString(KEY_USERNAME, null)
 
     fun getPassword(context: Context): String? =
         getPrefs(context).getString(KEY_PASSWORD, null)

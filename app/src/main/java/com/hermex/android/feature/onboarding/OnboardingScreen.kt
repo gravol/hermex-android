@@ -99,9 +99,20 @@ fun OnboardingScreen(
                 }
             }
 
-            // Password + Login (only if auth is enabled)
+            // Username + Password + Login (only if auth is enabled)
             if (state.connectionTested && state.authEnabled && !state.loginSuccess) {
                 Spacer(Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = state.username,
+                    onValueChange = viewModel::updateUsername,
+                    label = { Text("Username") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !state.isLoading,
+                )
+
+                Spacer(Modifier.height(8.dp))
 
                 var passwordVisible by remember { mutableStateOf(false) }
 

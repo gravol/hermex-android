@@ -104,11 +104,11 @@ object ApiClient {
 
     /** Login to a server. The session cookie is captured automatically by the
      *  shared client's CookieJar. Call [setBaseUrl] after success. */
-    suspend fun login(serverUrl: String, password: String): NetworkResult<LoginResponse> =
+    suspend fun login(serverUrl: String, username: String, password: String): NetworkResult<LoginResponse> =
         withContext(Dispatchers.IO) {
             val url = serverUrl.trimEnd('/') + "/api/auth/login"
             Log.d("Hermex", "ApiClient.login() → $url")
-            val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(password))
+            val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(username, password))
             client.newCall(
                 Request.Builder().url(url)
                     .post(bodyStr.toRequestBody(mediaTypeJson))
