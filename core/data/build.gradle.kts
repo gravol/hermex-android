@@ -39,6 +39,9 @@ dependencies {
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
 
-    // Gson (CacheManager — will be replaced in Pass 2)
-    implementation("com.google.code.gson:gson:2.11.0")
+    // AndroidX Security Crypto (encrypted credential storage)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Test
+    testImplementation("junit:junit:4.13.2")
 }

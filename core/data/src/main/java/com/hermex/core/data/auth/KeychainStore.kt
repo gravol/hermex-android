@@ -2,10 +2,12 @@ package com.hermex.core.data.auth
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKeys
 
 /**
- * Encrypted credential storage (stub — plain SharedPreferences for now,
- * upgrade to EncryptedSharedPreferences when security-crypto API stabilizes).
+ * Encrypted credential storage for auth tokens and server URLs.
+ * Backed by AndroidX EncryptedSharedPreferences (AES-256 GCM).
  */
 object KeychainStore {
     private const val PREFS_NAME = "auth_prefs"
@@ -16,7 +18,14 @@ object KeychainStore {
 
     private fun getPrefs(context: Context): SharedPreferences {
         return prefsMap.getOrPut(context.applicationContext) {
-            context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            EncryptedSharedPreferences.create(
+                PREFS_NAME,
+                masterKeyAlias,
+                context.applicationContext,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
         }
     }
 

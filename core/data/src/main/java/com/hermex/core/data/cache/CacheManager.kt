@@ -1,10 +1,7 @@
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import androidx.room.TypeConverter
 import java.util.Date
 
 object Converters {
-    private val gson = Gson()
 
     @TypeConverter
     fun fromTimestamp(value: Long?): Date? {
