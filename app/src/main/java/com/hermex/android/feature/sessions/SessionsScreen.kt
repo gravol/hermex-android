@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +29,7 @@ private val dateFormat = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).
 @Composable
 fun SessionsScreen(
     onSessionTap: (SessionSummary) -> Unit = {},
+    onSettings: () -> Unit = {},
     viewModel: SessionsViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -37,6 +39,9 @@ fun SessionsScreen(
             TopAppBar(
                 title = { Text("Hermex") },
                 actions = {
+                    IconButton(onClick = onSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
                     IconButton(onClick = viewModel::loadSessions, enabled = !state.isLoading) {
                         if (state.isLoading) {
                             CircularProgressIndicator(

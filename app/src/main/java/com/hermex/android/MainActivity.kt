@@ -13,6 +13,7 @@ import androidx.navigation.navArgument
 import com.hermex.android.feature.chat.ChatScreen
 import com.hermex.android.feature.onboarding.SetupScreen
 import com.hermex.android.feature.sessions.SessionsScreen
+import com.hermex.android.feature.settings.SettingsScreen
 import com.hermex.core.network.ApiClient
 import com.hermex.android.ui.theme.HermexTheme
 import java.net.URLDecoder
@@ -50,7 +51,15 @@ fun HermexNavGraph() {
                 onSessionTap = { session ->
                     val encodedTitle = URLEncoder.encode(session.title ?: session.id, "UTF-8")
                     navController.navigate("chat/${session.id}/$encodedTitle")
-                }
+                },
+                onSettings = {
+                    navController.navigate("settings")
+                },
+            )
+        }
+        composable("settings") {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
             )
         }
         composable(

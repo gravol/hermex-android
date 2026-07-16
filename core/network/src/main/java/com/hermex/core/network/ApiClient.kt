@@ -38,12 +38,14 @@ object ApiClient {
         val cookieJar = NetworkCookieJar(context)
         client = OkHttpClient.Builder()
             .cookieJar(cookieJar)
+            .addInterceptor(DebugLoggingInterceptor())
             .addInterceptor(BearerInterceptor())
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS)  // no read timeout for SSE
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
         Log.d("Hermex", "ApiClient.init: OkHttpClient ready")
+        DebugLog.log("INFO", "ApiClient", "OkHttpClient initialized")
     }
 
     /** Set the base URL (e.g. http://100.80.204.66:8650). */
@@ -158,10 +160,48 @@ object ApiClient {
     ): EventSource {
         val req = ChatRequest(message = message, workspace = workspace, model = model, modelProvider = modelProvider)
         val bodyStr = json.encodeToString(ChatRequest.serializer(), req)
+        val url = "$baseUrl/api/sessions/$sessionId/chat/stream"
         val request = Request.Builder()
-            .url("$baseUrl/api/sessions/$sessionId/chat/stream")
+            .url(url)
             .post(bodyStr.toRequestBody(mediaTypeJson))
             .build()
-        return EventSources.createFactory(client).newEventSource(request, listener)
+
+        DebugLog.sse("Chat", "Opening SSE stream to $url | message: \"${message.take(80)}\"")
+
+        return EventSources.createFactory(client).newEventSource(request, object : EventSourceListener() {
+            private var eventCount = 0
+            private val lastEventTimes = mutableMapOf<String, Long>()
+            private var loggedTypes = 0
+
+            override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
+                eventCount++
+                val now = System.currentTimeMillis()
+                // Log first occurrence of each event type, then every 10th of that type
+                val typeName = type ?: "message"
+                val lastTime = lastEventTimes[typeName]
+                if (lastTime == null || eventCount - ((lastEventTimes["__total"] ?: 0L).toInt()) >= 10) {
+                    DebugLog.sse("Chat", "event #$eventCount: $typeName")
+                    lastEventTimes["__total"] = eventCount.toLong()
+                }
+                lastEventTimes[typeName] = now
+                listener.onEvent(eventSource, id, type, data)
+            }
+
+            override fun onFailure(eventSource: EventSource, t: Throwable?, response: okhttp3.Response?) {
+                val code = response?.code
+                DebugLog.error("SSE", "Stream failure: ${t?.message ?: "HTTP $code"}", t)
+                listener.onFailure(eventSource, t, response)
+            }
+
+            override fun onClosed(eventSource: EventSource) {
+                DebugLog.sse("Chat", "Stream closed after $eventCount events")
+                listener.onClosed(eventSource)
+            }
+
+            override fun onOpen(eventSource: EventSource, response: okhttp3.Response) {
+                DebugLog.sse("Chat", "Stream opened (HTTP ${response.code})")
+                listener.onOpen(eventSource, response)
+            }
+        })
     }
 }
