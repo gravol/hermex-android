@@ -1,4 +1,3 @@
-// File: app/src/main/java/com/hermex/android/di/AppModule.kt
 package com.hermex.android.di
 
 import android.content.Context
@@ -13,64 +12,46 @@ import com.hermex.android.data.local.dao.MessageDao
 import com.hermex.android.data.local.dao.SessionDao
 import com.hermex.android.data.local.dao.ThinkingCardDao
 import com.hermex.android.data.local.dao.ToolCallDao
-import dagger.Module
-import dagger.Provides
-import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
-import dagger.hilt.components.SingletonComponent
-import javax.inject.Singleton
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "hermex_settings")
 
-@Module
-@InstallIn(SingletonComponent::class)
+/**
+ * Manual dependency injection — no Hilt/Dagger.
+ * Provide singletons via lazy-initialized factory methods.
+ */
 object AppModule {
 
-    @Provides
-    @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): Database {
-        return Database.getInstance(context)
+    @Volatile
+    private var database: Database? = null
+    @Volatile
+    private var dataStoreManager: DataStoreManager? = null
+
+    fun provideDatabase(context: Context): Database {
+        return database ?: synchronized(this) {
+            database ?: Database.getInstance(context).also { database = it }
+        }
     }
 
-    @Provides
-    @Singleton
-    fun provideAuthDao(database: Database): AuthDao {
-        return database.authDao()
-    }
+    fun provideAuthDao(context: Context): AuthDao =
+        provideDatabase(context).authDao()
 
-    @Provides
-    @Singleton
-    fun provideSessionDao(database: Database): SessionDao {
-        return database.sessionDao()
-    }
+    fun provideSessionDao(context: Context): SessionDao =
+        provideDatabase(context).sessionDao()
 
-    @Provides
-    @Singleton
-    fun provideMessageDao(database: Database): MessageDao {
-        return database.messageDao()
-    }
+    fun provideMessageDao(context: Context): MessageDao =
+        provideDatabase(context).messageDao()
 
-    @Provides
-    @Singleton
-    fun provideToolCallDao(database: Database): ToolCallDao {
-        return database.toolCallDao()
-    }
+    fun provideToolCallDao(context: Context): ToolCallDao =
+        provideDatabase(context).toolCallDao()
 
-    @Provides
-    @Singleton
-    fun provideThinkingCardDao(database: Database): ThinkingCardDao {
-        return database.thinkingCardDao()
-    }
+    fun provideThinkingCardDao(context: Context): ThinkingCardDao =
+        provideDatabase(context).thinkingCardDao()
 
-    @Provides
-    @Singleton
-    fun provideCacheManager(): CacheManager {
-        return CacheManager
-    }
+    fun provideCacheManager(): CacheManager = CacheManager
 
-    @Provides
-    @Singleton
-    fun provideDataStoreManager(@ApplicationContext context: Context): DataStoreManager {
-        return DataStoreManager(context.dataStore)
+    fun provideDataStoreManager(context: Context): DataStoreManager {
+        return dataStoreManager ?: synchronized(this) {
+            dataStoreManager ?: DataStoreManager(context.dataStore).also { dataStoreManager = it }
+        }
     }
 }

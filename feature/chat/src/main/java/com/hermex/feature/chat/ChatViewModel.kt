@@ -1,7 +1,7 @@
 // ChatScreen.kt
 @Composable
 fun ChatScreen(
-    viewModel: ChatViewModel = hiltViewModel(),
+    viewModel: ChatViewModel,
     colorScheme: ColorScheme,
     modifier: Modifier = Modifier
 ) {

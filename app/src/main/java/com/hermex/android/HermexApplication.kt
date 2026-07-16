@@ -4,9 +4,7 @@ import android.app.Application
 import com.hermex.core.data.auth.KeychainStore
 import com.hermex.core.data.auth.ReloginAuthenticator
 import com.hermex.core.network.ApiClient
-import dagger.hilt.android.HiltAndroidApp
 
-@HiltAndroidApp
 class HermexApplication : Application() {
     override fun onCreate() {
         super.onCreate()

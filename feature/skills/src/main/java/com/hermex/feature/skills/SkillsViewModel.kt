@@ -1,7 +1,7 @@
 @Composable
 fun SkillDetailView(
     skillId: String,
-    viewModel: SkillsViewModel = hiltViewModel(),
+    viewModel: SkillsViewModel,
     onNavigateBack: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
