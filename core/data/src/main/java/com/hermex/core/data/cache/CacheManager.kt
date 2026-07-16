@@ -1,46 +1,27 @@
-import androidx.room.TypeConverter
-import java.util.Date
+package com.hermex.core.data.cache
 
-object Converters {
+import android.util.LruCache
 
-    @TypeConverter
-    fun fromTimestamp(value: Long?): Date? {
-        return value?.let { Date(it) }
+object CacheManager {
+    private val cache: LruCache<String, Any> = object : LruCache<String, Any>(100) {
+        override fun sizeOf(key: String, value: Any): Int {
+            return 1 // Each entry is 1 unit in size for simplicity
+        }
     }
 
-    @TypeConverter
-    fun dateToTimestamp(date: Date?): Long? {
-        return date?.time
+    fun put(key: String, value: Any) {
+        cache.put(key, value)
     }
 
-    @TypeConverter
-    fun fromString(value: String?): String? {
-        return value
+    fun get(key: String): Any? {
+        return cache.get(key)
     }
 
-    @TypeConverter
-    fun toString(value: String?): String? {
-        return value
-    }
-    
-    // Generic JSON Converters
-    @TypeConverter
-    fun fromSessionJson(value: String?): String? {
-        return value
+    fun clear() {
+        cache.evictAll()
     }
 
-    @TypeConverter
-    fun toSessionJson(value: String?): String? {
-        return value
-    }
-    
-    @TypeConverter
-    fun fromMessageJson(value: String?): String? {
-        return value
-    }
-
-    @TypeConverter
-    fun toMessageJson(value: String?): String? {
-        return value
+    fun remove(key: String) {
+        cache.remove(key)
     }
 }

@@ -1,8 +1,7 @@
-// File: app/src/main/java/com/hermex/android/data/local/dao/MessageDao.kt
-package com.hermex.android.data.local.dao
+package com.hermex.core.data.db.dao
 
 import androidx.room.*
-import com.hermex.android.data.local.entities.Message
+import com.hermex.core.data.db.Message
 import kotlinx.coroutines.flow.Flow
 
 @Dao

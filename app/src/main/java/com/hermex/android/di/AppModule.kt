@@ -4,14 +4,12 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import com.hermex.android.data.local.Database
-import com.hermex.android.data.local.DataStoreManager
-import com.hermex.android.data.local.cache.CacheManager
-import com.hermex.android.data.local.dao.AuthDao
-import com.hermex.android.data.local.dao.MessageDao
-import com.hermex.android.data.local.dao.SessionDao
-import com.hermex.android.data.local.dao.ThinkingCardDao
-import com.hermex.android.data.local.dao.ToolCallDao
+import com.hermex.core.data.DataStoreManager
+import com.hermex.core.data.cache.CacheManager
+import com.hermex.core.data.db.dao.MessageDao
+import com.hermex.core.data.db.dao.SessionDao
+import com.hermex.core.data.db.dao.ThinkingCardDao
+import com.hermex.core.data.db.dao.ToolCallDao
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "hermex_settings")
 
@@ -22,18 +20,15 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 object AppModule {
 
     @Volatile
-    private var database: Database? = null
+    private var database: com.hermex.core.data.db.Database? = null
     @Volatile
     private var dataStoreManager: DataStoreManager? = null
 
-    fun provideDatabase(context: Context): Database {
+    fun provideDatabase(context: Context): com.hermex.core.data.db.Database {
         return database ?: synchronized(this) {
-            database ?: Database.getInstance(context).also { database = it }
+            database ?: com.hermex.core.data.db.Database.getInstance(context).also { database = it }
         }
     }
-
-    fun provideAuthDao(context: Context): AuthDao =
-        provideDatabase(context).authDao()
 
     fun provideSessionDao(context: Context): SessionDao =
         provideDatabase(context).sessionDao()

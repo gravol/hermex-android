@@ -1,5 +1,4 @@
-// File: app/src/main/java/com/hermex/android/data/local/entities/ThinkingCard.kt
-package com.hermex.android.data.local.entities
+package com.hermex.core.data.db
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey

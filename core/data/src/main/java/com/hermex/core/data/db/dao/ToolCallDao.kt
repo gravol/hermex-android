@@ -1,8 +1,7 @@
-// File: app/src/main/java/com/hermex/android/data/local/dao/ToolCallDao.kt
-package com.hermex.android.data.local.dao
+package com.hermex.core.data.db.dao
 
 import androidx.room.*
-import com.hermex.android.data.local.entities.ToolCall
+import com.hermex.core.data.db.ToolCall
 import kotlinx.coroutines.flow.Flow
 
 @Dao

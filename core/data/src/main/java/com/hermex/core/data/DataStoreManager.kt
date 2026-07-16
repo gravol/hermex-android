@@ -1,4 +1,4 @@
-package com.hermex.android.data.local
+package com.hermex.core.data
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
