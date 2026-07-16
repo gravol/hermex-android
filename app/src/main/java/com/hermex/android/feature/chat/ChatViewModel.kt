@@ -112,6 +112,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(text: String) {
         if (text.isBlank() || sessionId.isEmpty()) return
 
+        // Cancel any previous stream before opening a new one
+        activeEventSource?.cancel()
+        activeEventSource = null
+
         val userMsgId = "user_${tempIdCounter.incrementAndGet()}"
         val assistantMsgId = "asst_${tempIdCounter.incrementAndGet()}"
 
@@ -137,10 +141,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             message = text,
             listener = object : EventSourceListener() {
                 override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
-                    val event = SseParser.feed("event: ${type ?: ""}") ?: return
-                    val event2 = SseParser.feed("data: $data")
+                    // Feed lines to SseParser — only feed event: line when type is present
+                    if (!type.isNullOrBlank()) {
+                        SseParser.feed("event: $type")
+                    }
+                    SseParser.feed("data: $data")
                     val parsed = SseParser.feed("")
-                    handleSseEvent(parsed ?: event)
+                    if (parsed != null) {
+                        DebugLog.sse("Parser", "parsed event: ${parsed.eventType}")
+                        handleSseEvent(parsed)
+                    } else {
+                        DebugLog.sse("Parser", "no complete event yet (type=${type ?: "null"})")
+                    }
                 }
 
                 override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
@@ -206,6 +218,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             is SseEvent.RunStarted -> { /* no UI change needed */ }
 
             is SseEvent.MessageStarted -> {
+                DebugLog.sse("Handler", "message.started — updating assistant message ID")
                 // Update the in-flight assistant message ID to the server-assigned one
                 event.message?.id?.let { serverId ->
                     val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
@@ -224,6 +237,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             id = if (cur.id.startsWith("asst_")) msgId else cur.id,
                             content = cur.content + (event.delta ?: ""),
                         )
+                        DebugLog.sse("Handler", "delta → msg[$idx] content now ${msgs[idx].content.length} chars")
+                    } else {
+                        DebugLog.sse("Handler", "delta → NO assistant message found in list!")
                     }
                 }
             }
@@ -272,6 +288,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             is SseEvent.MessageCompleted -> {
+                DebugLog.sse("Handler", "message/assistant.completed — finalizing message, clearing stream")
                 val idx = msgs.indexOfLast { it.role == "assistant" }
                 if (idx >= 0) {
                     val cur = msgs[idx]
