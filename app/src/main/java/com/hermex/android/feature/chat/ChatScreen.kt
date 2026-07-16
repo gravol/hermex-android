@@ -59,10 +59,15 @@ fun ChatScreen(
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
 
-    // Auto-scroll to bottom when new messages arrive
+    // Auto-scroll to bottom when new messages arrive — but only if
+    // the user is already near the bottom (don't fight manual scrolling)
     LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.content) {
         if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val total = listState.layoutInfo.totalItemsCount
+            if (total == 0 || lastVisible >= total - 3) {
+                listState.animateScrollToItem(state.messages.lastIndex)
+            }
         }
     }
 
