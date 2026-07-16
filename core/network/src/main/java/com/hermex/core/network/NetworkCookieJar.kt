@@ -1,4 +1,4 @@
-package com.example.auth
+package com.hermex.core.network
 
 import okhttp3.Cookie
 import okhttp3.CookieJar

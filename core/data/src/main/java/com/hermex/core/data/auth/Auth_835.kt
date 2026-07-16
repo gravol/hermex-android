@@ -1,4 +1,4 @@
-package com.example.auth
+package com.hermex.core.data.auth
 
 import kotlinx.serialization.Serializable
 

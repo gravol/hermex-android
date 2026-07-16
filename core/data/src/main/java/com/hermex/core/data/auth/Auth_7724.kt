@@ -1,18 +1,15 @@
-package com.example.auth
+package com.hermex.core.data.auth
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.net.InetAddress
+import com.hermex.core.network.NetworkCookieJar
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
 import android.content.Context
-import android.util.Log
 
 class AuthManager(
     private val context: Context,
@@ -107,7 +104,7 @@ class AuthManager(
                     }
 
                     // Perform Login
-                    val loginJson = json.encodeToString(json.encodeToJsonElement(PasswordRequest(password)))
+                    val loginJson = json.encodeToString(PasswordRequest.serializer(), PasswordRequest(password))
                     val request = Request.Builder()
                         .url("${serverURL}${LOGIN_PATH}")
                         .post(loginJson.toRequestBody("application/json".toMediaType()))
