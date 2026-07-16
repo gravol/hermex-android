@@ -88,7 +88,7 @@ object ApiClient {
         withContext(Dispatchers.IO) {
             val url = serverUrl.trimEnd('/') + "/auth/password-login"
             Log.d("Hermex", "ApiClient.login() → $url")
-            val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(username = username, password = password))
+            val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(provider = "basic", username = username, password = password))
             client.newCall(
                 Request.Builder().url(url)
                     .post(bodyStr.toRequestBody(mediaTypeJson))
