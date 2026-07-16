@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.hermex.core.network.ApiClient
 import com.hermex.core.network.ChatMessage
 import com.hermex.core.network.ChatRequest
+import com.hermex.core.network.DebugLog
 import com.hermex.core.network.NetworkResult
 import com.hermex.core.network.SseEvent
 import com.hermex.core.network.SseParser
@@ -293,6 +294,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         usage = usage,
                     )
                 }
+                // Clear the global streaming flag — don't wait for run.completed
+                _uiState.value = _uiState.value.copy(
+                    messages = msgs,
+                    isStreaming = false,
+                )
+                return  // already set _uiState below
             }
 
             is SseEvent.RunCompleted -> {
@@ -304,7 +311,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             is SseEvent.Unknown -> {
-                Log.d("Hermex", "Unknown SSE event: ${event.eventType}")
+                Log.w("Hermex", "Unknown SSE event: ${event.eventType}")
+                DebugLog.sse("Chat", "Unknown event: ${event.eventType} — raw: ${event.rawData}")
             }
         }
 

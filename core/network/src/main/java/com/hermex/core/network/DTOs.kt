@@ -295,15 +295,17 @@ object SseParser {
     private fun decodeEvent(name: String, data: String): SseEvent {
         return try {
             when (name) {
-                "run.started"       -> json.decodeFromString(SseEvent.RunStarted.serializer(), data)
-                "message.started"   -> json.decodeFromString(SseEvent.MessageStarted.serializer(), data)
-                "assistant.delta"   -> json.decodeFromString(SseEvent.AssistantDelta.serializer(), data)
-                "tool.progress"     -> json.decodeFromString(SseEvent.ToolProgress.serializer(), data)
-                "tool.started"      -> json.decodeFromString(SseEvent.ToolStarted.serializer(), data)
-                "tool.completed"    -> json.decodeFromString(SseEvent.ToolCompleted.serializer(), data)
-                "message.completed" -> json.decodeFromString(SseEvent.MessageCompleted.serializer(), data)
-                "run.completed"     -> json.decodeFromString(SseEvent.RunCompleted.serializer(), data)
-                "done"              -> SseEvent.Done()
+                "run.started"          -> json.decodeFromString(SseEvent.RunStarted.serializer(), data)
+                "message.started",
+                "assistant.started"    -> json.decodeFromString(SseEvent.MessageStarted.serializer(), data)
+                "assistant.delta"      -> json.decodeFromString(SseEvent.AssistantDelta.serializer(), data)
+                "tool.progress"        -> json.decodeFromString(SseEvent.ToolProgress.serializer(), data)
+                "tool.started"         -> json.decodeFromString(SseEvent.ToolStarted.serializer(), data)
+                "tool.completed"       -> json.decodeFromString(SseEvent.ToolCompleted.serializer(), data)
+                "message.completed",
+                "assistant.completed"  -> json.decodeFromString(SseEvent.MessageCompleted.serializer(), data)
+                "run.completed"        -> json.decodeFromString(SseEvent.RunCompleted.serializer(), data)
+                "done"                 -> SseEvent.Done()
                 else                -> SseEvent.Unknown(
                     eventType = name,
                     rawData = kotlinx.serialization.json.Json.parseToJsonElement(data),
