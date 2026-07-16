@@ -27,9 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -66,11 +66,12 @@ fun ChatScreen(
         }
     }
 
-    // Auto-scroll when keyboard opens
-    val density = LocalDensity.current
-    val imeBottom = WindowInsets.ime.getBottom(density)
-    LaunchedEffect(imeBottom) {
-        if (imeBottom > 0 && state.messages.isNotEmpty()) {
+    // Auto-scroll when composer gains focus (keyboard opens)
+    var composerFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(composerFocused) {
+        if (composerFocused && state.messages.isNotEmpty()) {
+            // Brief delay so imePadding has applied by the time we scroll
+            kotlinx.coroutines.delay(150)
             listState.animateScrollToItem(state.messages.lastIndex)
         }
     }
@@ -111,7 +112,8 @@ fun ChatScreen(
                         placeholder = { Text("Message Hermes...") },
                         modifier = Modifier
                             .weight(1f)
-                            .focusRequester(focusRequester),
+                            .focusRequester(focusRequester)
+                            .onFocusChanged { composerFocused = it.isFocused },
                         maxLines = 4,
                         enabled = true,
                         shape = RoundedCornerShape(24.dp),

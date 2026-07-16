@@ -53,11 +53,18 @@ class DebugLoggingInterceptor : Interceptor {
 
         val elapsed = System.currentTimeMillis() - startTime
 
-        // Log response
-        val responseBodyStr = try {
-            response.peekBody(Long.MAX_VALUE).string().take(2000)
-        } catch (_: Exception) {
-            "[unreadable body]"
+        // Log response — skip body peeking for SSE streams (chat/stream).
+        // peekBody(Long.MAX_VALUE) blocks until the entire stream arrives,
+        // which defeats incremental SSE delivery.
+        val isStreamingResponse = response.request.url.encodedPath.endsWith("/chat/stream")
+        val responseBodyStr = if (isStreamingResponse) {
+            "[SSE stream — body skipped]"
+        } else {
+            try {
+                response.peekBody(2000).string()
+            } catch (_: Exception) {
+                "[unreadable body]"
+            }
         }
 
         DebugLog.resp(

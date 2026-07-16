@@ -168,22 +168,16 @@ object ApiClient {
 
         DebugLog.sse("Chat", "Opening SSE stream to $url | message: \"${message.take(80)}\"")
 
+        val streamStartTime = System.currentTimeMillis()
+
         return EventSources.createFactory(client).newEventSource(request, object : EventSourceListener() {
             private var eventCount = 0
-            private val lastEventTimes = mutableMapOf<String, Long>()
-            private var loggedTypes = 0
 
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
                 eventCount++
-                val now = System.currentTimeMillis()
-                // Log first occurrence of each event type, then every 10th of that type
-                val typeName = type ?: "message"
-                val lastTime = lastEventTimes[typeName]
-                if (lastTime == null || eventCount - ((lastEventTimes["__total"] ?: 0L).toInt()) >= 10) {
-                    DebugLog.sse("Chat", "event #$eventCount: $typeName")
-                    lastEventTimes["__total"] = eventCount.toLong()
-                }
-                lastEventTimes[typeName] = now
+                val elapsed = System.currentTimeMillis() - streamStartTime
+                // Log every event with millisecond timing for diagnostics
+                DebugLog.sse("Chat", "event #$eventCount received at T+${elapsed}ms: ${type ?: "message"} | data: ${data.take(60)}")
                 listener.onEvent(eventSource, id, type, data)
             }
 
