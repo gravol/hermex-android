@@ -8,6 +8,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
 import okhttp3.CertificatePinner
+import okhttp3.internal.tls.OkHostnameVerifier
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -45,6 +46,13 @@ object ApiClient {
                     .add("100.80.204.66", "sha256/jOIJfSaEOx0W1RLGrwSG/gIH4c2I5Nz2y193EoWi2+Q=")
                     .build()
                 )
+                // Scoped hostname verifier: the self-signed cert's SANs don't include
+                // the Tailscale IP (they're container-internal addresses).  Allow the
+                // mismatch ONLY for 100.80.204.66 and ONLY because CertificatePinner
+                // already cryptographically verifies the server's public key.
+                hostnameVerifier { hostname, session ->
+                    hostname == "100.80.204.66" || OkHostnameVerifier.verify(hostname, session)
+                }
             }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
