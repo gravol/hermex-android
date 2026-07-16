@@ -1,9 +1,11 @@
 package com.hermex.core.network
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
+import okhttp3.Authenticator
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -19,15 +21,28 @@ object ApiClient {
     private val mediaTypeJson = "application/json".toMediaType()
 
     private var baseUrl: String = ""
-    private var client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private lateinit var client: OkHttpClient
 
-    fun configure(baseUrl: String, okHttpClient: OkHttpClient) {
-        this.baseUrl = baseUrl.trimEnd('/')
-        this.client = okHttpClient
+    val isConfigured: Boolean get() = baseUrl.isNotEmpty()
+
+    /**
+     * Initialize the shared OkHttpClient with a persistent CookieJar and
+     * optional 401 auto-relogin Authenticator. Call once during app startup.
+     */
+    fun init(context: Context, authenticator: Authenticator? = null) {
+        val cookieJar = NetworkCookieJar(context)
+        client = OkHttpClient.Builder()
+            .cookieJar(cookieJar)
+            .apply { if (authenticator != null) authenticator(authenticator) }
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /** Set the base URL after successful login. */
+    fun setBaseUrl(url: String) {
+        this.baseUrl = url.trimEnd('/')
     }
 
     // ── helpers ──
@@ -52,34 +67,27 @@ object ApiClient {
 
     // ── Auth ──
 
-    /** Health-check a server URL without configuring the client. */
+    /** Health-check a server URL. Uses the shared client so cookies are captured. */
     suspend fun health(serverUrl: String): NetworkResult<HealthResponse> =
         withContext(Dispatchers.IO) {
             val url = serverUrl.trimEnd('/') + "/health"
-            OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
-                .build()
-                .newCall(Request.Builder().url(url).get().build())
+            client.newCall(Request.Builder().url(url).get().build())
                 .execute()
                 .handleResult(json, HealthResponse.serializer())
         }
 
-    /** Login to a server, returning the token. Stores the authenticated session
-     *  cookie in the client's CookieJar once configure() has been called. */
+    /** Login to a server. The session cookie is captured automatically by the
+     *  shared client's CookieJar. Call [setBaseUrl] after success. */
     suspend fun login(serverUrl: String, password: String): NetworkResult<LoginResponse> =
         withContext(Dispatchers.IO) {
             val url = serverUrl.trimEnd('/') + "/api/auth/login"
             val bodyStr = json.encodeToString(LoginRequest.serializer(), LoginRequest(password))
-            // Use the shared client so cookies persist
             client.newCall(
                 Request.Builder().url(url)
                     .post(bodyStr.toRequestBody(mediaTypeJson))
                     .build()
             ).execute().handleResult(json, LoginResponse.serializer())
         }
-
-    val isConfigured: Boolean get() = baseUrl.isNotEmpty()
 
     // ── Chat ──
 

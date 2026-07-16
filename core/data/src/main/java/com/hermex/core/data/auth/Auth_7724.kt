@@ -15,7 +15,7 @@ class AuthManager(
     private val context: Context,
     private val serverRegistry: ServerRegistry, // Assume this exists or is mocked
     private val headerStore: CustomHeaderStore = CustomHeaderStore.shared,
-    private val cookieJar: CookieJar = NetworkCookieJar()
+    private val cookieJar: CookieJar = NetworkCookieJar(context)
 ) {
     companion object {
         private const val HEALTH_PATH = "/health"
@@ -122,8 +122,8 @@ class AuthManager(
                         return@flow
                     }
 
-                    // Success Path
-                    saveServerData(serverURLString, loginResponse.token ?: "")
+                    // Success Path — store credentials for auto-relogin
+                    saveServerData(serverURLString, password)
                     serverRegistry.activate(serverURLString) // Assuming ServerRegistry handles this
                     refreshServers()
                     _activeServerID.value = serverURLString
@@ -147,21 +147,17 @@ class AuthManager(
     private fun restoreSavedServer() {
         val savedUrl = KeychainStore.getServerUrl(context)
         if (savedUrl != null) {
-            // Attempt to restore state
-            val token = KeychainStore.getToken(context)
-            if (token != null) {
-                _activeServerID.value = savedUrl
-                _stateFlow.value = AuthState.LoggedIn
-                refreshServers()
-            } else {
-                _stateFlow.value = AuthState.LoggedOut
-                refreshServers()
-            }
+            // Attempt to restore state — if we have a saved password,
+            // the 401 Authenticator will handle re-login on first request.
+            val hasPassword = KeychainStore.getPassword(context) != null
+            _activeServerID.value = savedUrl
+            _stateFlow.value = if (hasPassword) AuthState.LoggedIn else AuthState.LoggedOut
+            refreshServers()
         }
     }
 
-    private fun saveServerData(url: String, token: String) {
-        KeychainStore.save(context, url, token)
+    private fun saveServerData(url: String, password: String) {
+        KeychainStore.savePassword(context, url, password)
     }
 
     private fun refreshServers() {

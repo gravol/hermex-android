@@ -5,8 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.core.data.auth.KeychainStore
 import com.hermex.core.network.ApiClient
-import com.hermex.core.network.HealthResponse
-import com.hermex.core.network.LoginResponse
 import com.hermex.core.network.NetworkResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -86,7 +84,11 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 is NetworkResult.Success -> {
                     val loginResp = result.data
                     if (loginResp.ok) {
-                        KeychainStore.save(getApplication(), url, loginResp.token ?: "")
+                        // Auth is cookie-based — the session cookie was captured
+                        // automatically by the shared OkHttpClient's CookieJar.
+                        // We store the password for auto-relogin on 401.
+                        KeychainStore.savePassword(getApplication(), url, pw)
+                        ApiClient.setBaseUrl(url)
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             loginSuccess = true,
