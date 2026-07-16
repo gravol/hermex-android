@@ -1,277 +1,203 @@
-package com.example.hermes.networking
+package com.hermex.core.network
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
-import okhttp3.Request
-import retrofit2.Retrofit
-import retrofit2.converter.kotlinx.serialization.KotlinxSerializationConverterFactory
-import kotlinx.serialization.json.Json
+import okhttp3.sse.EventSources
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
-    private const val BASE_URL = "https://your-api-domain.com/" // Replace with actual URL
 
-    private val json = Json {
-        isLenient = true
-        ignoreUnknownKeys = true
-    }
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val mediaTypeJson = "application/json".toMediaType()
 
-    private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+    private var baseUrl: String = ""
+    private var client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
-        // Add Auth Interceptor here if needed
-        // .addInterceptor(AuthInterceptor())
-        // Add Cookie Jar here
-        // .cookieJar(CookieJar())
         .build()
 
-    private val retrofit: Retrofit = Retrofit.Builder()
-        .baseUrl(BASE_URL)
-        .client(okHttpClient)
-        .addConverterFactory(KotlinxSerializationConverterFactory.create(json))
-        .build()
-
-    val apiService: HermesApiService = retrofit.create(HermesApiService::class.java)
-
-    // --- Helper for SSE ---
-    fun startSSE(
-        url: String,
-        listener: EventSourceListener
-    ) {
-        val request = Request.Builder().url(url).build()
-        okHttpClient.eventListenerFactory {
-            EventSource.Factory(okHttpClient)
-        }.newEventSource(request, listener)
+    fun configure(baseUrl: String, okHttpClient: OkHttpClient) {
+        this.baseUrl = baseUrl.trimEnd('/')
+        this.client = okHttpClient
     }
 
-    fun cancelSSE(eventSource: EventSource) {
-        eventSource.cancel()
+    // ── helpers ──
+
+    private suspend fun <T> get(path: String, ser: KSerializer<T>): NetworkResult<T> =
+        withContext(Dispatchers.IO) {
+            client.newCall(Request.Builder().url("$baseUrl$path").get().build())
+                .execute().handleResult(json, ser)
+        }
+
+    private suspend fun <T, B> post(
+        path: String, body: B, bodySer: KSerializer<B>, respSer: KSerializer<T>,
+    ): NetworkResult<T> = withContext(Dispatchers.IO) {
+        val bodyStr = json.encodeToString(bodySer, body)
+        client.newCall(
+            Request.Builder().url("$baseUrl$path")
+                .post(bodyStr.toRequestBody(mediaTypeJson)).build()
+        ).execute().handleResult(json, respSer)
     }
 
-    // --- Chat Methods ---
-    suspend fun startChat(
-        sessionID: String,
-        message: String,
-        workspace: String?,
-        model: String?,
-        modelProvider: String?,
-        profile: String?,
-        explicitModelPick: Boolean,
-        attachments: List<JsonElement>?
-    ): NetworkResult<ChatStartResponse> {
-        val request = ChatStartRequest(
-            sessionId = sessionID,
-            message = message,
-            workspace = workspace,
-            model = model,
-            modelProvider = modelProvider,
-            profile = profile,
-            explicitModelPick = if (explicitModelPick) true else null,
-            attachments = attachments
-        )
-        return apiService.startChat(request).handleResult()
+    private fun sseUrl(path: String) = "$baseUrl$path"
+
+    // ── Chat ──
+
+    suspend fun startChat(req: ChatStartRequest) =
+        post("/chat/start", req, ChatStartRequest.serializer(), ChatStartResponse.serializer())
+
+    suspend fun chatStreamStatus(streamId: String) =
+        get("/chat/$streamId/status", ChatStreamStatusResponse.serializer())
+
+    suspend fun cancelChat(streamId: String) =
+        get("/chat/$streamId/cancel", ChatCancelResponse.serializer())
+
+    // ── Approval ──
+
+    suspend fun approvalPending(sessionId: String) =
+        get("/approval/$sessionId/pending", ApprovalPendingResponse.serializer())
+
+    suspend fun respondApproval(req: ApprovalRespondRequest) =
+        post("/approval/respond", req, ApprovalRespondRequest.serializer(), ApprovalRespondResponse.serializer())
+
+    // ── Clarification ──
+
+    suspend fun clarifyPending(sessionId: String) =
+        get("/clarify/$sessionId/pending", ClarificationPendingResponse.serializer())
+
+    suspend fun respondClarification(req: ClarificationRespondRequest) =
+        post("/clarify/respond", req, ClarificationRespondRequest.serializer(), ClarificationRespondResponse.serializer())
+
+    // ── Steer / Goal / BTW / Background ──
+
+    suspend fun steerChat(req: ChatSteerRequest) =
+        post("/chat/steer", req, ChatSteerRequest.serializer(), ChatSteerResponse.serializer())
+
+    suspend fun submitGoal(req: GoalSubmissionRequest) =
+        post("/goal/submit", req, GoalSubmissionRequest.serializer(), GoalSubmissionResponse.serializer())
+
+    suspend fun startBtw(req: BtwRequest) =
+        post("/btw/start", req, BtwRequest.serializer(), BtwStartResponse.serializer())
+
+    suspend fun startBackground(req: BackgroundRequest) =
+        post("/background/start", req, BackgroundRequest.serializer(), BackgroundStartResponse.serializer())
+
+    suspend fun backgroundStatus(sessionId: String) =
+        get("/background/$sessionId/status", BackgroundStatusResponse.serializer())
+
+    // ── Sessions ──
+
+    suspend fun sessions() =
+        get("/sessions", SessionsResponse.serializer())
+
+    suspend fun searchSessions(query: String, content: Boolean = true, depth: Int = 5): NetworkResult<SessionSearchResponse> {
+        val q = "query=$query&content=$content&depth=$depth"
+        return get("/sessions/search?$q", SessionSearchResponse.serializer())
     }
-
-    suspend fun cancelChat(streamID: String): NetworkResult<ChatCancelResponse> =
-        apiService.cancelChat(streamID).handleResult()
-
-    suspend fun chatStreamStatus(streamID: String): NetworkResult<ChatStreamStatusResponse> =
-        apiService.chatStreamStatus(streamID).handleResult()
-
-    suspend fun approvalPending(sessionID: String): NetworkResult<ApprovalPendingResponse> =
-        apiService.approvalPending(sessionID).handleResult()
-
-    suspend fun respondApproval(
-        sessionID: String,
-        choice: String,
-        approvalID: String?
-    ): NetworkResult<ApprovalRespondResponse> {
-        val req = ApprovalRespondRequest(sessionId = sessionID, choice = choice, approvalId = approvalID)
-        return apiService.respondApproval(req).handleResult()
-    }
-
-    suspend fun clarifyPending(sessionID: String): NetworkResult<ClarificationPendingResponse> =
-        apiService.clarifyPending(sessionID).handleResult()
-
-    suspend fun respondClarification(
-        sessionID: String,
-        response: String,
-        clarifyID: String?
-    ): NetworkResult<ClarificationRespondResponse> {
-        val req = ClarificationRespondRequest(sessionId = sessionID, response = response, clarifyId = clarifyID)
-        return apiService.respondClarification(req).handleResult()
-    }
-
-    suspend fun steerChat(sessionID: String, text: String): NetworkResult<ChatSteerResponse> {
-        return apiService.steerChat(ChatSteerRequest(sessionID, text)).handleResult()
-    }
-
-    suspend fun submitGoal(
-        sessionID: String,
-        args: String,
-        workspace: String?,
-        model: String?,
-        modelProvider: String?,
-        profile: String?
-    ): NetworkResult<GoalSubmissionResponse> {
-        val req = GoalSubmissionRequest(sessionID, args, workspace, model, modelProvider, profile)
-        return apiService.submitGoal(req).handleResult()
-    }
-
-    suspend fun startBtw(sessionID: String, question: String): NetworkResult<BtwStartResponse> =
-        apiService.startBtw(BtwRequest(sessionID, question)).handleResult()
-
-    suspend fun startBackground(sessionID: String, prompt: String): NetworkResult<BackgroundStartResponse> =
-        apiService.startBackground(BackgroundRequest(sessionID, prompt)).handleResult()
-
-    suspend fun backgroundStatus(sessionID: String): NetworkResult<BackgroundStatusResponse> =
-        apiService.backgroundStatus(sessionID).handleResult()
-
-    // --- Session Methods ---
-    suspend fun sessions(): NetworkResult<SessionsResponse> = apiService.sessions().handleResult()
-
-    suspend fun searchSessions(
-        query: String,
-        content: Boolean,
-        depth: Int
-    ): NetworkResult<SessionSearchResponse> =
-        apiService.searchSessions(query, content, depth).handleResult()
 
     suspend fun session(
-        id: String,
-        includeMessages: Boolean,
-        messageLimit: Int?,
-        messageBefore: Int?,
-        expandRenderable: Boolean
-    ): NetworkResult<SessionResponse> =
-        apiService.session(id, includeMessages, messageLimit, messageBefore, expandRenderable).handleResult()
-
-    suspend fun sessionStatus(id: String): NetworkResult<SessionStatusResponse> =
-        apiService.sessionStatus(id).handleResult()
-
-    suspend fun createSession(
-        workspace: String?,
-        model: String?,
-        modelProvider: String?,
-        profile: String?
+        id: String, includeMessages: Boolean = true, messageLimit: Int? = 50,
+        messageBefore: Int? = null, expandRenderable: Boolean = false,
     ): NetworkResult<SessionResponse> {
-        val req = NewSessionRequest(workspace, model, modelProvider, profile)
-        return apiService.createSession(req).handleResult()
+        val p = mutableListOf("includeMessages=$includeMessages")
+        if (messageLimit != null) p += "messageLimit=$messageLimit"
+        if (messageBefore != null) p += "messageBefore=$messageBefore"
+        if (expandRenderable) p += "expandRenderable=true"
+        return get("/session/$id?${p.joinToString("&")}", SessionResponse.serializer())
     }
 
-    suspend fun renameSession(id: String, title: String): NetworkResult<SessionMutationResponse> =
-        apiService.renameSession(RenameSessionRequest(id, title)).handleResult()
+    suspend fun sessionStatus(id: String) =
+        get("/session/$id/status", SessionStatusResponse.serializer())
 
-    suspend fun deleteSession(id: String): NetworkResult<SessionMutationResponse> =
-        apiService.deleteSession(SessionIDRequest(id)).handleResult()
+    suspend fun createSession(req: NewSessionRequest) =
+        post("/session/new", req, NewSessionRequest.serializer(), SessionResponse.serializer())
 
-    suspend fun pinSession(id: String, pinned: Boolean): NetworkResult<SessionMutationResponse> =
-        apiService.pinSession(PinSessionRequest(id, pinned)).handleResult()
+    suspend fun renameSession(req: RenameSessionRequest) =
+        post("/session/rename", req, RenameSessionRequest.serializer(), SessionMutationResponse.serializer())
 
-    suspend fun archiveSession(id: String, archived: Boolean): NetworkResult<SessionMutationResponse> =
-        apiService.archiveSession(ArchiveSessionRequest(id, archived)).handleResult()
+    suspend fun deleteSession(req: SessionIDRequest) =
+        post("/session/delete", req, SessionIDRequest.serializer(), SessionMutationResponse.serializer())
 
-    suspend fun branchSession(
-        id: String,
-        keepCount: Int?,
-        title: String?
-    ): NetworkResult<SessionBranchResponse> =
-        apiService.branchSession(BranchSessionRequest(id, keepCount, title)).handleResult()
+    suspend fun pinSession(req: PinSessionRequest) =
+        post("/session/pin", req, PinSessionRequest.serializer(), SessionMutationResponse.serializer())
 
-    suspend fun compressSession(
-        id: String,
-        focusTopic: String?
-    ): NetworkResult<SessionCompressResponse> =
-        apiService.compressSession(CompressSessionRequest(id, focusTopic)).handleResult()
+    suspend fun archiveSession(req: ArchiveSessionRequest) =
+        post("/session/archive", req, ArchiveSessionRequest.serializer(), SessionMutationResponse.serializer())
 
-    suspend fun undoSession(id: String): NetworkResult<SessionUndoResponse> =
-        apiService.undoSession(SessionIDRequest(id)).handleResult()
+    suspend fun branchSession(req: BranchSessionRequest) =
+        post("/session/branch", req, BranchSessionRequest.serializer(), SessionBranchResponse.serializer())
 
-    suspend fun retrySession(id: String): NetworkResult<SessionRetryResponse> =
-        apiService.retrySession(SessionIDRequest(id)).handleResult()
+    suspend fun compressSession(req: CompressSessionRequest) =
+        post("/session/compress", req, CompressSessionRequest.serializer(), SessionCompressResponse.serializer())
 
-    suspend fun truncateSession(id: String, keepCount: Int): NetworkResult<SessionResponse> =
-        apiService.truncateSession(TruncateSessionRequest(id, keepCount)).handleResult()
+    suspend fun undoSession(req: SessionIDRequest) =
+        post("/session/undo", req, SessionIDRequest.serializer(), SessionUndoResponse.serializer())
 
-    suspend fun updateSession(
-        id: String,
-        workspace: String?,
-        model: String?,
-        modelProvider: String?
-    ): NetworkResult<SessionResponse> {
-        val req = UpdateSessionRequest(id, workspace, model, modelProvider)
-        return apiService.updateSession(req).handleResult()
+    suspend fun retrySession(req: SessionIDRequest) =
+        post("/session/retry", req, SessionIDRequest.serializer(), SessionRetryResponse.serializer())
+
+    suspend fun truncateSession(req: TruncateSessionRequest) =
+        post("/session/truncate", req, TruncateSessionRequest.serializer(), SessionResponse.serializer())
+
+    suspend fun updateSession(req: UpdateSessionRequest) =
+        post("/session/update", req, UpdateSessionRequest.serializer(), SessionResponse.serializer())
+
+    suspend fun moveSession(req: MoveSessionRequest) =
+        post("/session/move", req, MoveSessionRequest.serializer(), SessionMutationResponse.serializer())
+
+    suspend fun sessionYolo(sessionId: String) =
+        get("/session/$sessionId/yolo", SessionYoloResponse.serializer())
+
+    suspend fun setSessionYolo(req: SessionYoloRequest) =
+        post("/session/yolo", req, SessionYoloRequest.serializer(), SessionYoloResponse.serializer())
+
+    // ── Cron ──
+
+    suspend fun crons() =
+        get("/crons", CronJobsResponse.serializer())
+
+    suspend fun createCron(req: CronCreateRequest) =
+        post("/cron/create", req, CronCreateRequest.serializer(), CronMutationResponse.serializer())
+
+    suspend fun updateCron(req: CronUpdateRequest) =
+        post("/cron/update", req, CronUpdateRequest.serializer(), CronMutationResponse.serializer())
+
+    suspend fun deleteCron(req: CronJobIDRequest) =
+        post("/cron/delete", req, CronJobIDRequest.serializer(), CronMutationResponse.serializer())
+
+    suspend fun runCron(req: CronJobIDRequest) =
+        post("/cron/run", req, CronJobIDRequest.serializer(), CronMutationResponse.serializer())
+
+    suspend fun pauseCron(req: CronJobIDRequest) =
+        post("/cron/pause", req, CronJobIDRequest.serializer(), CronMutationResponse.serializer())
+
+    suspend fun resumeCron(req: CronJobIDRequest) =
+        post("/cron/resume", req, CronJobIDRequest.serializer(), CronMutationResponse.serializer())
+
+    // ── SSE ──
+
+    fun chatStreamUrl(streamId: String, replay: Int? = null, afterSeq: Int? = null): String {
+        val p = mutableListOf<String>()
+        if (replay != null) p += "replay=$replay"
+        if (afterSeq != null) p += "after_seq=${maxOf(0, afterSeq)}"
+        val qs = if (p.isNotEmpty()) "?${p.joinToString("&")}" else ""
+        return sseUrl("/chat/$streamId/stream$qs")
     }
 
-    suspend fun moveSession(id: String, projectID: String?): NetworkResult<SessionMutationResponse> =
-        apiService.moveSession(MoveSessionRequest(id, projectID)).handleResult()
+    fun approvalStreamUrl(sessionId: String) = sseUrl("/approval/$sessionId/stream")
+    fun clarifyStreamUrl(sessionId: String) = sseUrl("/clarify/$sessionId/stream")
 
-    suspend fun sessionYolo(sessionID: String): NetworkResult<SessionYoloResponse> =
-        apiService.sessionYolo(sessionID).handleResult()
-
-    suspend fun setSessionYolo(sessionID: String, enabled: Boolean): NetworkResult<SessionYoloResponse> =
-        apiService.setSessionYolo(SessionYoloRequest(sessionID, enabled)).handleResult()
-
-    // --- Cron Methods ---
-    suspend fun crons(): NetworkResult<CronJobsResponse> = apiService.crons().handleResult()
-
-    suspend fun createCron(
-        prompt: String,
-        schedule: String,
-        name: String?,
-        deliver: String?,
-        skills: List<String>,
-        model: String?,
-        profile: String?,
-        toastNotifications: Boolean
-    ): NetworkResult<CronMutationResponse> {
-        val req = CronCreateRequest(prompt, schedule, name, deliver, skills, model, profile, toastNotifications)
-        return apiService.createCron(req).handleResult()
-    }
-
-    suspend fun updateCron(
-        jobID: String,
-        prompt: String?,
-        schedule: String?,
-        name: String?,
-        deliver: String?,
-        skills: List<String>?,
-        model: String?,
-        profile: String?,
-        toastNotifications: Boolean?
-    ): NetworkResult<CronMutationResponse> {
-        val req = CronUpdateRequest(jobID, prompt, schedule, name, deliver, skills, model, profile, toastNotifications)
-        return apiService.updateCron(req).handleResult()
-    }
-
-    suspend fun deleteCron(jobID: String): NetworkResult<CronMutationResponse> =
-        apiService.deleteCron(CronJobIDRequest(jobID, null)).handleResult()
-
-    suspend fun runCron(jobID: String): NetworkResult<CronMutationResponse> =
-        apiService.runCron(CronJobIDRequest(jobID, null)).handleResult()
-
-    suspend fun pauseCron(jobID: String, reason: String?): NetworkResult<CronMutationResponse> =
-        apiService.pauseCron(CronJobIDRequest(jobID, reason)).handleResult()
-
-    suspend fun resumeCron(jobID: String): NetworkResult<CronMutationResponse> =
-        apiService.resumeCron(CronJobIDRequest(jobID, null)).handleResult()
-
-    // --- SSE URL Generators (Returns URL string for EventSource) ---
-    fun getChatStreamURL(streamID: String, replayAfterSeq: Int?): String {
-        val url = "${BASE_URL}chat/$streamID/stream"
-        return if (replayAfterSeq != null) {
-            val seq = maxOf(0, replayAfterSeq)
-            "$url?replay=1&after_seq=$seq"
-        } else {
-            url
-        }
-    }
-
-    fun getApprovalStreamURL(sessionID: String): String =
-        "${BASE_URL}approval/$sessionID/stream"
-
-    fun getClarifyStreamURL(sessionID: String): String =
-        "${BASE_URL}clarify/$sessionID/stream"
+    fun newEventSource(url: String, listener: EventSourceListener): EventSource =
+        EventSources.createFactory(client).newEventSource(
+            Request.Builder().url(url).build(), listener
+        )
 }

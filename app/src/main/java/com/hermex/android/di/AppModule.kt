@@ -13,8 +13,6 @@ import com.hermex.android.data.local.dao.MessageDao
 import com.hermex.android.data.local.dao.SessionDao
 import com.hermex.android.data.local.dao.ThinkingCardDao
 import com.hermex.android.data.local.dao.ToolCallDao
-import com.hermex.android.data.network.ApiService
-import com.hermex.android.data.network.RetrofitClient
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -62,12 +60,6 @@ object AppModule {
     @Singleton
     fun provideThinkingCardDao(database: Database): ThinkingCardDao {
         return database.thinkingCardDao()
-    }
-
-    @Provides
-    @Singleton
-    fun provideApiService(): ApiService {
-        return RetrofitClient.instance.create(ApiService::class.java)
     }
 
     @Provides

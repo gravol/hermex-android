@@ -32,14 +32,6 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".data.service.StreamingService"
-            android:exported="false" />
-
-        <receiver
-            android:name=".data.service.NotificationReceiver"
-            android:exported="false" />
-
     </application>
 
 </manifest>

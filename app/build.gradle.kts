@@ -87,9 +87,7 @@ dependencies {
     ksp(libs.hilt.android.compiler)
     implementation(libs.hilt.navigation.compose)
 
-    // Retrofit
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.converter.gson)
+    // OkHttp (raw, no Retrofit — matches iOS URLSession)
     implementation(libs.okhttp.logging.interceptor)
 
     // Room
