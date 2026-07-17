@@ -5,6 +5,7 @@ import android.util.Log
 import com.hermex.core.data.auth.KeychainStore
 import com.hermex.core.network.ApiClient
 import com.hermex.core.network.DashboardApiClient
+import com.hermex.core.network.DebugLog
 
 class HermexApplication : Application() {
     override fun onCreate() {
@@ -25,6 +26,9 @@ class HermexApplication : Application() {
                 ApiClient.setBaseUrl(savedUrl)
                 ApiClient.setApiKey(savedKey)
                 Log.d("Hermex", "HermexApplication: restored server URL + API key")
+                DebugLog.log("INFO", "HermexApp", "restored LEGACY API credentials → ApiClient.isConfigured=true")
+            } else {
+                DebugLog.log("INFO", "HermexApp", "no legacy API credentials stored → ApiClient.isConfigured=false")
             }
         } catch (e: Exception) {
             Log.e("Hermex", "HermexApplication: ApiClient.init failed", e)
@@ -39,6 +43,9 @@ class HermexApplication : Application() {
                 DashboardApiClient.setDashboardUrl(savedDashboardUrl)
                 DashboardApiClient.setPassword(savedDashboardPassword)
                 Log.d("Hermex", "HermexApplication: restored dashboard URL + password")
+                DebugLog.log("INFO", "HermexApp", "restored dashboard credentials → isConfigured=true")
+            } else {
+                DebugLog.log("INFO", "HermexApp", "no dashboard credentials stored → isConfigured=false")
             }
         } catch (e: Exception) {
             Log.e("Hermex", "HermexApplication: DashboardApiClient.init failed", e)

@@ -20,6 +20,7 @@ import com.hermex.android.feature.sessions.SessionsScreen
 import com.hermex.android.feature.settings.SettingsScreen
 import com.hermex.core.network.ApiClient
 import com.hermex.core.network.DashboardApiClient
+import com.hermex.core.network.DebugLog
 import com.hermex.android.ui.theme.HermexTheme
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -41,9 +42,18 @@ fun HermexNavGraph() {
     val navController = rememberNavController()
     // Prefer dashboard auth; fall back to legacy API server setup
     val startDest = when {
-        DashboardApiClient.isConfigured -> "home"
-        ApiClient.isConfigured -> "home"
-        else -> "dashboard-setup"
+        DashboardApiClient.isConfigured -> {
+            DebugLog.log("ROUTE", "MainActivity", "startup → home (dashboard configured)")
+            "home"
+        }
+        ApiClient.isConfigured -> {
+            DebugLog.log("ROUTE", "MainActivity", "startup → home (LEGACY API configured — dashboard NOT configured)")
+            "home"
+        }
+        else -> {
+            DebugLog.log("ROUTE", "MainActivity", "startup → dashboard-setup (neither configured)")
+            "dashboard-setup"
+        }
     }
 
     NavHost(navController = navController, startDestination = startDest) {
@@ -92,8 +102,10 @@ fun HermexNavGraph() {
             val encodedTitle = backStackEntry.arguments?.getString("title") ?: ""
             val title = URLDecoder.decode(encodedTitle, "UTF-8")
             val chatViewModel = if (DashboardApiClient.isConfigured) {
+                DebugLog.log("ROUTE", "MainActivity", "chat → DashboardChatViewModel")
                 viewModel<DashboardChatViewModel>()
             } else {
+                DebugLog.log("ROUTE", "MainActivity", "chat → LEGACY ChatViewModel (dashboard not configured)")
                 viewModel<ChatViewModel>()
             }
             ChatScreen(

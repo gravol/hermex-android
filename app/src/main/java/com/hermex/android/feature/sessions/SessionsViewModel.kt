@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.core.network.ApiClient
+import com.hermex.core.network.DebugLog
 import com.hermex.core.network.NetworkResult
 import com.hermex.core.network.SessionSummary
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,7 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
     fun loadSessions() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            DebugLog.log("INFO", "SessionsVM", "loadSessions via LEGACY ApiClient.sessions()")
             try {
                 when (val result = ApiClient.sessions()) {
                     is NetworkResult.Success -> {
