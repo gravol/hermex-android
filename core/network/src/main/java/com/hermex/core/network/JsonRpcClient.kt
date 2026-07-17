@@ -118,8 +118,8 @@ class JsonRpcClient(
             append("{\"jsonrpc\":\"2.0\",\"id\":$id,\"method\":\"$method\",\"params\":$paramsStr}")
         }
 
-        DebugLog.log("RPC", "Request", "[$id] $method")
-        Log.d("Hermex", "JsonRpcClient.request: [$id] $method")
+        DebugLog.log("RPC", "Request", "[$id] $method — params=$paramsStr")
+        Log.d("Hermex", "JsonRpcClient.request: [$id] $method — params=$paramsStr")
 
         return suspendCancellableCoroutine { cont ->
             pendingRequests[id] = cont

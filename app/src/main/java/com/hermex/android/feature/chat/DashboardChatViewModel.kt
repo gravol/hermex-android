@@ -27,6 +27,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     override var uiState by mutableStateOf(ChatUiState())
 
     private var sessionId: String = ""
+    private var resumedSessionId: String = ""   // session_id returned by session.resume
     private var sessionTitle: String = ""
     private val tempIdCounter = AtomicInteger(0)
 
@@ -43,10 +44,15 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
     /** Initialize with a session. Call once from the composable. */
     override fun init(sessionId: String, title: String?) {
-        if (this.sessionId == sessionId) return
+        if (this.sessionId == sessionId) {
+            DebugLog.log("STATE", "SessionID", "init() — unchanged sessionId=$sessionId, skipped")
+            return
+        }
         this.sessionId = sessionId
+        this.resumedSessionId = ""  // reset until session.resume returns
         this.sessionTitle = title ?: sessionId.take(16)
         uiState = ChatUiState(sessionTitle = this.sessionTitle)
+        DebugLog.log("STATE", "SessionID", "init() — set sessionId=$sessionId title=$sessionTitle")
         connectWsAndStart()
     }
 
@@ -56,6 +62,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             uiState = uiState.copy(isLoading = true, error = null)
             try {
                 val result = rpcClient.sessionResume(sessionId)
+                // DEBUG: track the session_id returned by session.resume
+                resumedSessionId = result.session_id
+                DebugLog.log("STATE", "SessionID",
+                    "session.resume returned session_id=${result.session_id} " +
+                    "(sent=$sessionId, match=${result.session_id == sessionId})")
                 val messages = result.messages?.map {
                     val messageContent = it.resolvedContent ?: ""
                     UiMessage(
@@ -121,6 +132,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
         viewModelScope.launch {
             try {
+                DebugLog.log("STATE", "SessionID",
+                    "sendMessage: current sessionId=$sessionId " +
+                    "resumedSessionId=$resumedSessionId " +
+                    "match=${sessionId == resumedSessionId}")
                 DebugLog.log("RPC", "DashboardChat", "prompt.submit → session=$sessionId")
                 rpcClient.promptSubmit(sessionId, text)
             } catch (e: Exception) {
@@ -216,6 +231,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         when (n) {
             is RpcNotification.GatewayReady -> {
                 DebugLog.log("RPC", "DashboardChat", "gateway.ready — agent=${n.agentId} v${n.version}")
+                val gwSessionId = n.sessionId
+                if (gwSessionId != null && gwSessionId.isNotEmpty()) {
+                    DebugLog.log("STATE", "SessionID",
+                        "gateway.ready sessionId=$gwSessionId " +
+                        "(our sessionId=${this.sessionId}, match=$gwSessionId == ${this.sessionId})")
+                }
             }
 
             is RpcNotification.RunStarted -> {
