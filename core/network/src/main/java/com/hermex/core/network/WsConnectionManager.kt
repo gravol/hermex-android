@@ -57,7 +57,7 @@ class WsConnectionManager(
 
     // ── Public API ──
 
-    /** Full auth chain: ensure logged in → fetch ticket → open WS. */
+    /** Full auth chain: ensure logged in → fetch ticket → open WS. Blocks until connected. */
     suspend fun connect() {
         if (_state.value == State.Connected || _state.value == State.Connecting) return
         isUserDisconnect = false
@@ -71,6 +71,8 @@ class WsConnectionManager(
             is NetworkResult.Success -> {
                 DebugLog.log("WS", "Connection", "ticket fetched (ttl=${ticketResult.data.ttl_seconds}s)")
                 openWebSocket(ticketResult.data.ticket)
+                // Wait for the async WebSocket handshake to complete
+                waitForConnection()
             }
             is NetworkResult.Error, is NetworkResult.HttpError -> {
                 DebugLog.log("WS", "Connection", "ticket fetch failed — starting reconnect loop")
@@ -78,6 +80,23 @@ class WsConnectionManager(
                 startReconnectLoop()
             }
         }
+    }
+
+    /** Block until the WebSocket reaches State.Connected or times out. */
+    private suspend fun waitForConnection(timeoutMs: Long = 10_000) {
+        val start = System.currentTimeMillis()
+        while (_state.value != State.Connected) {
+            if (System.currentTimeMillis() - start > timeoutMs) {
+                DebugLog.log("WS", "Connection", "connect() timed out waiting for onOpen after ${timeoutMs}ms")
+                Log.w("Hermex", "WsConnectionManager: timed out waiting for Connected state")
+                throw Exception("WebSocket connection timed out after ${timeoutMs}ms")
+            }
+            if (isUserDisconnect) {
+                throw Exception("WebSocket connection cancelled")
+            }
+            delay(50)
+        }
+        DebugLog.log("WS", "Connection", "connect() — WebSocket ready")
     }
 
     /** Clean disconnect — cancels reconnect, closes WS. */
