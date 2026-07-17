@@ -93,12 +93,12 @@ fun ChatScreen(
         }
     }
 
-    // Streaming auto-scroll: follows content unless user has dragged away.
-    // Uses scrollToItem (instant) instead of animateScrollToItem to avoid
-    // animation-cancellation drift during rapid deltas (10-50ms gaps).
-    LaunchedEffect(state.messages.lastOrNull()?.content) {
-        if (state.messages.isNotEmpty() && !userScrolledUp) {
-            DebugLog.log("SCROLL", "AutoScroll", "scrollToItem(lastIndex=${state.messages.lastIndex}) contentLen=${state.messages.last().content.length}")
+    // Auto-scroll: follows any list mutation (deltas, tool calls, thinking, etc.)
+    // during streaming. Keyed on scrollGeneration — bumps on every SSE event that
+    // mutates the message list. Any future event type gets auto-scroll for free.
+    LaunchedEffect(state.scrollGeneration) {
+        if (state.messages.isNotEmpty() && !userScrolledUp && state.isStreaming) {
+            DebugLog.log("SCROLL", "AutoScroll", "gen=${state.scrollGeneration} scrollToItem(lastIndex=${state.messages.lastIndex})")
             listState.scrollToItem(state.messages.lastIndex)
         }
     }
@@ -109,19 +109,24 @@ fun ChatScreen(
     // the final message is visible after the stream closes.
     LaunchedEffect(state.isStreaming) {
         if (!state.isStreaming && state.messages.isNotEmpty()) {
-            DebugLog.log("SCROLL", "StreamEnd", "stream ended (isStreaming=false), forcing scrollToItem(lastIndex=${state.messages.lastIndex})")
-            listState.scrollToItem(state.messages.lastIndex)
+            val idx = state.messages.lastIndex  // compute fresh at call time
+            val count = state.messages.size
+            DebugLog.log("SCROLL", "StreamEnd", "stream ended, scrollToItem(lastIndex=$idx, totalItems=$count)")
+            listState.scrollToItem(idx)
         }
     }
 
     // Detect keyboard open/close for scroll.
     // Read WindowInsets.ime BEFORE Scaffold.imePadding() consumes it.
+    // Uses scrollToItem (instant) — animateScrollToItem's spring animation
+    // fights the LazyColumn layout changes from imePadding() settling.
     val density = LocalDensity.current
     val imeBottom = WindowInsets.ime.getBottom(density)
     LaunchedEffect(imeBottom) {
         if (imeBottom > 0 && state.messages.isNotEmpty()) {
-            kotlinx.coroutines.delay(400)  // wait for full keyboard animation
-            listState.animateScrollToItem(state.messages.lastIndex)
+            kotlinx.coroutines.delay(500)  // wait for keyboard + LazyColumn layout to settle
+            DebugLog.log("SCROLL", "Keyboard", "keyboard open (ime=${imeBottom}px), scrollToItem(lastIndex=${state.messages.lastIndex})")
+            listState.scrollToItem(state.messages.lastIndex)
         }
     }
 

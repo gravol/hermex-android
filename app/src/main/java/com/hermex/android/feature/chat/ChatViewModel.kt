@@ -58,6 +58,7 @@ data class ChatUiState(
     val isLoading: Boolean = false,
     val isStreaming: Boolean = false,
     val error: String? = null,
+    val scrollGeneration: Long = 0L,  // bumped on every SSE-driven list mutation; triggers auto-scroll
 )
 
 // ── ViewModel ──
@@ -319,6 +320,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 uiState = uiState.copy(
                     messages = msgs,
                     isStreaming = false,
+                    scrollGeneration = uiState.scrollGeneration + 1,
                 )
                 return  // already set uiState above
             }
@@ -339,7 +341,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         // Emit updated state — mutableStateOf writes to Compose's snapshot,
         // triggering recomposition in the next frame. No conflation.
-        uiState = uiState.copy(messages = msgs)
+        // scrollGeneration bump triggers auto-scroll in ChatScreen for ANY
+        // mutation (deltas, tool calls, thinking) — not just content changes.
+        uiState = uiState.copy(messages = msgs, scrollGeneration = uiState.scrollGeneration + 1)
     }
 
     // ── Mapping ──
