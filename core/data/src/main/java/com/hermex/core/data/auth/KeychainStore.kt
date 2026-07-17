@@ -7,12 +7,14 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 
 /**
- * Encrypted storage for Hermex API Server credentials.
+ * Encrypted storage for Hermex credentials.
  */
 object KeychainStore {
     private const val PREFS_NAME = "hermex_auth"
     private const val KEY_SERVER_URL = "server_url"
     private const val KEY_API_KEY = "api_key"
+    private const val KEY_DASHBOARD_URL = "dashboard_url"
+    private const val KEY_DASHBOARD_PASSWORD = "dashboard_password"
 
     private val prefsMap = mutableMapOf<Context, SharedPreferences>()
 
@@ -47,6 +49,25 @@ object KeychainStore {
 
     fun getApiKey(context: Context): String? =
         getPrefs(context).getString(KEY_API_KEY, null)
+
+    // ── Dashboard credentials ──
+
+    fun saveDashboardCredentials(
+        context: Context, dashboardUrl: String, dashboardPassword: String,
+    ) {
+        getPrefs(context).edit()
+            .putString(KEY_DASHBOARD_URL, dashboardUrl)
+            .putString(KEY_DASHBOARD_PASSWORD, dashboardPassword)
+            .apply()
+    }
+
+    fun getDashboardUrl(context: Context): String? =
+        getPrefs(context).getString(KEY_DASHBOARD_URL, null)
+
+    fun getDashboardPassword(context: Context): String? =
+        getPrefs(context).getString(KEY_DASHBOARD_PASSWORD, null)
+
+    // ──
 
     fun clear(context: Context) {
         getPrefs(context).edit().clear().apply()
