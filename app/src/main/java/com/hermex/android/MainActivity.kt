@@ -11,10 +11,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.hermex.android.feature.chat.ChatScreen
+import com.hermex.android.feature.onboarding.DashboardSetupScreen
 import com.hermex.android.feature.onboarding.SetupScreen
 import com.hermex.android.feature.sessions.SessionsScreen
 import com.hermex.android.feature.settings.SettingsScreen
 import com.hermex.core.network.ApiClient
+import com.hermex.core.network.DashboardApiClient
 import com.hermex.android.ui.theme.HermexTheme
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -34,9 +36,23 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HermexNavGraph() {
     val navController = rememberNavController()
-    val startDest = if (ApiClient.isConfigured) "home" else "setup"
+    // Prefer dashboard auth; fall back to legacy API server setup
+    val startDest = when {
+        DashboardApiClient.isConfigured -> "home"
+        ApiClient.isConfigured -> "home"
+        else -> "dashboard-setup"
+    }
 
     NavHost(navController = navController, startDestination = startDest) {
+        composable("dashboard-setup") {
+            DashboardSetupScreen(
+                onDone = {
+                    navController.navigate("home") {
+                        popUpTo("dashboard-setup") { inclusive = true }
+                    }
+                }
+            )
+        }
         composable("setup") {
             SetupScreen(
                 onDone = {
