@@ -62,11 +62,17 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             uiState = uiState.copy(isLoading = true, error = null)
             try {
                 val result = rpcClient.sessionResume(sessionId)
-                // DEBUG: track the session_id returned by session.resume
+                // Canonicalize: use the resolved live sid for all downstream ops
                 resumedSessionId = result.session_id
-                DebugLog.log("STATE", "SessionID",
-                    "session.resume returned session_id=${result.session_id} " +
-                    "(sent=$sessionId, match=${result.session_id == sessionId})")
+                if (result.session_id != sessionId) {
+                    DebugLog.log("STATE", "SessionID",
+                        "normalizing sessionId from $sessionId to ${result.session_id}")
+                    sessionId = result.session_id
+                } else {
+                    DebugLog.log("STATE", "SessionID",
+                        "session.resume returned session_id=${result.session_id} " +
+                        "(already canonical, match=${result.session_id == sessionId})")
+                }
                 val messages = result.messages?.map {
                     val messageContent = it.resolvedContent ?: ""
                     UiMessage(
