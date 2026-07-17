@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-17 (post-device-test update)  
-**Current version:** v0.1.20 (versionCode 20)  
+**Last updated:** 2026-07-18 (Phase 4K)  
+**Current version:** v0.1.21 (versionCode 21)  
 **HEAD commit:** `ea7e98e` — Update HEAD commit reference in PROJECT_HANDOFF_CURRENT.md  
 **Branch:** `master` (up to date with `origin/master`)  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -186,7 +186,15 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
 - Unknown events logged with full `rawParams` (200-char preview) for debugging
 - Verified: thinking dropdown remains functional and collapsible after message completion
 
-### Phase 4J — Streaming Verification + Hardening (v0.1.20)
+### Phase 4K — Chat Viewport Stabilization (v0.1.21)
+- **Extracted `autoScrollToBottom()` helper** — unified two-step scroll: `scrollToItem(targetIndex)` then `scrollBy(remaining)` computed from `visibleItemsInfo` offset+size vs viewport height
+- **Fixed streaming auto-scroll** — when a streaming bubble grows taller than the viewport, the compensation step scrolls the remaining distance so the newest content's bottom is visible
+- **Fixed keyboard open scroll** — after IME opens, the same compensation ensures the last message's bottom is above the keyboard
+- **All 4 scroll sites unified** — SessionOpen, AutoScroll (per-delta), StreamEnd, and Keyboard all use the same helper
+- **Comprehensive debug logging** — every scroll event logs `firstVisibleItemIndex`, `lastVisibleItemIndex`, `canScrollForward`, `viewportSize.height`, and actual item bottom offset during compensation
+- IME open/close events log viewport height before and after
+- Build verified: `assembleRelease` compiles successfully
+- Version bumped to v0.1.21
 - **Bugfix: `isWaitingForFirstEvent` never cleared by `thinking.delta`/`reasoning.delta`** — if the server's first event was a thinking delta (model thinking before responding), `TypingDots` displayed indefinitely because `isWaitingForFirstEvent` stayed `true`. Fixed by ensuring all delta handlers clear the flag.
 - **Bugfix: `MessageStarted` didn't clear `isWaitingForFirstEvent` when `messageId` was null** — if `message.start` arrived without a server message ID, the placeholder never transitioned from TypingDots. Fixed by always clearing the flag regardless of messageId.
 - **Hardening: all delta handlers now filter by `isStreaming`** — `indexOfLast { it.role == "assistant" && it.isStreaming }` prevents content from being applied to a completed non-streaming assistant message when multiple assistant messages exist in the list.
@@ -369,11 +377,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 ## Next Steps (After Device Verification)
 
-1. **Device-verify Phase 4G fix** — Install v0.1.19 APK, test send/stream flow, confirm no 4001 errors
-2. **Fix empty session list** — Filter sessions with zero messages or add server-side filtering
-3. **Legacy stack cleanup** — Remove `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, `SessionsViewModel`, `ChatViewModel`
-4. **Feature module cleanup** — Delete stub files in `feature/` directories not included in build
-5. **Background WebSocket** — Wire `HermesForegroundService` to keep WebSocket alive when phone locks
-6. **Approval/clarify UI** — Replace auto-deny with real approval dialog UI
-7. **Production signing** — Wire proper keystore for release builds
-8. **Make repo public** — So Obtainium can see GitHub Releases and auto-update
+1. **Device-verify Phase 4K fix** — Install v0.1.21 APK, test streaming auto-scroll (100-word, 500+-word, thinking-enabled, keyboard-during-streaming), verify no content hidden below viewport
+2. **Legacy stack cleanup** — Remove `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, `SessionsViewModel`, `ChatViewModel`
+3. **Feature module cleanup** — Delete stub files in `feature/` directories not included in build
+4. **Background WebSocket** — Wire `HermesForegroundService` to keep WebSocket alive when phone locks
+5. **Approval/clarify UI** — Replace auto-deny with real approval dialog UI
+6. **Production signing** — Wire proper keystore for release builds
+7. **Make repo public** — So Obtainium can see GitHub Releases and auto-update

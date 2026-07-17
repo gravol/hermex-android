@@ -18,8 +18,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -110,17 +112,14 @@ fun ChatScreen(
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
             val targetIdx = state.messages.lastIndex
-            val beforeFirst = listState.firstVisibleItemIndex
-            DebugLog.log("SCROLL", "SessionOpen",
-                "reason=session_load messages=${state.messages.size} " +
-                "scrollToItem(target=$targetIdx) userScrolledUp=$userScrolledUp " +
-                "firstVisibleBefore=$beforeFirst")
             userScrolledUp = false
-            listState.scrollToItem(targetIdx)
-            DebugLog.log("SCROLL", "SessionOpen",
-                "scrollToItem($targetIdx) done " +
-                "firstVisibleAfter=${listState.firstVisibleItemIndex} " +
-                "canScrollForward=${listState.canScrollForward}")
+            autoScrollToBottom(
+                listState = listState,
+                targetIndex = targetIdx,
+                totalItems = state.messages.size,
+                scrollGeneration = 0L,
+                reason = "SessionOpen",
+            )
         }
     }
 
@@ -129,39 +128,29 @@ fun ChatScreen(
     // mutates the message list. Any future event type gets auto-scroll for free.
     LaunchedEffect(state.scrollGeneration) {
         if (state.messages.isNotEmpty() && !userScrolledUp && state.isStreaming) {
-            val targetIdx = state.messages.lastIndex
-            val beforeFirst = listState.firstVisibleItemIndex
-            DebugLog.log("SCROLL", "AutoScroll",
-                "reason=content_delta gen=${state.scrollGeneration} " +
-                "isStreaming=${state.isStreaming} userScrolledUp=$userScrolledUp " +
-                "target=$targetIdx totalItems=${state.messages.size} " +
-                "firstVisibleBefore=$beforeFirst")
-            listState.scrollToItem(targetIdx)
-            DebugLog.log("SCROLL", "AutoScroll",
-                "scrollToItem($targetIdx) done " +
-                "firstVisibleAfter=${listState.firstVisibleItemIndex} " +
-                "canScrollForward=${listState.canScrollForward}")
+            autoScrollToBottom(
+                listState = listState,
+                targetIndex = state.messages.lastIndex,
+                totalItems = state.messages.size,
+                scrollGeneration = state.scrollGeneration,
+                reason = "AutoScroll",
+            )
         }
     }
 
     // When streaming ends, force a final scroll to bottom.
     // Catches the case where the view drifted up mid-stream (from
-    // rapid content growth outpacing aborted animations) and ensures
+    // rapid content growth outpacing previous adjusts) and ensures
     // the final message is visible after the stream closes.
     LaunchedEffect(state.isStreaming) {
         if (!state.isStreaming && state.messages.isNotEmpty()) {
-            val idx = state.messages.lastIndex
-            val count = state.messages.size
-            val beforeFirst = listState.firstVisibleItemIndex
-            DebugLog.log("SCROLL", "StreamEnd",
-                "reason=stream_ended gen=${state.scrollGeneration} " +
-                "target=$idx totalItems=$count " +
-                "firstVisibleBefore=$beforeFirst")
-            listState.scrollToItem(idx)
-            DebugLog.log("SCROLL", "StreamEnd",
-                "scrollToItem($idx) done " +
-                "firstVisibleAfter=${listState.firstVisibleItemIndex} " +
-                "canScrollForward=${listState.canScrollForward}")
+            autoScrollToBottom(
+                listState = listState,
+                targetIndex = state.messages.lastIndex,
+                totalItems = state.messages.size,
+                scrollGeneration = state.scrollGeneration,
+                reason = "StreamEnd",
+            )
         }
     }
 
@@ -176,10 +165,12 @@ fun ChatScreen(
     LaunchedEffect(imeBottom) {
         val prevFirstVisible = listState.firstVisibleItemIndex
         val prevTotalItems = state.messages.size
+        val prevViewportHeight = listState.layoutInfo.viewportSize.height
         DebugLog.log("UI", "Keyboard",
             "event=${if (imeBottom > 0) "OPEN" else "CLOSE"} " +
             "imeHeight=${imeBottom}px messages=$prevTotalItems " +
-            "firstVisibleBefore=$prevFirstVisible")
+            "firstVisibleBefore=$prevFirstVisible " +
+            "viewportHeightBefore=$prevViewportHeight")
         if (imeBottom > 0 && state.messages.isNotEmpty()) {
             // Log window/inset height before scroll
             DebugLog.log("UI", "Keyboard",
@@ -187,6 +178,7 @@ fun ChatScreen(
                 "sysBottom=${sysBottom}px sysTop=${sysTop}px " +
                 "density=${density.density}")
             kotlinx.coroutines.delay(500)  // wait for keyboard + LazyColumn layout to settle
+
             // Log viewport state after keyboard settles, before scroll
             val layoutInfo = listState.layoutInfo
             val firstVis = layoutInfo.visibleItemsInfo.firstOrNull()
@@ -196,12 +188,16 @@ fun ChatScreen(
                 "reason=keyboard_open ime=${imeBottom}px " +
                 "target=$targetIdx totalItems=${state.messages.size} " +
                 "viewportBefore=[${firstVis?.index}..${lastVis?.index}] " +
+                "viewportHeight=${layoutInfo.viewportSize.height} " +
                 "totalViewportItems=${layoutInfo.visibleItemsInfo.size}")
-            listState.scrollToItem(targetIdx)
-            DebugLog.log("SCROLL", "Keyboard",
-                "scrollToItem($targetIdx) done " +
-                "firstVisibleAfter=${listState.firstVisibleItemIndex} " +
-                "canScrollForward=${listState.canScrollForward}")
+
+            autoScrollToBottom(
+                listState = listState,
+                targetIndex = targetIdx,
+                totalItems = state.messages.size,
+                scrollGeneration = state.scrollGeneration,
+                reason = "Keyboard",
+            )
         }
     }
 
@@ -727,4 +723,65 @@ private fun TypingDots() {
             )
         }
     }
+}
+
+// ── AUTO-SCROLL HELPER ──
+// Scrolls to the target item, then compensates for items that extend beyond
+// the viewport (common during streaming when content grows taller than the
+// visible area). Uses scrollToItem (instant) + scrollBy for the remainder.
+// Logs comprehensive debug info: first/last visible indices, viewport height,
+// canScrollForward, and actual item bottom offset.
+
+private suspend fun autoScrollToBottom(
+    listState: LazyListState,
+    targetIndex: Int,
+    totalItems: Int,
+    scrollGeneration: Long,
+    reason: String,
+) {
+    val beforeFirst = listState.firstVisibleItemIndex
+    val beforeLast = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+    val beforeCanScroll = listState.canScrollForward
+    val beforeViewportHeight = listState.layoutInfo.viewportSize.height
+
+    DebugLog.log("SCROLL", reason,
+        "scrollToItem(target=$targetIndex) totalItems=$totalItems " +
+        "gen=$scrollGeneration " +
+        "firstVisibleBefore=$beforeFirst " +
+        "lastVisibleBefore=$beforeLast " +
+        "viewportHeight=$beforeViewportHeight " +
+        "canScrollForward=$beforeCanScroll")
+
+    // Step 1: default scroll to make the target item visible
+    listState.scrollToItem(targetIndex)
+
+    // Step 2: compensate for item taller than viewport.
+    // After scrollToItem, if the last visible item includes the target and
+    // canScrollForward is still true, the item extends below the viewport.
+    // Compute the remaining scroll distance from layout info and scrollBy it.
+    val afterFirst = listState.firstVisibleItemIndex
+    val afterCanScroll = listState.canScrollForward
+    val layoutInfo = listState.layoutInfo
+    val viewportHeight = layoutInfo.viewportSize.height
+    val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
+
+    if (afterCanScroll && lastVisible != null && lastVisible.index >= targetIndex) {
+        val itemBottom = lastVisible.offset + lastVisible.size
+        val beyondViewport = itemBottom - viewportHeight
+        if (beyondViewport > 0) {
+            DebugLog.log("SCROLL", reason,
+                "compensating: item[${lastVisible.index}] offset=${lastVisible.offset} " +
+                "size=${lastVisible.size} bottom=$itemBottom " +
+                "viewportHeight=$viewportHeight beyond=$beyondViewport px")
+            listState.scrollBy(beyondViewport.toFloat())
+        }
+    }
+
+    val afterFirst2 = listState.firstVisibleItemIndex
+    val afterLast2 = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+    val afterCanScroll2 = listState.canScrollForward
+    DebugLog.log("SCROLL", reason,
+        "done: firstVisible=$afterFirst2 " +
+        "lastVisible=$afterLast2 " +
+        "canScrollForward=$afterCanScroll2")
 }
