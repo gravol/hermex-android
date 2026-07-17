@@ -1,10 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-> ⚠️ **Root project verification — 2026-07-17** — See `## Verified Project Root` below.
-
-**Last updated:** 2026-07-17 (Phase 4K)  
-**Current version:** v0.1.22 (versionCode 22)  
-**HEAD commit:** `5e692dd` — Phase 4K: chat viewport stabilization — two-step auto-scroll with height compensation  
+**Last updated:** 2026-07-17 (Phase 4L)  
+**Current version:** v0.1.23 (versionCode 23)  
+**HEAD commit:** `dc56adc` — Phase 4L groundwork: session_key field + debug logging in sessionResume  
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -18,12 +16,12 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `5e692dd` — Phase 4K: chat viewport stabilization |
+| Latest commit | `dc56adc` — Phase 4L groundwork: session_key field |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.22 (versionCode 22) |
-| Completed phase | Phase 4K — chat viewport stabilization |
-| Next phase | **Phase 4L — session chat scroll only after session validation** |
+| Version | v0.1.23 (versionCode 23) |
+| Completed phase | **Phase 4L — chat viewport & keyboard anchoring, session_key field** |
+| Next phase | **Phase 4M — device verification of end-to-end send/stream** |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
 
@@ -205,6 +203,15 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
 - Extended `message.completed`/`assistant.completed` to also match `message.complete`; uses `payload` object first (Dashboard WS convention), falls back to `message` (REST SSE convention)
 - Unknown events logged with full `rawParams` (200-char preview) for debugging
 - Verified: thinking dropdown remains functional and collapsible after message completion
+
+### Phase 4L — Chat Viewport & Keyboard Anchoring, Session Key Field (v0.1.23)
+
+- **Replaced `scrollGeneration`-keyed LaunchedEffect with polling loop** — continuous 50ms polling while `isStreaming` ensures auto-scroll keeps up with rapid content growth without being cancelled by SSE event restarts
+- **Frame-based keyboard settle** — replaced fixed 500ms delay with `withFrameNanos` × 3 to wait for IME-driven layout pass
+- **Session ID lifecycle hardening** — split `sessionId` (DB key) from `liveSid` (transient RPC sid); `session_key` field added to `SessionResumeResult` with debug logging of match/mismatch
+- **Debug logging overhaul** — all session ID logs use `dbKey=$sessionId liveSid=$liveSid` format for clarity
+- **Handoff doc updated** to reflect Phase 4L completion
+- Version bumped to v0.1.23
 
 ### Phase 4K — Chat Viewport Stabilization (v0.1.21)
 - **Extracted `autoScrollToBottom()` helper** — unified two-step scroll: `scrollToItem(targetIndex)` then `scrollBy(remaining)` computed from `visibleItemsInfo` offset+size vs viewport height

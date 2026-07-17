@@ -23,6 +23,57 @@ android {
         }
     }
 
+    // ── Signing config: consistent key across all machines ──
+    // Local builds: keystore.properties (gitignored) at project root
+    // CI builds: KEYSTORE_BASE64 + KEYSTORE_PASSWORD + KEY_ALIAS + KEY_PASSWORD env vars
+    // MUST be declared before buildTypes which references signingConfigs.release
+    val localProps = rootProject.file("keystore.properties")
+    if (localProps.exists()) {
+        val lines = localProps.readLines()
+        fun lineValue(prefix: String): String? =
+            lines.firstOrNull { it.startsWith(prefix) }?.substringAfter("=")?.trim()
+        val sf = lineValue("storeFile") ?: error("keystore.properties: storeFile required")
+        val sp = lineValue("storePassword") ?: error("keystore.properties: storePassword required")
+        val ka = lineValue("keyAlias") ?: error("keystore.properties: keyAlias required")
+        val kp = lineValue("keyPassword") ?: error("keystore.properties: keyPassword required")
+        signingConfigs.create("release") {
+            storeFile = rootProject.file(sf)
+            storePassword = sp
+            keyAlias = ka
+            keyPassword = kp
+        }
+    } else {
+        val ciBase64 = providers.environmentVariable("KEYSTORE_BASE64").orNull
+        val storePass = providers.environmentVariable("KEYSTORE_PASSWORD").orNull
+        if (ciBase64 != null && storePass != null) {
+            val decodedFile = layout.buildDirectory.file("ci-release.keystore").get().asFile
+            decodedFile.parentFile.mkdirs()
+            decodedFile.writeBytes(
+                ciBase64.encodeToByteArray().let { raw ->
+                    ProcessBuilder("base64", "-d")
+                        .redirectInput(ProcessBuilder.Redirect.PIPE)
+                        .redirectOutput(decodedFile)
+                        .start().also { proc ->
+                            proc.outputStream.write(raw)
+                            proc.outputStream.close()
+                            proc.waitFor()
+                        }
+                    decodedFile.readBytes()
+                }
+            )
+            val ciKeyAlias = providers.environmentVariable("KEY_ALIAS").orNull ?: "hermex"
+            val ciKeyPass = providers.environmentVariable("KEY_PASSWORD").orNull ?: ""
+            signingConfigs.create("release") {
+                storeFile = decodedFile
+                storePassword = storePass
+                keyAlias = ciKeyAlias
+                keyPassword = ciKeyPass
+            }
+        } else {
+            signingConfigs.create("release") { }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -31,7 +82,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             isMinifyEnabled = false

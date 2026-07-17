@@ -69,10 +69,11 @@ jobs:
         if: steps.check_tag.outputs.exists == 'false'
         run: ./gradlew assembleRelease --no-configuration-cache
         env:
-          # Android SDK debug keystore is used by default for signing.
-          # For production signing, add KEYSTORE_BASE64 + KEY_* secrets
-          # and wire signingConfigs.release into app/build.gradle.kts.
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Locate APK
         if: steps.check_tag.outputs.exists == 'false'
