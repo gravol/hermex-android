@@ -54,6 +54,7 @@ import com.hermex.core.network.DebugLog
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -97,25 +98,15 @@ fun ChatScreen(
         }
     }
 
-    // ─── Debug: scrollGeneration tracking ───
-    LaunchedEffect(state.scrollGeneration) {
-        if (state.scrollGeneration > 0) {
-            DebugLog.log("UI", "ScrollGen",
-                "bump → ${state.scrollGeneration} " +
-                "messages=${state.messages.size} " +
-                "isStreaming=${state.isStreaming} " +
-                "userScrolledUp=$userScrolledUp")
-        }
-    }
-
-    // Session open: instantly jump to last message (no animation)
-    LaunchedEffect(state.messages.size) {
+    // ─── One-shot: scroll to bottom on initial message load ───
+    // Uses isNotEmpty() as key — fires exactly once when messages first arrive,
+    // does NOT re-fire on subsequent sends (key stays true).
+    LaunchedEffect(state.messages.isNotEmpty()) {
         if (state.messages.isNotEmpty()) {
-            val targetIdx = state.messages.lastIndex
             userScrolledUp = false
             autoScrollToBottom(
                 listState = listState,
-                targetIndex = targetIdx,
+                targetIndex = state.messages.lastIndex,
                 totalItems = state.messages.size,
                 scrollGeneration = 0L,
                 reason = "SessionOpen",
@@ -123,34 +114,30 @@ fun ChatScreen(
         }
     }
 
-    // Auto-scroll: follows any list mutation (deltas, tool calls, thinking, etc.)
-    // during streaming. Keyed on scrollGeneration — bumps on every SSE event that
-    // mutates the message list. Any future event type gets auto-scroll for free.
-    LaunchedEffect(state.scrollGeneration) {
-        if (state.messages.isNotEmpty() && !userScrolledUp && state.isStreaming) {
-            autoScrollToBottom(
-                listState = listState,
-                targetIndex = state.messages.lastIndex,
-                totalItems = state.messages.size,
-                scrollGeneration = state.scrollGeneration,
-                reason = "AutoScroll",
-            )
-        }
-    }
-
-    // When streaming ends, force a final scroll to bottom.
-    // Catches the case where the view drifted up mid-stream (from
-    // rapid content growth outpacing previous adjusts) and ensures
-    // the final message is visible after the stream closes.
+    // ─── Streaming auto-scroll: continuous polling loop ───
+    // Single source of truth for auto-scroll during streaming.
+    // Replaces scrollGeneration-keyed LaunchedEffect (which restarted on every
+    // SSE event, cancelling the scrollBy compensation mid-flight).
+    // Polls every 50ms — fast enough to keep up with rapid content growth,
+    // slow enough to avoid CPU churn.
+    // Respects manual scrolling: skips when userScrolledUp=true, resumes
+    // automatically when user returns to bottom (userScrolledUp→false).
     LaunchedEffect(state.isStreaming) {
-        if (!state.isStreaming && state.messages.isNotEmpty()) {
-            autoScrollToBottom(
-                listState = listState,
-                targetIndex = state.messages.lastIndex,
-                totalItems = state.messages.size,
-                scrollGeneration = state.scrollGeneration,
-                reason = "StreamEnd",
-            )
+        if (state.isStreaming && state.messages.isNotEmpty()) {
+            DebugLog.log("SCROLL", "StreamLoop", "started (messages=${state.messages.size})")
+            while (state.isStreaming && state.messages.isNotEmpty()) {
+                if (!userScrolledUp) {
+                    autoScrollToBottom(
+                        listState = listState,
+                        targetIndex = state.messages.lastIndex,
+                        totalItems = state.messages.size,
+                        scrollGeneration = state.scrollGeneration,
+                        reason = "StreamLoop",
+                    )
+                }
+                delay(50)
+            }
+            DebugLog.log("SCROLL", "StreamLoop", "ended (isStreaming=${state.isStreaming} messages=${state.messages.size})")
         }
     }
 
@@ -177,7 +164,20 @@ fun ChatScreen(
                 "keyboard open details: ime=${imeBottom}px " +
                 "sysBottom=${sysBottom}px sysTop=${sysTop}px " +
                 "density=${density.density}")
-            kotlinx.coroutines.delay(500)  // wait for keyboard + LazyColumn layout to settle
+
+            // Wait for keyboard animation + layout to settle.
+            // Uses frame-based waits (not a fixed delay) so we re-check
+            // after Compose processes the IME-driven layout pass.
+            var prevHeight = listState.layoutInfo.viewportSize.height
+            repeat(3) { attempt ->
+                withFrameNanos { }
+                val currentHeight = listState.layoutInfo.viewportSize.height
+                if (currentHeight != prevHeight) {
+                    DebugLog.log("UI", "Keyboard",
+                        "frame $attempt: viewportHeight changed $prevHeight→$currentHeight (waiting for settle)")
+                    prevHeight = currentHeight
+                }
+            }
 
             // Log viewport state after keyboard settles, before scroll
             val layoutInfo = listState.layoutInfo
@@ -731,6 +731,11 @@ private fun TypingDots() {
 // visible area). Uses scrollToItem (instant) + scrollBy for the remainder.
 // Logs comprehensive debug info: first/last visible indices, viewport height,
 // canScrollForward, and actual item bottom offset.
+//
+// IMPORTANT: This function MUST complete fully (both steps) to keep the
+// bottom of a tall message visible. The polling loop (StreamLoop) ensures
+// this function runs uninterrupted — it is NOT cancelled by rapid key
+// changes (unlike the old LaunchedEffect on scrollGeneration).
 
 private suspend fun autoScrollToBottom(
     listState: LazyListState,

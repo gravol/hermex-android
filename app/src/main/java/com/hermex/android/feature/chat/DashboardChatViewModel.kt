@@ -26,8 +26,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     // Compose snapshot state — identical pattern to ChatViewModel
     override var uiState by mutableStateOf(ChatUiState())
 
-    private var sessionId: String = ""
-    private var resumedSessionId: String = ""   // session_id returned by session.resume
+    private var sessionId: String = ""         // stable DB session key (e.g. "20260717_181712_7303bce8")
+    private var liveSid: String = ""           // transient live RPC sid from session.resume (8 hex chars, debug only)
+    private var resumedSessionId: String = ""   // "resumed" field from session.resume response
     private var sessionTitle: String = ""
     private val tempIdCounter = AtomicInteger(0)
 
@@ -48,11 +49,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             DebugLog.log("STATE", "SessionID", "init() — unchanged sessionId=$sessionId, skipped")
             return
         }
-        this.sessionId = sessionId
-        this.resumedSessionId = ""  // reset until session.resume returns
+        this.sessionId = sessionId           // KEEP as stable DB session key — do NOT overwrite with live sid
+        this.liveSid = ""                    // reset until session.resume returns
+        this.resumedSessionId = ""           // reset until session.resume returns
         this.sessionTitle = title ?: sessionId.take(16)
         uiState = ChatUiState(sessionTitle = this.sessionTitle)
-        DebugLog.log("STATE", "SessionID", "init() — set sessionId=$sessionId title=$sessionTitle")
+        DebugLog.log("STATE", "SessionID",
+            "init() — set sessionId=$sessionId (DB key) title=$sessionTitle")
         connectWsAndStart()
     }
 
@@ -62,16 +65,19 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             uiState = uiState.copy(isLoading = true, error = null)
             try {
                 val result = rpcClient.sessionResume(sessionId)
-                // Canonicalize: use the resolved live sid for all downstream ops
-                resumedSessionId = result.session_id
-                if (result.session_id != sessionId) {
+                // IMPORTANT: session.resume returns a transient live RPC session_id
+                // (e.g. "3aa3f8f3", 8 hex chars). We MUST keep the original DB session
+                // key (e.g. "20260717_181712_7303bce8") for all downstream RPC calls.
+                // The server's _sess_nowait resolves DB keys to live sids transparently.
+                liveSid = result.session_id  // store for debug logging only
+                resumedSessionId = result.resumed ?: sessionId
+                DebugLog.log("STATE", "SessionID",
+                    "loadMessages: dbKey=$sessionId liveSid=$liveSid " +
+                    "resumed=$resumedSessionId match=${sessionId == resumedSessionId} " +
+                    "resumedFromServer=${result.resumed}")
+                if (result.session_key != null && result.session_key != sessionId) {
                     DebugLog.log("STATE", "SessionID",
-                        "normalizing sessionId from $sessionId to ${result.session_id}")
-                    sessionId = result.session_id
-                } else {
-                    DebugLog.log("STATE", "SessionID",
-                        "session.resume returned session_id=${result.session_id} " +
-                        "(already canonical, match=${result.session_id == sessionId})")
+                        "session_key=${result.session_key} differs from dbKey=$sessionId")
                 }
                 val messages = result.messages?.map {
                     val messageContent = it.resolvedContent ?: ""
@@ -139,10 +145,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         viewModelScope.launch {
             try {
                 DebugLog.log("STATE", "SessionID",
-                    "sendMessage: current sessionId=$sessionId " +
-                    "resumedSessionId=$resumedSessionId " +
-                    "match=${sessionId == resumedSessionId}")
-                DebugLog.log("RPC", "DashboardChat", "prompt.submit → session=$sessionId")
+                    "sendMessage: dbKey=$sessionId liveSid=$liveSid " +
+                    "resumed=$resumedSessionId match=${sessionId == resumedSessionId}")
+                DebugLog.log("RPC", "DashboardChat", "prompt.submit → session=$sessionId (DB key)")
                 rpcClient.promptSubmit(sessionId, text)
             } catch (e: Exception) {
                 Log.e("Hermex", "DashboardChatViewModel: promptSubmit failed", e)
@@ -240,8 +245,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 val gwSessionId = n.sessionId
                 if (gwSessionId != null && gwSessionId.isNotEmpty()) {
                     DebugLog.log("STATE", "SessionID",
-                        "gateway.ready sessionId=$gwSessionId " +
-                        "(our sessionId=${this.sessionId}, match=$gwSessionId == ${this.sessionId})")
+                        "gateway.ready gwSessionId=$gwSessionId " +
+                        "(our dbKey=${this.sessionId} liveSid=$liveSid " +
+                        "match=$gwSessionId == ${this.sessionId})")
                 }
             }
 
