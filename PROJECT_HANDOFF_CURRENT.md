@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-07-17  
 **Current version:** v0.1.20 (versionCode 20)  
-**HEAD commit:** `580b779` — Phase 4G: complete session ID normalization  
+**HEAD commit:** `2059c72` — Phase 4J: streaming verification + hardening  
 **Branch:** `master` (up to date with `origin/master`)  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `~/HermexAndroid`
