@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff
 
 **Last updated:** 2026-07-17  
-**Current version:** 0.1.6 (versionCode 7)  
+**Current version:** 0.1.7 (versionCode 8)  
 **Repository:** `git@github.com:gravol/hermes-android.git`  
 **Working directory:** `~/HermexAndroid`
 
@@ -64,8 +64,7 @@ Four new files in `core/network/`, all compiling, full APK builds clean:
 | `JsonRpcClient.kt` | 433 | `@PublishedApi internal inline reified request()`, `CompletableDeferred` pending map, notification parser, v1 convenience methods, auto-deny for approval/clarify |
 
 ### What is NOT yet wired
-- **`HermexApplication` has not been updated** — it still calls `ApiClient.init()` (port 8650) but never calls `DashboardApiClient.init()` (port 9119)
-- **No dashboard SetupViewModel** — none of the dashboard auth flow is connected to UI
+- **No dashboard SetupViewModel** — none of the dashboard auth flow is connected to UI (login, status check)
 - **No dashboard ChatViewModel** — no JSON-RPC streaming parser wired to Compose state
 - **`MainActivity`** / `HermexNavGraph` still uses the old `ApiClient.isConfigured` check
 - **Feature modules** (`feature/chat/`, `feature/session/`, etc.) contain auto-generated stubs — dead code
@@ -115,6 +114,26 @@ These live alongside the existing REST+SSE code (`ApiClient.kt`, `DTOs.kt`, etc.
 - **Hardcoded username**: The 401 Authenticator in DashboardApiClient hardcodes `username = "jeff"` for re-login. Replace with stored value
 - **Auto-deny for v1**: Approval and clarify requests are auto-denied with a log message. Real UI should be built before removing this
 - **Delta shape**: `message.delta`, `thinking.delta`, `reasoning.delta` are APPEND-ONLY fragments. Client concatenates. No sequence field. Order guaranteed by WebSocket stream order
+
+---
+
+## Completed Work
+
+### Phase 1 — Dashboard Initialization (v0.1.7, commit `19f036c`)
+
+**What changed:**
+- `KeychainStore.kt` — added `saveDashboardCredentials()`, `getDashboardUrl()`, `getDashboardPassword()` methods alongside existing API key storage. Same `EncryptedSharedPreferences` backend (AES256 GCM), same fallback-to-plain-SharedPreferences pattern.
+- `HermexApplication.kt` — added `DashboardApiClient.init(this)` in a separate try/catch block after legacy `ApiClient.init()`. Restores saved dashboard URL and password from `KeychainStore` on startup. Legacy `ApiClient` init path unchanged.
+- `app/build.gradle.kts` — versionCode 7→8, versionName "0.1.6"→"0.1.7"
+
+**Design decisions:**
+- Dashboard init is in a **separate try/catch** from legacy init — a dashboard failure does not block legacy API server access
+- Dashboard credentials use **the same `hermex_auth` prefs file** as legacy credentials (separate keys, shared encrypted store)
+- No new Compose screens, no ViewModel changes, no WebSocket/JSON-RPC wiring — purely startup initialization
+
+**Verified:** `./gradlew assembleRelease --no-configuration-cache` → BUILD SUCCESSFUL
+
+**Next recommended phase:** Phase 2 — Dashboard SetupViewModel (`DashboardApiClient.status()` → `login()`, Compose screen for URL + password entry, route in `HermexNavGraph`). No WebSocket yet.
 
 ---
 
@@ -233,12 +252,8 @@ Not applicable — there is no iOS version in this repo. The old `~/hermes-andro
 
 ## Remaining Work
 
-### 1. Wire DashboardApiClient into HermexApplication
-**Goal:** Initialize the new networking stack on app startup, restore saved dashboard URL + password.  
-**Relevant files:** `HermexApplication.kt`, `DashboardApiClient.kt`, `KeychainStore.kt`  
-**Current progress:** `DashboardApiClient` is built and compiles. `HermexApplication` only initializes old `ApiClient`.  
-**Blocking issues:** None.  
-**Recommended next step:** Add `DashboardApiClient.init(this)` to `HermexApplication.onCreate()`, restore dashboard URL/password from `KeychainStore` (store them during login). Coexist with old `ApiClient` for now.
+### ~~1. Wire DashboardApiClient into HermexApplication~~ ✅ Done (v0.1.7)
+**Completed:** `DashboardApiClient.init(this)` now called in `HermexApplication.onCreate()` alongside legacy `ApiClient.init()`. Dashboard credentials restored from `KeychainStore` on startup. Separate try/catch ensures dashboard failure doesn't block legacy API access.
 
 ### 2. Create Dashboard SetupViewModel + setup flow
 **Goal:** User enters dashboard URL (e.g. `https://100.80.204.66:8443`), password. App calls `DashboardApiClient.status()` then `DashboardApiClient.login()`. On success, store credentials and navigate to sessions.  
