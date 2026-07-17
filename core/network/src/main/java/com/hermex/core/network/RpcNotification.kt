@@ -1,0 +1,143 @@
+package com.hermex.core.network
+
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+
+/**
+ * Server-pushed JSON-RPC notifications (no "id" field).
+ * Parsed from {"jsonrpc":"2.0","method":"event","params":{...}} frames.
+ *
+ * Every event carries [sessionId] in params (confirmed from _emit() in server.py).
+ * Route by session ID, not by type alone.
+ */
+sealed class RpcNotification {
+    /** Extracted from params.session_id on every event. */
+    abstract val sessionId: String?
+
+    // ── Connection lifecycle ──
+
+    data class GatewayReady(
+        val agentId: String? = null,
+        val version: String? = null,
+        override val sessionId: String? = null,
+    ) : RpcNotification()
+
+    // ── Streaming deltas (APPEND-ONLY — client concatenates) ──
+
+    /** Token-level text delta for the assistant response. Append-only, order guaranteed by WS. */
+    data class MessageDelta(
+        override val sessionId: String,
+        val text: String,
+    ) : RpcNotification()
+
+    /** Thinking/reasoning stream (shown in collapsible block). Append-only. */
+    data class ThinkingDelta(
+        override val sessionId: String,
+        val text: String,
+    ) : RpcNotification()
+
+    data class ReasoningDelta(
+        override val sessionId: String,
+        val text: String,
+    ) : RpcNotification()
+
+    // ── Tool events ──
+
+    data class ToolStarted(
+        override val sessionId: String,
+        val toolName: String,
+        val messageId: String? = null,
+        val preview: String? = null,
+        val args: JsonElement? = null,
+    ) : RpcNotification()
+
+    data class ToolProgress(
+        override val sessionId: String,
+        val toolName: String,
+        val delta: String? = null,
+    ) : RpcNotification()
+
+    data class ToolCompleted(
+        override val sessionId: String,
+        val toolName: String,
+    ) : RpcNotification()
+
+    // ── Run lifecycle ──
+
+    data class RunStarted(
+        override val sessionId: String,
+    ) : RpcNotification()
+
+    data class RunCompleted(
+        override val sessionId: String,
+    ) : RpcNotification()
+
+    // ── Message completion (final state from server) ──
+
+    data class MessageCompleted(
+        override val sessionId: String,
+        val messageId: String? = null,
+        val content: String? = null,
+        val toolCalls: List<ToolCallInfo>? = null,
+        val usage: UsageInfo? = null,
+    ) : RpcNotification()
+
+    @Serializable
+    data class ToolCallInfo(
+        val id: String? = null,
+        val function: FunctionInfo? = null,
+    )
+
+    @Serializable
+    data class FunctionInfo(
+        val name: String? = null,
+        val arguments: String? = null,
+    )
+
+    @Serializable
+    data class UsageInfo(
+        val promptTokens: Int? = null,
+        val completionTokens: Int? = null,
+        val totalTokens: Int? = null,
+        val estimatedCostUsd: Double? = null,
+    )
+
+    // ── User interaction requests (v1: auto-deny + visible notice) ──
+
+    /**
+     * Server needs approval for a tool call. Correlated by session_key (FIFO queue).
+     * v1 behavior: auto-deny with toast. Unhandled = hung turn.
+     */
+    data class ApprovalRequest(
+        override val sessionId: String,
+        val sessionKey: String,
+        val toolName: String? = null,
+        val args: JsonElement? = null,
+    ) : RpcNotification()
+
+    /**
+     * Server needs clarification from the user. Correlated by request_id.
+     * v1 behavior: auto-deny.
+     */
+    data class ClarifyRequest(
+        override val sessionId: String,
+        val requestId: String,
+        val question: String? = null,
+    ) : RpcNotification()
+
+    // ── Session info ──
+
+    data class SessionInfo(
+        override val sessionId: String,
+        val info: JsonObject? = null,
+    ) : RpcNotification()
+
+    // ── Fallback for unrecognized events ──
+
+    data class Unknown(
+        val eventType: String,
+        val rawParams: JsonObject? = null,
+        override val sessionId: String? = null,
+    ) : RpcNotification()
+}
