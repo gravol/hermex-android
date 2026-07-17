@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -71,15 +72,20 @@ fun ChatScreen(
         }
     }
 
-    // Auto-scroll when composer gains focus (keyboard opens)
-    var composerFocused by remember { mutableStateOf(false) }
-    LaunchedEffect(composerFocused) {
-        if (composerFocused && state.messages.isNotEmpty()) {
-            // Brief delay so imePadding has applied by the time we scroll
-            kotlinx.coroutines.delay(150)
+    // Detect keyboard open/close for scroll.
+    // Read WindowInsets.ime BEFORE Scaffold.imePadding() consumes it.
+    val density = LocalDensity.current
+    val imeBottom = WindowInsets.ime.getBottom(density)
+    LaunchedEffect(imeBottom) {
+        if (imeBottom > 0 && state.messages.isNotEmpty()) {
+            kotlinx.coroutines.delay(200)  // wait for keyboard animation
+            // Always scroll when keyboard opens — user wants to type, see latest
             listState.animateScrollToItem(state.messages.lastIndex)
         }
     }
+
+    // Track composer focus separately (for other uses if needed)
+    var composerFocused by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.imePadding(),
