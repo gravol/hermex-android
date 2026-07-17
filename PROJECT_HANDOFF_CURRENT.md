@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-17  
+**Last updated:** 2026-07-17 (post-device-test update)  
 **Current version:** v0.1.20 (versionCode 20)  
-**HEAD commit:** `2059c72` — Phase 4J: streaming verification + hardening  
+**HEAD commit:** `ea7e98e` — Update HEAD commit reference in PROJECT_HANDOFF_CURRENT.md  
 **Branch:** `master` (up to date with `origin/master`)  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `~/HermexAndroid`
