@@ -60,13 +60,19 @@ fun ChatScreen(
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
 
-    // Auto-scroll to bottom when new messages arrive — but only if
-    // the user is already near the bottom (don't fight manual scrolling)
-    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.content) {
+    // Session open: instantly jump to last message (no animation)
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty()) {
+            listState.scrollToItem(state.messages.lastIndex)
+        }
+    }
+
+    // Streaming auto-scroll: only when content changes, with near-bottom guard
+    LaunchedEffect(state.messages.lastOrNull()?.content) {
         if (state.messages.isNotEmpty()) {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             val total = listState.layoutInfo.totalItemsCount
-            if (total == 0 || lastVisible >= total - 3) {
+            if (lastVisible >= total - 3) {
                 listState.animateScrollToItem(state.messages.lastIndex)
             }
         }
