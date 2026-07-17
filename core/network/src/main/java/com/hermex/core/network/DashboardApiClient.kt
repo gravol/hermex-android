@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
  */
 object DashboardApiClient {
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
     private val mediaTypeJson = "application/json".toMediaType()
 
     private var dashboardUrl: String = ""       // e.g. "https://100.80.204.66:8443"
@@ -131,7 +131,7 @@ object DashboardApiClient {
      */
     suspend fun login(username: String, password: String): NetworkResult<LoginResponse> =
         withContext(Dispatchers.IO) {
-            val body = LoginRequest(username = username, password = password)
+            val body = LoginRequest(provider = "basic", username = username, password = password)
             val bodyStr = json.encodeToString(LoginRequest.serializer(), body)
             Log.d("Hermex", "DashboardApiClient.login() → $dashboardUrl/auth/password-login")
             DebugLog.log("REQ", "Dashboard", "POST /auth/password-login (user=$username)")
@@ -209,7 +209,7 @@ object DashboardApiClient {
                 Log.d("Hermex", "DashboardAuthenticator: 401 on ${response.request.url}, re-logging in")
 
                 try {
-                    val loginBody = LoginRequest(username = "jeff", password = currentPassword)
+                    val loginBody = LoginRequest(provider = "basic", username = "jeff", password = currentPassword)
                     val bodyStr = json.encodeToString(LoginRequest.serializer(), loginBody)
 
                     val loginCall = httpClient.newCall(
