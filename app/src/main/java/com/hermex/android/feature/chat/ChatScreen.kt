@@ -28,7 +28,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
@@ -60,21 +64,28 @@ fun ChatScreen(
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
 
+    // Track whether user has manually scrolled away from the bottom
+    var userScrolledUp by remember { mutableStateOf(false) }
+
+    // Reset flag when user scrolls back to the bottom
+    LaunchedEffect(listState.canScrollForward) {
+        if (!listState.canScrollForward) {
+            userScrolledUp = false
+        }
+    }
+
     // Session open: instantly jump to last message (no animation)
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
+            userScrolledUp = false
             listState.scrollToItem(state.messages.lastIndex)
         }
     }
 
-    // Streaming auto-scroll: only when content changes, with near-bottom guard
+    // Streaming auto-scroll: follows content unless user has dragged away
     LaunchedEffect(state.messages.lastOrNull()?.content) {
-        if (state.messages.isNotEmpty()) {
-            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val total = listState.layoutInfo.totalItemsCount
-            if (lastVisible >= total - 3) {
-                listState.animateScrollToItem(state.messages.lastIndex)
-            }
+        if (state.messages.isNotEmpty() && !userScrolledUp) {
+            listState.animateScrollToItem(state.messages.lastIndex)
         }
     }
 
@@ -225,7 +236,17 @@ fun ChatScreen(
                         state = listState,
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth(),
+                            .fillMaxWidth()
+                            .nestedScroll(remember {
+                                object : NestedScrollConnection {
+                                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                                        if (source == NestedScrollSource.UserInput && available.y > 0) {
+                                            userScrolledUp = true
+                                        }
+                                        return Offset.Zero
+                                    }
+                                }
+                            }),
                         contentPadding = PaddingValues(vertical = 8.dp),
                     ) {
                         itemsIndexed(state.messages, key = { _, msg -> msg.id }) { index, msg ->
