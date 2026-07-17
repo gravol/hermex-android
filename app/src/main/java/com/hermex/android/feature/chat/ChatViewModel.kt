@@ -28,6 +28,7 @@ data class UiMessage(
     val role: String,      // "user" | "assistant"
     val content: String = "",
     val isStreaming: Boolean = false,
+    val isWaitingForFirstEvent: Boolean = false,  // true from send until first SSE event
     val thinkingText: String? = null,
     val thinkingExpanded: Boolean = true,
     val thinkingHasContent: Boolean = false,  // true once first assistant.delta arrives
@@ -129,7 +130,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         current.add(userMsg)
 
         // Add empty streaming assistant message placeholder
-        val asstMsg = UiMessage(id = assistantMsgId, role = "assistant", isStreaming = true, timestamp = now)
+        val asstMsg = UiMessage(id = assistantMsgId, role = "assistant", isStreaming = true, isWaitingForFirstEvent = true, timestamp = now)
         current.add(asstMsg)
 
         uiState = uiState.copy(
@@ -240,6 +241,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             id = if (cur.id.startsWith("asst_")) msgId else cur.id,
                             content = cur.content + (event.delta ?: ""),
                             thinkingHasContent = true,
+                            isWaitingForFirstEvent = false,
                         )
                         DebugLog.sse("Handler", "delta → msg[$idx] content now ${msgs[idx].content.length} chars")
                     } else {
@@ -254,7 +256,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     if (idx >= 0) {
                         val cur = msgs[idx]
                         val existing = cur.thinkingText ?: ""
-                        msgs[idx] = cur.copy(thinkingText = existing + (event.delta ?: ""))
+                        msgs[idx] = cur.copy(thinkingText = existing + (event.delta ?: ""), isWaitingForFirstEvent = false)
                     }
                 }
             }

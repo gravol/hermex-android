@@ -5,6 +5,11 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -15,6 +20,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -443,12 +449,16 @@ private fun MessageBubble(
                     )
                 }
             } else if (message.isStreaming && message.thinkingText == null) {
-                // Streaming hasn't produced content yet, no thinking either
-                Text(
-                    text = "▌",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                // No content yet — show typing dots while waiting, cursor otherwise
+                if (message.isWaitingForFirstEvent) {
+                    TypingDots()
+                } else {
+                    Text(
+                        text = "▌",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             } else if (message.isStreaming && message.thinkingHasContent && message.content.isBlank()) {
                 // Thinking done, content starting soon — show cursor
                 Text(
@@ -577,5 +587,39 @@ private fun formatTime(epochMillis: Long): String {
         timeFormatter.format(Instant.ofEpochMilli(epochMillis))
     } catch (_: Exception) {
         ""
+    }
+}
+
+// ── TYPING DOTS (bouncing animation, iMessage-style) ──
+
+@Composable
+private fun TypingDots() {
+    val infiniteTransition = rememberInfiniteTransition(label = "typing")
+    val delays = listOf(0, 150, 300)
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 6.dp),
+    ) {
+        delays.forEachIndexed { i, delayMs ->
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.3f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(400, delayMillis = delayMs),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "dot$i",
+            )
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+                    ),
+            )
+        }
     }
 }
