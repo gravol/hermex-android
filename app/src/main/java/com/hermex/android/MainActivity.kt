@@ -40,18 +40,20 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HermexNavGraph() {
     val navController = rememberNavController()
-    // Prefer dashboard auth; fall back to legacy API server setup
+    // Dashboard is the primary path. Legacy API fallback is only reachable
+    // via explicit navigation to "setup" — never auto-selected at startup.
+    // Old legacy credentials will not prevent the dashboard setup screen.
     val startDest = when {
         DashboardApiClient.isConfigured -> {
             DebugLog.log("ROUTE", "MainActivity", "startup → home (dashboard configured)")
             "home"
         }
-        ApiClient.isConfigured -> {
-            DebugLog.log("ROUTE", "MainActivity", "startup → home (LEGACY API configured — dashboard NOT configured)")
-            "home"
-        }
         else -> {
-            DebugLog.log("ROUTE", "MainActivity", "startup → dashboard-setup (neither configured)")
+            if (ApiClient.isConfigured) {
+                DebugLog.log("ROUTE", "MainActivity", "startup → dashboard-setup (legacy API exists but dashboard not configured)")
+            } else {
+                DebugLog.log("ROUTE", "MainActivity", "startup → dashboard-setup (neither configured)")
+            }
             "dashboard-setup"
         }
     }

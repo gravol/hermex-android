@@ -5,13 +5,19 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hermex.core.network.ApiClient
+import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
+import com.hermex.core.network.JsonRpcClient
 import com.hermex.core.network.NetworkResult
 import com.hermex.core.network.SessionSummary
+import com.hermex.core.network.WsConnectionManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 data class SessionsUiState(
     val sessions: List<SessionSummary> = emptyList(),
@@ -31,35 +37,116 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
     fun loadSessions() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            DebugLog.log("INFO", "SessionsVM", "loadSessions via LEGACY ApiClient.sessions()")
-            try {
-                when (val result = ApiClient.sessions()) {
-                    is NetworkResult.Success -> {
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            sessions = result.data.data,
-                            error = null,
-                        )
-                    }
-                    is NetworkResult.HttpError -> {
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            error = "Server error (${result.code})",
-                        )
-                    }
-                    is NetworkResult.Error -> {
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            error = result.exception.message ?: "Failed to load sessions",
-                        )
-                    }
+
+            if (DashboardApiClient.isConfigured) {
+                loadDashboardSessions()
+            } else {
+                loadLegacySessions()
+            }
+        }
+    }
+
+    // ── Dashboard JSON-RPC session.list ──
+
+    private suspend fun loadDashboardSessions() {
+        DebugLog.log("INFO", "SessionsVM", "loadSessions via DASHBOARD JsonRpcClient.sessionList()")
+        Log.d("Hermex", "SessionsViewModel: loading dashboard sessions")
+
+        val wsConnection = WsConnectionManager(viewModelScope)
+
+        try {
+            // Connect WS
+            wsConnection.connect()
+
+            val rpcClient = JsonRpcClient(wsConnection, viewModelScope)
+            rpcClient.start()
+
+            val rpcSessions = rpcClient.sessionList()
+            DebugLog.log("INFO", "SessionsVM", "session.list → ${rpcSessions.size} sessions")
+
+            val mapped = rpcSessions.map { it.toSessionSummary() }
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                sessions = mapped,
+                error = null,
+            )
+        } catch (e: Exception) {
+            Log.e("Hermex", "SessionsViewModel: dashboard session load failed", e)
+            DebugLog.log("ERROR", "SessionsVM", "dashboard session.list failed: ${e.message}")
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = "Dashboard: ${e.message ?: "Session load failed"}",
+            )
+        } finally {
+            wsConnection.disconnect()
+        }
+    }
+
+    // ── Legacy API fallback ──
+
+    private suspend fun loadLegacySessions() {
+        DebugLog.log("INFO", "SessionsVM", "loadSessions via LEGACY ApiClient.sessions()")
+        try {
+            when (val result = ApiClient.sessions()) {
+                is NetworkResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        sessions = result.data.data,
+                        error = null,
+                    )
                 }
-            } catch (e: Exception) {
-                Log.e("Hermex", "loadSessions crashed", e)
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = e.message ?: "Unexpected error",
-                )
+                is NetworkResult.HttpError -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Server error (${result.code})",
+                    )
+                }
+                is NetworkResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = result.exception.message ?: "Failed to load sessions",
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("Hermex", "loadSessions crashed", e)
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = e.message ?: "Unexpected error",
+            )
+        }
+    }
+
+    // ── Mapping: JsonRpcClient.SessionInfo → SessionSummary ──
+
+    private fun JsonRpcClient.SessionInfo.toSessionSummary(): SessionSummary {
+        return SessionSummary(
+            id = id,
+            title = title,
+            source = source,
+            model = model,
+            startedAt = created_at?.let { parseIsoToEpoch(it) },
+            lastActive = updated_at?.let { parseIsoToEpoch(it) },
+            messageCount = message_count ?: 0,
+            preview = preview,
+        )
+    }
+
+    companion object {
+        private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+
+        /**
+         * Parse ISO-8601 timestamp (e.g. "2026-07-17T12:34:56") to epoch seconds.
+         * Returns null on parse failure.
+         */
+        private fun parseIsoToEpoch(iso: String): Double? {
+            return try {
+                val date = isoFormat.parse(iso.substringBefore('.').substringBefore('Z'))
+                date?.time?.toDouble()?.div(1000.0)
+            } catch (_: Exception) {
+                null
             }
         }
     }
