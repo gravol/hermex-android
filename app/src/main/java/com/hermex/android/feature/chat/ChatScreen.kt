@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hermex.core.network.DebugLog
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -75,23 +76,41 @@ fun ChatScreen(
 
     // Reset flag when user scrolls back to the bottom
     LaunchedEffect(listState.canScrollForward) {
-        if (!listState.canScrollForward) {
+        if (!listState.canScrollForward && userScrolledUp) {
             userScrolledUp = false
+            DebugLog.log("SCROLL", "DragDetect", "userScrolledUp=false (scrolled back to bottom)")
         }
     }
 
     // Session open: instantly jump to last message (no animation)
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
+            if (userScrolledUp) {
+                DebugLog.log("SCROLL", "SessionOpen", "userScrolledUp=false (session open, ${state.messages.size} msgs)")
+            }
             userScrolledUp = false
             listState.scrollToItem(state.messages.lastIndex)
         }
     }
 
-    // Streaming auto-scroll: follows content unless user has dragged away
+    // Streaming auto-scroll: follows content unless user has dragged away.
+    // Uses scrollToItem (instant) instead of animateScrollToItem to avoid
+    // animation-cancellation drift during rapid deltas (10-50ms gaps).
     LaunchedEffect(state.messages.lastOrNull()?.content) {
         if (state.messages.isNotEmpty() && !userScrolledUp) {
-            listState.animateScrollToItem(state.messages.lastIndex)
+            DebugLog.log("SCROLL", "AutoScroll", "scrollToItem(lastIndex=${state.messages.lastIndex}) contentLen=${state.messages.last().content.length}")
+            listState.scrollToItem(state.messages.lastIndex)
+        }
+    }
+
+    // When streaming ends, force a final scroll to bottom.
+    // Catches the case where the view drifted up mid-stream (from
+    // rapid content growth outpacing aborted animations) and ensures
+    // the final message is visible after the stream closes.
+    LaunchedEffect(state.isStreaming) {
+        if (!state.isStreaming && state.messages.isNotEmpty()) {
+            DebugLog.log("SCROLL", "StreamEnd", "stream ended (isStreaming=false), forcing scrollToItem(lastIndex=${state.messages.lastIndex})")
+            listState.scrollToItem(state.messages.lastIndex)
         }
     }
 
@@ -247,7 +266,13 @@ fun ChatScreen(
                                 object : NestedScrollConnection {
                                     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                                         if (source == NestedScrollSource.UserInput && available.y > 0) {
-                                            userScrolledUp = true
+                                            if (!userScrolledUp) {
+                                                userScrolledUp = true
+                                                DebugLog.log("SCROLL", "DragDetect",
+                                                    "userScrolledUp=true (source=$source, " +
+                                                    "available.y=${available.y}, " +
+                                                    "isScrollInProgress=${listState.isScrollInProgress})")
+                                            }
                                         }
                                         return Offset.Zero
                                     }
