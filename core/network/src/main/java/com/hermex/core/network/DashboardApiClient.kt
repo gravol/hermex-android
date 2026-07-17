@@ -15,22 +15,26 @@ import okhttp3.Route
 import java.util.concurrent.TimeUnit
 
 /**
- * REST client for the Hermes Dashboard (port 9119/8443).
+ * REST client for the Hermes Dashboard (port 8443 REST, 9119 WebSocket).
  *
  * Auth chain: password-login → session cookies → ws-ticket → WebSocket.
  * Separate from [ApiClient] (port 8650 Bearer-auth REST+SSE).
  * Both coexist in the same codebase.
+ *
+ * REST calls use [restUrl] (port 8443 HTTPS). WebSocket upgrades use [wsUrl]
+ * (port 9119 WS), derived automatically from [restUrl] in [setDashboardUrl].
  */
 object DashboardApiClient {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
     private val mediaTypeJson = "application/json".toMediaType()
 
-    private var dashboardUrl: String = ""       // e.g. "https://100.80.204.66:8443"
+    private var restUrl: String = ""            // e.g. "https://100.80.204.66:8443"
+    private var wsUrl: String = ""              // e.g. "ws://100.80.204.66:9119"  (derived)
     private var dashboardPassword: String = ""
     private lateinit var httpClient: OkHttpClient
 
-    val isConfigured: Boolean get() = dashboardUrl.isNotEmpty() && dashboardPassword.isNotEmpty()
+    val isConfigured: Boolean get() = restUrl.isNotEmpty() && dashboardPassword.isNotEmpty()
 
     // ── Init ──
 
@@ -74,7 +78,12 @@ object DashboardApiClient {
     }
 
     fun setDashboardUrl(url: String) {
-        dashboardUrl = url.trimEnd('/')
+        restUrl = url.trimEnd('/')
+        // Derive the WebSocket URL: same host, port 9119, ws:///wss:// scheme
+        wsUrl = restUrl
+            .replace("https://", "wss://")
+            .replace("http://", "ws://")
+            .replace(":8443", ":9119")
     }
 
     fun setPassword(password: String) {
@@ -84,7 +93,11 @@ object DashboardApiClient {
     /** Expose the HTTP client for ticket-fetch + WS creation. */
     fun httpClient(): OkHttpClient = httpClient
 
-    fun baseUrl(): String = dashboardUrl
+    /** REST base URL (port 8443 HTTPS). Used for login, ws-ticket, status. */
+    fun baseUrl(): String = restUrl
+
+    /** WebSocket base URL (port 9119 WS/WSS). Used for WS upgrade. */
+    fun wsBaseUrl(): String = wsUrl
 
     // ── Auth endpoints ──
 
@@ -133,12 +146,12 @@ object DashboardApiClient {
         withContext(Dispatchers.IO) {
             val body = LoginRequest(provider = "basic", username = username, password = password)
             val bodyStr = json.encodeToString(LoginRequest.serializer(), body)
-            Log.d("Hermex", "DashboardApiClient.login() → $dashboardUrl/auth/password-login")
+            Log.d("Hermex", "DashboardApiClient.login() → $restUrl/auth/password-login")
             DebugLog.log("REQ", "Dashboard", "POST /auth/password-login (user=$username)")
             try {
                 val response = httpClient.newCall(
                     Request.Builder()
-                        .url("$dashboardUrl/auth/password-login")
+                        .url("$restUrl/auth/password-login")
                         .post(bodyStr.toRequestBody(mediaTypeJson))
                         .build()
                 ).execute()
@@ -157,12 +170,12 @@ object DashboardApiClient {
      */
     suspend fun fetchWsTicket(): NetworkResult<WsTicketResponse> =
         withContext(Dispatchers.IO) {
-            Log.d("Hermex", "DashboardApiClient.fetchWsTicket() → $dashboardUrl/api/auth/ws-ticket")
+            Log.d("Hermex", "DashboardApiClient.fetchWsTicket() → $restUrl/api/auth/ws-ticket")
             DebugLog.log("REQ", "Dashboard", "POST /api/auth/ws-ticket")
             try {
                 val response = httpClient.newCall(
                     Request.Builder()
-                        .url("$dashboardUrl/api/auth/ws-ticket")
+                        .url("$restUrl/api/auth/ws-ticket")
                         .post("{}".toRequestBody(mediaTypeJson))
                         .build()
                 ).execute()
@@ -214,7 +227,7 @@ object DashboardApiClient {
 
                     val loginCall = httpClient.newCall(
                         Request.Builder()
-                            .url("$dashboardUrl/auth/password-login")
+                            .url("$restUrl/auth/password-login")
                             .post(bodyStr.toRequestBody(mediaTypeJson))
                             .build()
                     )

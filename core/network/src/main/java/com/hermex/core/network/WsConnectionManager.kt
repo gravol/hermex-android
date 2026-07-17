@@ -125,9 +125,7 @@ class WsConnectionManager(
     // ── Internal ──
 
     private fun openWebSocket(ticket: String) {
-        val wsUrl = DashboardApiClient.baseUrl()
-            .replace("https://", "wss://")
-            .replace("http://", "ws://")
+        val wsUrl = DashboardApiClient.wsBaseUrl()
             .trimEnd('/') + "/api/ws?ticket=$ticket"
 
         DebugLog.log("WS", "Connection", "opening → $wsUrl")
