@@ -84,8 +84,7 @@ fun ChatScreen(
     val imeBottom = WindowInsets.ime.getBottom(density)
     LaunchedEffect(imeBottom) {
         if (imeBottom > 0 && state.messages.isNotEmpty()) {
-            kotlinx.coroutines.delay(200)  // wait for keyboard animation
-            // Always scroll when keyboard opens — user wants to type, see latest
+            kotlinx.coroutines.delay(400)  // wait for full keyboard animation
             listState.animateScrollToItem(state.messages.lastIndex)
         }
     }
