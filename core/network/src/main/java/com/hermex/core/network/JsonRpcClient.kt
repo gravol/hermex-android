@@ -379,7 +379,7 @@ class JsonRpcClient(
     @Serializable
     data class SessionResumeResult(
         val session_id: String,
-        val resumed: Boolean? = null,
+        val resumed: String? = null,  // server returns original session_id, not a boolean
         val message_count: Int? = null,
         val messages: List<MessageData>? = null,
         val info: JsonObject? = null,
@@ -390,9 +390,16 @@ class JsonRpcClient(
         val id: String? = null,
         val role: String? = null,
         val content: String? = null,
+        val text: String? = null,  // server sends "text" field, not "content"
+        val name: String? = null,  // tool-result messages have "name"
+        val context: String? = null,  // tool-result messages have "context"
         val created_at: String? = null,
         val tool_calls: List<RpcNotification.ToolCallInfo>? = null,
-    )
+    ) {
+        /** Resolve message text from any known field. */
+        val resolvedContent: String?
+            get() = content ?: text ?: context
+    }
 
     @Serializable
     data class PromptSubmitResult(

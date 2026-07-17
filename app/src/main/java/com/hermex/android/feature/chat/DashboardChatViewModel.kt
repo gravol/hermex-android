@@ -53,10 +53,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             try {
                 val result = rpcClient.sessionResume(sessionId)
                 val messages = result.messages?.map {
+                    val messageContent = it.resolvedContent ?: ""
                     UiMessage(
                         id = it.id ?: "msg_${tempIdCounter.incrementAndGet()}",
                         role = it.role ?: "user",
-                        content = it.content ?: "",
+                        content = messageContent,
                         thinkingExpanded = false,
                         thinkingHasContent = true,
                         toolCalls = it.tool_calls?.map { tc ->
