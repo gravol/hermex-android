@@ -82,14 +82,45 @@ fun ChatScreen(
         }
     }
 
+    // ─── Debug: message count tracking ───
+    var prevMessageCount by remember { mutableStateOf(0) }
+    LaunchedEffect(state.messages.size) {
+        val newCount = state.messages.size
+        if (newCount != prevMessageCount) {
+            DebugLog.log("UI", "MsgCount",
+                "changed: $prevMessageCount → $newCount " +
+                "(delta=${newCount - prevMessageCount}) " +
+                "isStreaming=${state.isStreaming}")
+            prevMessageCount = newCount
+        }
+    }
+
+    // ─── Debug: scrollGeneration tracking ───
+    LaunchedEffect(state.scrollGeneration) {
+        if (state.scrollGeneration > 0) {
+            DebugLog.log("UI", "ScrollGen",
+                "bump → ${state.scrollGeneration} " +
+                "messages=${state.messages.size} " +
+                "isStreaming=${state.isStreaming} " +
+                "userScrolledUp=$userScrolledUp")
+        }
+    }
+
     // Session open: instantly jump to last message (no animation)
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
-            if (userScrolledUp) {
-                DebugLog.log("SCROLL", "SessionOpen", "userScrolledUp=false (session open, ${state.messages.size} msgs)")
-            }
+            val targetIdx = state.messages.lastIndex
+            val beforeFirst = listState.firstVisibleItemIndex
+            DebugLog.log("SCROLL", "SessionOpen",
+                "reason=session_load messages=${state.messages.size} " +
+                "scrollToItem(target=$targetIdx) userScrolledUp=$userScrolledUp " +
+                "firstVisibleBefore=$beforeFirst")
             userScrolledUp = false
-            listState.scrollToItem(state.messages.lastIndex)
+            listState.scrollToItem(targetIdx)
+            DebugLog.log("SCROLL", "SessionOpen",
+                "scrollToItem($targetIdx) done " +
+                "firstVisibleAfter=${listState.firstVisibleItemIndex} " +
+                "canScrollForward=${listState.canScrollForward}")
         }
     }
 
@@ -98,8 +129,18 @@ fun ChatScreen(
     // mutates the message list. Any future event type gets auto-scroll for free.
     LaunchedEffect(state.scrollGeneration) {
         if (state.messages.isNotEmpty() && !userScrolledUp && state.isStreaming) {
-            DebugLog.log("SCROLL", "AutoScroll", "gen=${state.scrollGeneration} scrollToItem(lastIndex=${state.messages.lastIndex})")
-            listState.scrollToItem(state.messages.lastIndex)
+            val targetIdx = state.messages.lastIndex
+            val beforeFirst = listState.firstVisibleItemIndex
+            DebugLog.log("SCROLL", "AutoScroll",
+                "reason=content_delta gen=${state.scrollGeneration} " +
+                "isStreaming=${state.isStreaming} userScrolledUp=$userScrolledUp " +
+                "target=$targetIdx totalItems=${state.messages.size} " +
+                "firstVisibleBefore=$beforeFirst")
+            listState.scrollToItem(targetIdx)
+            DebugLog.log("SCROLL", "AutoScroll",
+                "scrollToItem($targetIdx) done " +
+                "firstVisibleAfter=${listState.firstVisibleItemIndex} " +
+                "canScrollForward=${listState.canScrollForward}")
         }
     }
 
@@ -109,10 +150,18 @@ fun ChatScreen(
     // the final message is visible after the stream closes.
     LaunchedEffect(state.isStreaming) {
         if (!state.isStreaming && state.messages.isNotEmpty()) {
-            val idx = state.messages.lastIndex  // compute fresh at call time
+            val idx = state.messages.lastIndex
             val count = state.messages.size
-            DebugLog.log("SCROLL", "StreamEnd", "stream ended, scrollToItem(lastIndex=$idx, totalItems=$count)")
+            val beforeFirst = listState.firstVisibleItemIndex
+            DebugLog.log("SCROLL", "StreamEnd",
+                "reason=stream_ended gen=${state.scrollGeneration} " +
+                "target=$idx totalItems=$count " +
+                "firstVisibleBefore=$beforeFirst")
             listState.scrollToItem(idx)
+            DebugLog.log("SCROLL", "StreamEnd",
+                "scrollToItem($idx) done " +
+                "firstVisibleAfter=${listState.firstVisibleItemIndex} " +
+                "canScrollForward=${listState.canScrollForward}")
         }
     }
 
@@ -122,11 +171,37 @@ fun ChatScreen(
     // fights the LazyColumn layout changes from imePadding() settling.
     val density = LocalDensity.current
     val imeBottom = WindowInsets.ime.getBottom(density)
+    val sysBottom = WindowInsets.systemBars.getBottom(density)
+    val sysTop = WindowInsets.systemBars.getTop(density)
     LaunchedEffect(imeBottom) {
+        val prevFirstVisible = listState.firstVisibleItemIndex
+        val prevTotalItems = state.messages.size
+        DebugLog.log("UI", "Keyboard",
+            "event=${if (imeBottom > 0) "OPEN" else "CLOSE"} " +
+            "imeHeight=${imeBottom}px messages=$prevTotalItems " +
+            "firstVisibleBefore=$prevFirstVisible")
         if (imeBottom > 0 && state.messages.isNotEmpty()) {
+            // Log window/inset height before scroll
+            DebugLog.log("UI", "Keyboard",
+                "keyboard open details: ime=${imeBottom}px " +
+                "sysBottom=${sysBottom}px sysTop=${sysTop}px " +
+                "density=${density.density}")
             kotlinx.coroutines.delay(500)  // wait for keyboard + LazyColumn layout to settle
-            DebugLog.log("SCROLL", "Keyboard", "keyboard open (ime=${imeBottom}px), scrollToItem(lastIndex=${state.messages.lastIndex})")
-            listState.scrollToItem(state.messages.lastIndex)
+            // Log viewport state after keyboard settles, before scroll
+            val layoutInfo = listState.layoutInfo
+            val firstVis = layoutInfo.visibleItemsInfo.firstOrNull()
+            val lastVis = layoutInfo.visibleItemsInfo.lastOrNull()
+            val targetIdx = state.messages.lastIndex
+            DebugLog.log("SCROLL", "Keyboard",
+                "reason=keyboard_open ime=${imeBottom}px " +
+                "target=$targetIdx totalItems=${state.messages.size} " +
+                "viewportBefore=[${firstVis?.index}..${lastVis?.index}] " +
+                "totalViewportItems=${layoutInfo.visibleItemsInfo.size}")
+            listState.scrollToItem(targetIdx)
+            DebugLog.log("SCROLL", "Keyboard",
+                "scrollToItem($targetIdx) done " +
+                "firstVisibleAfter=${listState.firstVisibleItemIndex} " +
+                "canScrollForward=${listState.canScrollForward}")
         }
     }
 

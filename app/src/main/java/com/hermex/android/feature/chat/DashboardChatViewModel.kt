@@ -35,6 +35,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     private val rpcClient = JsonRpcClient(wsConnection, viewModelScope)
     private var notificationCollectorJob: Job? = null
 
+    // ─── Debug: timing & state tracking ───
+    private var connectStartTime = 0L
+    private var sessionLoadStartTime = 0L
+
     // ── Public API ──
 
     /** Initialize with a session. Call once from the composable. */
@@ -75,7 +79,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     messages = messages,
                     error = null,
                 )
-                DebugLog.log("RPC", "DashboardChat", "session.resume → ${messages.size} messages")
+                val loadDuration = if (sessionLoadStartTime > 0) System.currentTimeMillis() - sessionLoadStartTime else -1L
+                DebugLog.log("RPC", "DashboardChat",
+                    "session.resume → ${messages.size} messages in ${loadDuration}ms" +
+                    " (message_count=${result.message_count})")
+                sessionLoadStartTime = 0L
             } catch (e: Exception) {
                 Log.e("Hermex", "DashboardChatViewModel: loadMessages failed", e)
                 uiState = uiState.copy(
@@ -159,11 +167,22 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
     private fun connectWsAndStart() {
         viewModelScope.launch {
+            connectStartTime = System.currentTimeMillis()
             try {
                 DebugLog.log("WS", "DashboardChat", "connecting WebSocket")
                 wsConnection.connect()
+                val connectDuration = System.currentTimeMillis() - connectStartTime
+                DebugLog.log("WS", "DashboardChat", "WebSocket connected in ${connectDuration}ms — starting RPC")
+
+                // Monitor WS state transitions
+                launch {
+                    wsConnection.state.collect { wsState ->
+                        DebugLog.log("WS", "ChatVM", "state=${wsState}")
+                    }
+                }
+
                 rpcClient.start()
-                DebugLog.log("WS", "DashboardChat", "WebSocket connected, RPC client started")
+                DebugLog.log("WS", "DashboardChat", "RPC client started, total=${System.currentTimeMillis() - connectStartTime}ms")
 
                 // Begin collecting notifications
                 notificationCollectorJob = launch {
@@ -173,6 +192,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 }
 
                 // Load session history after connection
+                sessionLoadStartTime = System.currentTimeMillis()
                 loadMessages()
             } catch (e: Exception) {
                 Log.e("Hermex", "DashboardChatViewModel: WebSocket connect failed", e)
