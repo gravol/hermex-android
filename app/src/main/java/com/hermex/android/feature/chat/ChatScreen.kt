@@ -59,7 +59,7 @@ fun ChatScreen(
     sessionId: String,
     sessionTitle: String?,
     onBack: () -> Unit,
-    viewModel: ChatViewModel = viewModel(),
+    viewModel: ChatViewModelContract,
 ) {
     LaunchedEffect(sessionId) {
         viewModel.init(sessionId, sessionTitle)

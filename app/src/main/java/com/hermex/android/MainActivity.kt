@@ -5,12 +5,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.hermex.android.feature.chat.ChatScreen
+import com.hermex.android.feature.chat.ChatViewModel
+import com.hermex.android.feature.chat.DashboardChatViewModel
 import com.hermex.android.feature.onboarding.DashboardSetupScreen
 import com.hermex.android.feature.onboarding.SetupScreen
 import com.hermex.android.feature.sessions.SessionsScreen
@@ -88,10 +91,16 @@ fun HermexNavGraph() {
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
             val encodedTitle = backStackEntry.arguments?.getString("title") ?: ""
             val title = URLDecoder.decode(encodedTitle, "UTF-8")
+            val chatViewModel = if (DashboardApiClient.isConfigured) {
+                viewModel<DashboardChatViewModel>()
+            } else {
+                viewModel<ChatViewModel>()
+            }
             ChatScreen(
                 sessionId = sessionId,
                 sessionTitle = title,
                 onBack = { navController.popBackStack() },
+                viewModel = chatViewModel,
             )
         }
     }

@@ -1,0 +1,18 @@
+package com.hermex.android.feature.chat
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+
+/**
+ * Shared contract for chat ViewModels — both the legacy SSE [ChatViewModel]
+ * and the new dashboard [DashboardChatViewModel] implement this.
+ * Allows [ChatScreen] to work with either backend without changes.
+ */
+abstract class ChatViewModelContract(application: Application) : AndroidViewModel(application) {
+    abstract var uiState: ChatUiState
+    abstract fun init(sessionId: String, title: String?)
+    abstract fun loadMessages()
+    abstract fun sendMessage(text: String)
+    abstract fun stopStreaming()
+    abstract fun toggleThinking(messageId: String)
+}

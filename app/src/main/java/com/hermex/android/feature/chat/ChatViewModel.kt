@@ -63,11 +63,10 @@ data class ChatUiState(
 
 // ── ViewModel ──
 
-class ChatViewModel(application: Application) : AndroidViewModel(application) {
+class ChatViewModel(application: Application) : ChatViewModelContract(application) {
 
     // Compose snapshot state — no StateFlow conflation, every write feeds the next frame
-    var uiState by mutableStateOf(ChatUiState())
-        private set
+    override var uiState by mutableStateOf(ChatUiState())
 
     private var sessionId: String = ""
     private var sessionTitle: String = ""
@@ -77,7 +76,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     // ── Public API ──
 
     /** Initialize with a session. Call once from the composable. */
-    fun init(sessionId: String, title: String?) {
+    override fun init(sessionId: String, title: String?) {
         if (this.sessionId == sessionId) return
         this.sessionId = sessionId
         this.sessionTitle = title ?: sessionId.take(16)
@@ -85,7 +84,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         loadMessages()
     }
 
-    fun loadMessages() {
+    override fun loadMessages() {
         if (sessionId.isEmpty()) return
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, error = null)
@@ -114,7 +113,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun sendMessage(text: String) {
+    override fun sendMessage(text: String) {
         if (text.isBlank() || sessionId.isEmpty()) return
 
         // Cancel any previous stream before opening a new one
@@ -193,13 +192,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun stopStreaming() {
+    override fun stopStreaming() {
         activeEventSource?.cancel()
         activeEventSource = null
         uiState = uiState.copy(isStreaming = false)
     }
 
-    fun toggleThinking(messageId: String) {
+    override fun toggleThinking(messageId: String) {
         val msgs = uiState.messages.toMutableList()
         val idx = msgs.indexOfFirst { it.id == messageId }
         if (idx >= 0) {
