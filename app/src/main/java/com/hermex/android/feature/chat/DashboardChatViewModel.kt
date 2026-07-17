@@ -20,17 +20,26 @@ import java.util.concurrent.atomic.AtomicInteger
  * Reuses the same UI models ([UiMessage], [UiToolCall], [UiUsage], [ChatUiState])
  * and the same [mutableStateOf] snapshot-state pattern as the legacy SSE [ChatViewModel].
  * [ChatScreen] requires no changes — data flows underneath the existing Compose UI.
+ *
+ * SESSION ID LIFECYCLE RULES (Phase 4L.1):
+ * - sessionId (DB key, e.g. "20260717_205748_97c893e8") is persistent and is the
+ *   ONLY value allowed for ALL RPC calls: session.resume, prompt.submit,
+ *   session.interrupt, session.info.
+ * - liveSid (transient live RPC SID, e.g. "0b6c225e") is returned by session.resume
+ *   and is for debug logging ONLY. NEVER assign it to sessionId.
+ * - resumedSessionId stores the "resumed" field from session.resume for logging.
  */
 class DashboardChatViewModel(application: Application) : ChatViewModelContract(application) {
 
     // Compose snapshot state — identical pattern to ChatViewModel
     override var uiState by mutableStateOf(ChatUiState())
 
-    private var sessionId: String = ""         // stable DB session key (e.g. "20260717_181712_7303bce8")
-    private var liveSid: String = ""           // transient live RPC sid from session.resume (8 hex chars, debug only)
+    private var sessionId: String = ""         // stable DB session key — ONLY value for RPC calls
+    private var liveSid: String = ""           // transient live RPC sid — DEBUG ONLY, NEVER used in RPC
     private var resumedSessionId: String = ""   // "resumed" field from session.resume response
     private var sessionTitle: String = ""
     private val tempIdCounter = AtomicInteger(0)
+    private var resumeCount: Int = 0            // how many times session.resume was called
 
     // WebSocket + JSON-RPC infrastructure
     private val wsConnection = WsConnectionManager(viewModelScope)
@@ -46,44 +55,60 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     /** Initialize with a session. Call once from the composable. */
     override fun init(sessionId: String, title: String?) {
         if (this.sessionId == sessionId) {
-            DebugLog.log("STATE", "SessionID", "init() — unchanged sessionId=$sessionId, skipped")
+            DebugLog.log("STATE", "SessionID",
+                "init() — unchanged sessionId=$sessionId, skipped")
             return
         }
-        this.sessionId = sessionId           // KEEP as stable DB session key — do NOT overwrite with live sid
+        val oldSid = this.sessionId.takeIf { it.isNotEmpty() } ?: "(none)"
+        this.sessionId = sessionId           // KEEP as stable DB session key — NEVER overwrite with live sid
         this.liveSid = ""                    // reset until session.resume returns
         this.resumedSessionId = ""           // reset until session.resume returns
+        this.resumeCount = 0
         this.sessionTitle = title ?: sessionId.take(16)
         uiState = ChatUiState(sessionTitle = this.sessionTitle)
         DebugLog.log("STATE", "SessionID",
-            "init() — set sessionId=$sessionId (DB key) title=$sessionTitle")
+            "init() — sessionId ASSIGNED: old=$oldSid new=$sessionId (DB key) title=$sessionTitle")
         connectWsAndStart()
     }
 
     override fun loadMessages() {
         if (sessionId.isEmpty()) return
+        val callNum = resumeCount + 1
+        DebugLog.log("STATE", "SessionID",
+            "loadMessages(#$callNum) — entering with sessionId=$sessionId")
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, error = null)
             try {
                 val result = rpcClient.sessionResume(sessionId)
-                // IMPORTANT: session.resume returns a transient live RPC session_id
-                // (e.g. "d0dbec56", 8 hex chars). The server does NOT resolve DB keys
-                // transparently for prompt.submit — we MUST normalize here.
-                liveSid = result.session_id
-                resumedSessionId = result.resumed ?: sessionId
+                resumeCount++
+                // liveSid is DEBUG ONLY — never write into sessionId
+                val newLiveSid = result.session_id
+                val newResumed = result.resumed ?: sessionId
+                val newSessionKey = result.session_key
+
                 DebugLog.log("STATE", "SessionID",
-                    "loadMessages: dbKey=$sessionId liveSid=$liveSid " +
-                    "resumed=$resumedSessionId match=${sessionId == resumedSessionId} " +
-                    "resumedFromServer=${result.resumed}")
-                // Normalize: replace DB key with live sid for all downstream RPC calls
-                if (result.session_id != sessionId && result.session_id.isNotBlank()) {
+                    "loadMessages(#${resumeCount}) RESULT: " +
+                    "input_sessionId=$sessionId " +
+                    "result.session_id=$newLiveSid " +
+                    "result.resumed=$newResumed " +
+                    "result.session_key=$newSessionKey " +
+                    "result.message_count=${result.message_count}")
+
+                liveSid = newLiveSid           // DEBUG ONLY — see Phase 4L.1 rule
+                resumedSessionId = newResumed   // for logging/reference
+
+                DebugLog.log("STATE", "SessionID",
+                    "loadMessages(#${resumeCount}) ASSIGNMENTS: " +
+                    "liveSid=$liveSid (debug only) " +
+                    "resumedSessionId=$resumedSessionId " +
+                    "sessionId UNCHANGED=$sessionId (DB key preserved)")
+
+                if (newSessionKey != null && newSessionKey != sessionId) {
                     DebugLog.log("STATE", "SessionID",
-                        "normalizing sessionId from $sessionId to ${result.session_id}")
-                    sessionId = result.session_id
+                        "loadMessages(#${resumeCount}) WARNING: " +
+                        "session_key=$newSessionKey differs from dbKey=$sessionId")
                 }
-                if (result.session_key != null && result.session_key != sessionId) {
-                    DebugLog.log("STATE", "SessionID",
-                        "session_key=${result.session_key} differs from dbKey=$sessionId")
-                }
+
                 val messages = result.messages?.map {
                     val messageContent = it.resolvedContent ?: ""
                     UiMessage(
@@ -129,6 +154,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         val assistantMsgId = "asst_${tempIdCounter.incrementAndGet()}"
         val now = System.currentTimeMillis()
 
+        DebugLog.log("STATE", "SessionID",
+            "sendMessage ENTER: text=\"${text.take(50)}\" " +
+            "sessionId=$sessionId (DB key) liveSid=$liveSid (debug) " +
+            "resumedSessionId=$resumedSessionId " +
+            "resumeCount=${resumeCount}")
+
         // Add user message immediately
         val userMsg = UiMessage(id = userMsgId, role = "user", content = text, timestamp = now)
         val current = uiState.messages.toMutableList()
@@ -150,12 +181,18 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         viewModelScope.launch {
             try {
                 DebugLog.log("STATE", "SessionID",
-                    "sendMessage: dbKey=$sessionId liveSid=$liveSid " +
-                    "resumed=$resumedSessionId match=${sessionId == resumedSessionId}")
-                DebugLog.log("RPC", "DashboardChat", "prompt.submit → session=$sessionId (DB key)")
+                    "prompt.submit CALL: sessionId=$sessionId (DB key) " +
+                    "liveSid=$liveSid (debug only) " +
+                    "resumeCount=$resumeCount")
+                DebugLog.log("RPC", "DashboardChat",
+                    "prompt.submit → dbKey=$sessionId liveSid=$liveSid text=\"${text.take(50)}\"")
                 rpcClient.promptSubmit(sessionId, text)
+                DebugLog.log("STATE", "SessionID",
+                    "prompt.submit OK: sessionId=$sessionId")
             } catch (e: Exception) {
                 Log.e("Hermex", "DashboardChatViewModel: promptSubmit failed", e)
+                DebugLog.log("STATE", "SessionID",
+                    "prompt.submit FAILED: sessionId=$sessionId error=${e.message}")
                 val msgs = uiState.messages.toMutableList()
                 val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
@@ -173,6 +210,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     override fun stopStreaming() {
         viewModelScope.launch {
             try {
+                DebugLog.log("RPC", "DashboardChat",
+                    "session.interrupt → dbKey=$sessionId liveSid=$liveSid")
                 rpcClient.sessionInterrupt(sessionId)
             } catch (_: Exception) { /* best-effort */ }
             uiState = uiState.copy(isStreaming = false)
@@ -189,6 +228,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     }
 
     override fun onCleared() {
+        DebugLog.log("STATE", "SessionID",
+            "onCleared: sessionId=$sessionId liveSid=$liveSid resumeCount=$resumeCount")
         super.onCleared()
         notificationCollectorJob?.cancel()
         wsConnection.disconnect()
@@ -203,17 +244,22 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 DebugLog.log("WS", "DashboardChat", "connecting WebSocket")
                 wsConnection.connect()
                 val connectDuration = System.currentTimeMillis() - connectStartTime
-                DebugLog.log("WS", "DashboardChat", "WebSocket connected in ${connectDuration}ms — starting RPC")
+                DebugLog.log("WS", "DashboardChat",
+                    "WebSocket connected in ${connectDuration}ms — starting RPC " +
+                    "(sessionId=$sessionId liveSid=$liveSid)")
 
                 // Monitor WS state transitions
                 launch {
                     wsConnection.state.collect { wsState ->
-                        DebugLog.log("WS", "ChatVM", "state=${wsState}")
+                        DebugLog.log("WS", "ChatVM",
+                            "state=$wsState (sessionId=$sessionId liveSid=$liveSid)")
                     }
                 }
 
                 rpcClient.start()
-                DebugLog.log("WS", "DashboardChat", "RPC client started, total=${System.currentTimeMillis() - connectStartTime}ms")
+                DebugLog.log("WS", "DashboardChat",
+                    "RPC client started, total=${System.currentTimeMillis() - connectStartTime}ms " +
+                    "(sessionId=$sessionId)")
 
                 // Begin collecting notifications
                 notificationCollectorJob = launch {
@@ -240,19 +286,31 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     private fun handleNotification(n: RpcNotification) {
         // Filter: only process events for our session
         val nSid = n.sessionId
-        if (nSid != null && nSid.isNotEmpty() && nSid != sessionId) return
+        if (nSid != null && nSid.isNotEmpty() && nSid != sessionId && nSid != liveSid) {
+            // Notifications may carry either DB key or live SID — match against both
+            DebugLog.log("STATE", "SessionID",
+                "notification FILTERED: nSid=$nSid != dbKey=$sessionId != liveSid=$liveSid " +
+                "event=${n::class.simpleName}")
+            return
+        }
+        if (nSid != null && nSid.isNotEmpty()) {
+            DebugLog.log("STATE", "SessionID",
+                "notification MATCHED: nSid=$nSid dbKey=$sessionId liveSid=$liveSid " +
+                "event=${n::class.simpleName}")
+        }
 
         val msgs = uiState.messages.toMutableList()
 
         when (n) {
             is RpcNotification.GatewayReady -> {
-                DebugLog.log("RPC", "DashboardChat", "gateway.ready — agent=${n.agentId} v${n.version}")
+                DebugLog.log("RPC", "DashboardChat",
+                    "gateway.ready — agent=${n.agentId} v${n.version} " +
+                    "sessionId=${n.sessionId}")
                 val gwSessionId = n.sessionId
                 if (gwSessionId != null && gwSessionId.isNotEmpty()) {
                     DebugLog.log("STATE", "SessionID",
                         "gateway.ready gwSessionId=$gwSessionId " +
-                        "(our dbKey=${this.sessionId} liveSid=$liveSid " +
-                        "match=$gwSessionId == ${this.sessionId})")
+                        "(our dbKey=${this.sessionId} liveSid=$liveSid)")
                 }
             }
 
@@ -261,7 +319,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.MessageStarted -> {
-                DebugLog.log("RPC", "DashboardChat", "message.start — serverId=${n.messageId}")
+                DebugLog.log("RPC", "DashboardChat",
+                    "message.start — serverId=${n.messageId}")
                 val serverId = n.messageId
                 val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
