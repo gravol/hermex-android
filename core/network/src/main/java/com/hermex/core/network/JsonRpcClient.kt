@@ -255,6 +255,17 @@ class JsonRpcClient(
                 RpcNotification.MessageDelta(sessionId ?: "", text)
             }
 
+            "message.start", "message.started" -> {
+                val payload = params["payload"]?.jsonObject
+                RpcNotification.MessageStarted(
+                    sessionId = sessionId,
+                    messageId = payload?.get("id")?.jsonPrimitive?.content
+                        ?: params["message_id"]?.jsonPrimitive?.content,
+                )
+            }
+
+            "reasoning.available" -> RpcNotification.ReasoningAvailable(sessionId = sessionId)
+
             "thinking.delta" -> {
                 val payload = params["payload"]?.jsonObject
                 val text = payload?.get("text")?.jsonPrimitive?.content ?: ""
@@ -291,9 +302,10 @@ class JsonRpcClient(
 
             "run.completed" -> RpcNotification.RunCompleted(sessionId ?: "")
 
-            "message.completed", "assistant.completed" -> {
-                val message = params["message"]?.jsonObject
-                val toolCalls = message?.get("tool_calls")?.let { tcArray ->
+            "message.completed", "assistant.completed", "message.complete" -> {
+                // Try payload first (Dashboard WS convention), fall back to message (REST SSE convention)
+                val msgObj = params["payload"]?.jsonObject ?: params["message"]?.jsonObject
+                val toolCalls = msgObj?.get("tool_calls")?.let { tcArray ->
                     json.decodeFromJsonElement<List<RpcNotification.ToolCallInfo>>(tcArray)
                 }
                 val usage = params["usage"]?.let {
@@ -301,8 +313,8 @@ class JsonRpcClient(
                 }
                 RpcNotification.MessageCompleted(
                     sessionId = sessionId ?: "",
-                    messageId = message?.get("id")?.jsonPrimitive?.content,
-                    content = message?.get("content")?.jsonPrimitive?.content,
+                    messageId = msgObj?.get("id")?.jsonPrimitive?.content,
+                    content = msgObj?.get("content")?.jsonPrimitive?.content,
                     toolCalls = toolCalls,
                     usage = usage,
                 )

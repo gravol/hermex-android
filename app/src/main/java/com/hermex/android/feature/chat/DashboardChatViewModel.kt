@@ -249,8 +249,28 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 // No UI change needed — streaming placeholder already visible
             }
 
-            is RpcNotification.MessageDelta -> {
+            is RpcNotification.MessageStarted -> {
+                DebugLog.log("RPC", "DashboardChat", "message.start — serverId=${n.messageId}")
+                val serverId = n.messageId
+                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+                if (idx >= 0) {
+                    msgs[idx] = msgs[idx].copy(
+                        id = serverId ?: msgs[idx].id,
+                        isWaitingForFirstEvent = false,
+                    )
+                }
+            }
+
+            is RpcNotification.ReasoningAvailable -> {
                 val idx = msgs.indexOfLast { it.role == "assistant" }
+                if (idx >= 0) {
+                    val cur = msgs[idx]
+                    msgs[idx] = cur.copy(thinkingHasContent = true)
+                }
+            }
+
+            is RpcNotification.MessageDelta -> {
+                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     msgs[idx] = cur.copy(
@@ -262,7 +282,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ThinkingDelta -> {
-                val idx = msgs.indexOfLast { it.role == "assistant" }
+                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val existing = cur.thinkingText ?: ""
@@ -275,7 +295,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
             is RpcNotification.ReasoningDelta -> {
                 // Treat reasoning same as thinking — append to thinkingText
-                val idx = msgs.indexOfLast { it.role == "assistant" }
+                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val existing = cur.thinkingText ?: ""
@@ -287,7 +307,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ToolStarted -> {
-                val idx = msgs.indexOfLast { it.role == "assistant" }
+                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val existing = cur.toolCalls.toMutableList()
@@ -309,7 +329,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
             is RpcNotification.ToolProgress -> {
                 if (n.toolName == "_thinking" && n.delta != null) {
-                    val idx = msgs.indexOfLast { it.role == "assistant" }
+                    val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                     if (idx >= 0) {
                         val cur = msgs[idx]
                         val existing = cur.thinkingText ?: ""
@@ -322,7 +342,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ToolCompleted -> {
-                val idx = msgs.indexOfLast { it.role == "assistant" }
+                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val updated = cur.toolCalls.map { tc ->
@@ -393,7 +413,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
             is RpcNotification.Unknown -> {
                 Log.w("Hermex", "DashboardChat: unknown event: ${n.eventType}")
-                DebugLog.log("RPC", "DashboardChat", "unknown event: ${n.eventType}")
+                DebugLog.log("RPC", "DashboardChat", "unknown event: ${n.eventType} — rawParams=${n.rawParams?.toString()?.take(200)}")
             }
         }
 

@@ -42,6 +42,11 @@ sealed class RpcNotification {
         val text: String,
     ) : RpcNotification()
 
+    /** Signals that reasoning/thinking content is available for display. Triggers the collapsible thinking toggle in UI. */
+    data class ReasoningAvailable(
+        override val sessionId: String?,
+    ) : RpcNotification()
+
     // ── Tool events ──
 
     data class ToolStarted(
@@ -64,6 +69,14 @@ sealed class RpcNotification {
     ) : RpcNotification()
 
     // ── Run lifecycle ──
+
+    // ── Message started (new assistant message beginning) ──
+
+    /** Signals the start of a new assistant message. Server-provided message ID available. */
+    data class MessageStarted(
+        override val sessionId: String?,
+        val messageId: String? = null,
+    ) : RpcNotification()
 
     data class RunStarted(
         override val sessionId: String,

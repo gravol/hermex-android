@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
 **Last updated:** 2026-07-17  
-**Current version:** v0.1.19 (versionCode 19)  
+**Current version:** v0.1.20 (versionCode 20)  
 **HEAD commit:** `580b779` — Phase 4G: complete session ID normalization  
 **Branch:** `master` (up to date with `origin/master`)  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -68,7 +68,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 
 ### What is NOT yet wired / known issues
 - **Empty sessions in session.list** — `session.list` may return sessions with zero messages or no content. Need server-side filtering or client-side display filtering.
-- **Need device verification of send/stream flow** — Phase 4G session ID normalization has not been tested on-device. The 4001 fix is correct per protocol analysis but unverified against real server traffic.
+- **Need device verification of send/stream flow** — Phase 4I/4J streaming notification parsing and hardening are protocol-correct per code analysis but remain untested against real server traffic. Code review confirms: `isWaitingForFirstEvent` clears on all delta types, `isStreaming` filter prevents cross-message pollution, thinking/reasoning toggle lifecycle is correct.
 - **Legacy REST/SSE stack cleanup deferred** — `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, old `ChatViewModel` still present. Deferred until new stack is proven end-to-end.
 - **Auto-deny for approval/clarify** — v1 expedient. `ApprovalRequest` and `ClarifyRequest` are auto-denied by `JsonRpcClient`. Real approval UI needed before removing auto-deny.
 - **No background WebSocket keepalive** — `HermesForegroundService` exists in `core/ui` but is not wired. Phone lock may disconnect WebSocket.
@@ -174,6 +174,28 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
 - 5 regression tests on server side for DB key → live sid resolution
 - Added auto-release CI workflow (`.github/workflows/release.yml`)
 - Version bumped to v0.1.19
+
+### Phase 4H — Stabilize Documentation (v0.1.19)
+- Added PROJECT_HANDOFF_CURRENT.md and CHANGELOG.md
+- Comprehensive documentation of project state, architecture, and history
+
+### Phase 4I — Streaming Notification Parsing (v0.1.19)
+- Added `RpcNotification.MessageStarted` — parses `message.start`/`message.started` events, updates placeholder with server-provided message ID
+- Added `RpcNotification.ReasoningAvailable` — parses `reasoning.available`, triggers Thinking toggle appearance
+- Extended `message.completed`/`assistant.completed` to also match `message.complete`; uses `payload` object first (Dashboard WS convention), falls back to `message` (REST SSE convention)
+- Unknown events logged with full `rawParams` (200-char preview) for debugging
+- Verified: thinking dropdown remains functional and collapsible after message completion
+
+### Phase 4J — Streaming Verification + Hardening (v0.1.20)
+- **Bugfix: `isWaitingForFirstEvent` never cleared by `thinking.delta`/`reasoning.delta`** — if the server's first event was a thinking delta (model thinking before responding), `TypingDots` displayed indefinitely because `isWaitingForFirstEvent` stayed `true`. Fixed by ensuring all delta handlers clear the flag.
+- **Bugfix: `MessageStarted` didn't clear `isWaitingForFirstEvent` when `messageId` was null** — if `message.start` arrived without a server message ID, the placeholder never transitioned from TypingDots. Fixed by always clearing the flag regardless of messageId.
+- **Hardening: all delta handlers now filter by `isStreaming`** — `indexOfLast { it.role == "assistant" && it.isStreaming }` prevents content from being applied to a completed non-streaming assistant message when multiple assistant messages exist in the list.
+- Verified: `reasoning.available` correctly triggers Thinking toggle, reasoning content remains collapsible
+- Verified: tool events render as `ToolCallCard` components, do not leak into chat bubble text
+- Verified: `Unknown` events are logged with full params, never modify UI state
+- Verified: session ID normalization (DB key → live sid) propagates correctly through `prompt.submit`
+- Build verified: `assembleRelease` compiles successfully
+- Version bumped to v0.1.20
 
 ---
 

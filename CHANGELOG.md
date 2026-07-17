@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.20] — 2026-07-17 — Phase 4J: Streaming Verification + Hardening
+
+### Fixed
+- **`isWaitingForFirstEvent` never cleared by `thinking.delta`/`reasoning.delta`** — if the server's first event was a thinking delta, `TypingDots` displayed indefinitely. All delta handlers now clear the flag.
+- **`MessageStarted` didn't clear `isWaitingForFirstEvent` when `messageId` was null** — if `message.start` arrived without a server message ID, the placeholder never transitioned from TypingDots. Always clears flag regardless of messageId.
+- **All delta handlers hardened with `isStreaming` filter** — `indexOfLast { it.role == "assistant" && it.isStreaming }` prevents content being applied to the wrong (completed non-streaming) assistant message.
+
+### Changed
+- Bumped version from 0.1.19 → 0.1.20 (versionCode 19 → 20)
+
+---
+
 ## [0.1.19] — 2026-07-17 — Phase 4G: Session ID Normalization
 
 ### Added
