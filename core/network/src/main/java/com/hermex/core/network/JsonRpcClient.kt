@@ -391,7 +391,8 @@ class JsonRpcClient(
     @Serializable
     data class SessionResumeResult(
         val session_id: String,
-        val resumed: String? = null,  // server returns original session_id, not a boolean
+        val resumed: String? = null,       // original DB session key returned by server
+        val session_key: String? = null,    // stable lookup key returned by server
         val message_count: Int? = null,
         val messages: List<MessageData>? = null,
         val info: JsonObject? = null,
@@ -425,8 +426,17 @@ class JsonRpcClient(
         return result.sessions
     }
 
-    suspend fun sessionResume(sessionId: String): SessionResumeResult =
-        request("session.resume", mapOf("session_id" to sessionId))
+    suspend fun sessionResume(sessionId: String): SessionResumeResult {
+        DebugLog.log("STATE", "SessionID",
+            "sessionResume called with sessionId=$sessionId")
+        val result: SessionResumeResult =
+            request("session.resume", mapOf("session_id" to sessionId))
+        DebugLog.log("STATE", "SessionID",
+            "sessionResume result: session_id=${result.session_id} " +
+            "resumed=${result.resumed} session_key=${result.session_key} " +
+            "message_count=${result.message_count}")
+        return result
+    }
 
     suspend fun promptSubmit(sessionId: String, text: String): PromptSubmitResult =
         request("prompt.submit", mapOf("session_id" to sessionId, "text" to text))

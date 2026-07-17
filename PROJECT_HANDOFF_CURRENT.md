@@ -1,11 +1,31 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-18 (Phase 4K)  
-**Current version:** v0.1.21 (versionCode 21)  
-**HEAD commit:** `ea7e98e` — Update HEAD commit reference in PROJECT_HANDOFF_CURRENT.md  
-**Branch:** `master` (up to date with `origin/master`)  
+> ⚠️ **Root project verification — 2026-07-17** — See `## Verified Project Root` below.
+
+**Last updated:** 2026-07-17 (Phase 4K)  
+**Current version:** v0.1.22 (versionCode 22)  
+**HEAD commit:** `5e692dd` — Phase 4K: chat viewport stabilization — two-step auto-scroll with height compensation  
+**Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
-**Working directory:** `~/HermexAndroid`
+**Working directory:** `/home/jeff/HermexAndroid` (canonical)
+
+---
+
+## Verified Project Root
+
+| Field | Value |
+|---|---|
+| Canonical path | `/home/jeff/HermexAndroid` |
+| Remote URL | `git@github.com:gravol/hermex-android.git` |
+| Branch | `master` |
+| Latest commit | `5e692dd` — Phase 4K: chat viewport stabilization |
+| Build command | `./gradlew assembleRelease --no-configuration-cache` |
+| APK output | `app/build/outputs/apk/release/app-release.apk` |
+| Version | v0.1.22 (versionCode 22) |
+| Completed phase | Phase 4K — chat viewport stabilization |
+| Next phase | **Phase 4L — session chat scroll only after session validation** |
+
+> **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
 
 ---
 
