@@ -52,7 +52,7 @@ object DashboardApiClient {
             .hostnameVerifier { _, _ -> true }
             .apply {
                 // Trust-all SSL for self-signed cert on development server
-                val trustAllCerts = javax.net.ssl.X509TrustManager {
+                val trustAllCerts = object : javax.net.ssl.X509TrustManager {
                     @Suppress("EmptyFunctionBlock")
                     override fun checkClientTrusted(
                         chain: Array<java.security.cert.X509Certificate>, authType: String
@@ -195,10 +195,9 @@ object DashboardApiClient {
 
     // ── Authenticator: auto-relogin on 401 ──
 
-    private inner class DashboardAuthenticator : Authenticator {
+    private class DashboardAuthenticator : Authenticator {
         override fun authenticate(route: Route?, response: Response): Request? {
             if (response.request.url.encodedPath == "/auth/password-login") {
-                // Don't retry the login request itself
                 return null
             }
 
@@ -224,7 +223,6 @@ object DashboardApiClient {
                     if (loginResponse.isSuccessful) {
                         DebugLog.log("AUTH", "Dashboard", "re-login success — retrying original request")
                         Log.d("Hermex", "DashboardAuthenticator: re-login OK")
-                        // Cookies are now set by CookieJar — retry the original request
                         return response.request
                     } else {
                         DebugLog.log("AUTH", "Dashboard", "re-login failed (${loginResponse.code}) — giving up")

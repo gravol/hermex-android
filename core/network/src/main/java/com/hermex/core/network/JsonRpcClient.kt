@@ -42,13 +42,16 @@ import kotlin.coroutines.resumeWithException
  *   client.notifications.collect { event -> ... }
  */
 class JsonRpcClient(
-    private val connection: WsConnectionManager,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    @PublishedApi internal val connection: WsConnectionManager,
+    @PublishedApi internal val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
 ) {
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    @PublishedApi
+    internal val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    private val requestCounter = AtomicLong(1)
-    private val pendingRequests = ConcurrentHashMap<Long, kotlinx.coroutines.CancellableContinuation<JsonElement>>()
+    @PublishedApi
+    internal val requestCounter = AtomicLong(1)
+    @PublishedApi
+    internal val pendingRequests = ConcurrentHashMap<Long, kotlinx.coroutines.CancellableContinuation<JsonElement>>()
 
     // Separate channel for notifications to avoid backpressure on the WS message flow
     private val notificationChannel = Channel<RpcNotification>(UNLIMITED)
@@ -89,7 +92,8 @@ class JsonRpcClient(
      * @throws JsonRpcException  on JSON-RPC error response
      * @throws Exception  on timeout, connection loss, or parse failure
      */
-    suspend inline fun <reified T> request(
+    @PublishedApi
+    internal suspend inline fun <reified T> request(
         method: String,
         params: Map<String, Any?> = emptyMap(),
         timeoutMs: Long = 30_000,
@@ -175,8 +179,8 @@ class JsonRpcClient(
         try {
             val frame = json.parseToJsonElement(raw).jsonObject
 
-            val id = frame["id"]?.jsonPrimitive?.longOrNull
-            val method = frame["method"]?.jsonPrimitive?.contentOrNull
+            val id = frame["id"]?.jsonPrimitive?.content?.toLongOrNull()
+            val method = frame["method"]?.jsonPrimitive?.content
             val result = frame["result"]
             val error = frame["error"]
             val params = frame["params"]?.jsonObject
@@ -220,8 +224,8 @@ class JsonRpcClient(
     }
 
     private fun handleError(id: Long, error: JsonObject) {
-        val code = error["code"]?.jsonPrimitive?.intOrNull ?: -1
-        val message = error["message"]?.jsonPrimitive?.contentOrNull ?: "Unknown error"
+        val code = error["code"]?.jsonPrimitive?.content?.toIntOrNull() ?: -1
+        val message = error["message"]?.jsonPrimitive?.content ?: "Unknown error"
         val cont = pendingRequests.remove(id)
         if (cont != null) {
             DebugLog.log("RPC", "Error", "[$id] code=$code message=$message")
@@ -234,53 +238,53 @@ class JsonRpcClient(
     // ── Notification parser ──
 
     private fun handleNotification(method: String, params: JsonObject) {
-        val eventType = params["type"]?.jsonPrimitive?.contentOrNull ?: method
-        val sessionId = params["session_id"]?.jsonPrimitive?.contentOrNull
-            ?: params["sessionId"]?.jsonPrimitive?.contentOrNull
+        val eventType = params["type"]?.jsonPrimitive?.content ?: method
+        val sessionId = params["session_id"]?.jsonPrimitive?.content
+            ?: params["sessionId"]?.jsonPrimitive?.content
 
         val notification = when (eventType) {
             "gateway.ready" -> RpcNotification.GatewayReady(
-                agentId = params["agent_id"]?.jsonPrimitive?.contentOrNull,
-                version = params["version"]?.jsonPrimitive?.contentOrNull,
+                agentId = params["agent_id"]?.jsonPrimitive?.content,
+                version = params["version"]?.jsonPrimitive?.content,
                 sessionId = sessionId,
             )
 
             "message.delta" -> {
                 val payload = params["payload"]?.jsonObject
-                val text = payload?.get("text")?.jsonPrimitive?.contentOrNull ?: ""
+                val text = payload?.get("text")?.jsonPrimitive?.content ?: ""
                 RpcNotification.MessageDelta(sessionId ?: "", text)
             }
 
             "thinking.delta" -> {
                 val payload = params["payload"]?.jsonObject
-                val text = payload?.get("text")?.jsonPrimitive?.contentOrNull ?: ""
+                val text = payload?.get("text")?.jsonPrimitive?.content ?: ""
                 RpcNotification.ThinkingDelta(sessionId ?: "", text)
             }
 
             "reasoning.delta" -> {
                 val payload = params["payload"]?.jsonObject
-                val text = payload?.get("text")?.jsonPrimitive?.contentOrNull ?: ""
+                val text = payload?.get("text")?.jsonPrimitive?.content ?: ""
                 RpcNotification.ReasoningDelta(sessionId ?: "", text)
             }
 
             "tool.started" -> RpcNotification.ToolStarted(
                 sessionId = sessionId ?: "",
-                toolName = params["tool_name"]?.jsonPrimitive?.contentOrNull ?: "unknown",
-                messageId = params["message_id"]?.jsonPrimitive?.contentOrNull,
-                preview = params["preview"]?.jsonPrimitive?.contentOrNull,
+                toolName = params["tool_name"]?.jsonPrimitive?.content ?: "unknown",
+                messageId = params["message_id"]?.jsonPrimitive?.content,
+                preview = params["preview"]?.jsonPrimitive?.content,
                 args = params["args"],
             )
 
             "tool.progress" -> RpcNotification.ToolProgress(
                 sessionId = sessionId ?: "",
-                toolName = params["tool_name"]?.jsonPrimitive?.contentOrNull ?: "unknown",
-                delta = params["delta"]?.jsonPrimitive?.contentOrNull
-                    ?: params["payload"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull,
+                toolName = params["tool_name"]?.jsonPrimitive?.content ?: "unknown",
+                delta = params["delta"]?.jsonPrimitive?.content
+                    ?: params["payload"]?.jsonObject?.get("text")?.jsonPrimitive?.content,
             )
 
             "tool.completed" -> RpcNotification.ToolCompleted(
                 sessionId = sessionId ?: "",
-                toolName = params["tool_name"]?.jsonPrimitive?.contentOrNull ?: "unknown",
+                toolName = params["tool_name"]?.jsonPrimitive?.content ?: "unknown",
             )
 
             "run.started" -> RpcNotification.RunStarted(sessionId ?: "")
@@ -297,8 +301,8 @@ class JsonRpcClient(
                 }
                 RpcNotification.MessageCompleted(
                     sessionId = sessionId ?: "",
-                    messageId = message?.get("id")?.jsonPrimitive?.contentOrNull,
-                    content = message?.get("content")?.jsonPrimitive?.contentOrNull,
+                    messageId = message?.get("id")?.jsonPrimitive?.content,
+                    content = message?.get("content")?.jsonPrimitive?.content,
                     toolCalls = toolCalls,
                     usage = usage,
                 )
@@ -306,15 +310,15 @@ class JsonRpcClient(
 
             "approval.request" -> RpcNotification.ApprovalRequest(
                 sessionId = sessionId ?: "",
-                sessionKey = params["session_key"]?.jsonPrimitive?.contentOrNull ?: "",
-                toolName = params["tool_name"]?.jsonPrimitive?.contentOrNull,
+                sessionKey = params["session_key"]?.jsonPrimitive?.content ?: "",
+                toolName = params["tool_name"]?.jsonPrimitive?.content,
                 args = params["args"],
             )
 
             "clarify.request" -> RpcNotification.ClarifyRequest(
                 sessionId = sessionId ?: "",
-                requestId = params["request_id"]?.jsonPrimitive?.contentOrNull ?: "",
-                question = params["question"]?.jsonPrimitive?.contentOrNull,
+                requestId = params["request_id"]?.jsonPrimitive?.content ?: "",
+                question = params["question"]?.jsonPrimitive?.content,
             )
 
             "session.info" -> RpcNotification.SessionInfo(
