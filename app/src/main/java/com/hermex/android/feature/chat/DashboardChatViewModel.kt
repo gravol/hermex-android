@@ -66,15 +66,20 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             try {
                 val result = rpcClient.sessionResume(sessionId)
                 // IMPORTANT: session.resume returns a transient live RPC session_id
-                // (e.g. "3aa3f8f3", 8 hex chars). We MUST keep the original DB session
-                // key (e.g. "20260717_181712_7303bce8") for all downstream RPC calls.
-                // The server's _sess_nowait resolves DB keys to live sids transparently.
-                liveSid = result.session_id  // store for debug logging only
+                // (e.g. "d0dbec56", 8 hex chars). The server does NOT resolve DB keys
+                // transparently for prompt.submit — we MUST normalize here.
+                liveSid = result.session_id
                 resumedSessionId = result.resumed ?: sessionId
                 DebugLog.log("STATE", "SessionID",
                     "loadMessages: dbKey=$sessionId liveSid=$liveSid " +
                     "resumed=$resumedSessionId match=${sessionId == resumedSessionId} " +
                     "resumedFromServer=${result.resumed}")
+                // Normalize: replace DB key with live sid for all downstream RPC calls
+                if (result.session_id != sessionId && result.session_id.isNotBlank()) {
+                    DebugLog.log("STATE", "SessionID",
+                        "normalizing sessionId from $sessionId to ${result.session_id}")
+                    sessionId = result.session_id
+                }
                 if (result.session_key != null && result.session_key != sessionId) {
                     DebugLog.log("STATE", "SessionID",
                         "session_key=${result.session_key} differs from dbKey=$sessionId")
