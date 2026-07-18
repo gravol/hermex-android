@@ -19,4 +19,6 @@ abstract class ChatViewModelContract(application: Application) : AndroidViewMode
     open fun approveCurrentTool(approveAll: Boolean = false) {}
     /** Deny the current pending tool approval request. */
     open fun denyCurrentTool(denyAll: Boolean = false) {}
+    /** Respond to the current pending clarify request. */
+    open fun respondToClarify(answer: String) {}
 }

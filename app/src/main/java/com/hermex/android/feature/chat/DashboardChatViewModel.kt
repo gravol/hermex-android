@@ -216,7 +216,22 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     "session.interrupt → dbKey=$sessionId liveSid=$liveSid")
                 rpcClient.sessionInterrupt(sessionId)
             } catch (_: Exception) { /* best-effort */ }
-            uiState = uiState.copy(isStreaming = false)
+
+            // Clear per-message streaming flag so the blinking cursor / thinking
+            // ticker / typing dots disappear immediately (same pattern as the
+            // error handler in sendMessage).
+            val msgs = uiState.messages.toMutableList()
+            val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+            if (idx >= 0) {
+                msgs[idx] = msgs[idx].copy(isStreaming = false)
+            }
+
+            uiState = uiState.copy(
+                messages = msgs,
+                isStreaming = false,
+                pendingApproval = null,   // dismiss any visible approval dialog
+                pendingClarify = null,    // dismiss any visible clarify dialog
+            )
         }
     }
 
@@ -236,6 +251,15 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             "denying tool: ${pending.toolName} all=$denyAll")
         rpcClient.approvalRespond(sessionId, "deny", denyAll)
         uiState = uiState.copy(pendingApproval = null)
+    }
+
+    /** Respond to the current pending clarify request. */
+    override fun respondToClarify(answer: String) {
+        val pending = uiState.pendingClarify ?: return
+        DebugLog.log("RPC", "DashboardChat",
+            "responding to clarify: requestId=${pending.requestId} answer=$answer")
+        rpcClient.clarifyRespond(pending.requestId, answer)
+        uiState = uiState.copy(pendingClarify = null)
     }
 
     override fun toggleThinking(messageId: String) {
@@ -535,8 +559,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ClarifyRequest -> {
-                DebugLog.log("RPC", "DashboardChat", "clarify request auto-denied: ${n.requestId}")
-                Log.w("Hermex", "DashboardChat: clarify auto-denied for ${n.requestId}")
+                DebugLog.log("RPC", "DashboardChat", "clarify request received: requestId=${n.requestId} question=${n.question ?: ""}")
+                uiState = uiState.copy(
+                    pendingClarify = PendingClarify(
+                        requestId = n.requestId,
+                        question = n.question ?: "",
+                    )
+                )
             }
 
             is RpcNotification.SessionInfo -> {

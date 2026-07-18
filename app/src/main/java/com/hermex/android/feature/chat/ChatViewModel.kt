@@ -60,6 +60,7 @@ data class ChatUiState(
     val error: String? = null,
     val scrollGeneration: Long = 0L,  // bumped on every SSE-driven list mutation; triggers auto-scroll
     val pendingApproval: PendingApproval? = null,  // non-null when tool needs approval
+    val pendingClarify: PendingClarify? = null,    // non-null when clarification is needed
 )
 
 /**
@@ -69,6 +70,16 @@ data class PendingApproval(
     val toolName: String,
     val toolArgs: String = "",
     val requestId: String = "",
+)
+
+/**
+ * A clarification request waiting for user input.
+ * @property requestId Server-side ID for the clarification request.
+ * @property question The question the server is asking the user.
+ */
+data class PendingClarify(
+    val requestId: String,
+    val question: String = "",
 )
 
 // ── ViewModel ──
@@ -205,7 +216,13 @@ class ChatViewModel(application: Application) : ChatViewModelContract(applicatio
     override fun stopStreaming() {
         activeEventSource?.cancel()
         activeEventSource = null
-        uiState = uiState.copy(isStreaming = false)
+        // Clear per-message streaming flag for visual cleanup
+        val msgs = uiState.messages.toMutableList()
+        val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+        if (idx >= 0) {
+            msgs[idx] = msgs[idx].copy(isStreaming = false)
+        }
+        uiState = uiState.copy(messages = msgs, isStreaming = false)
     }
 
     override fun toggleThinking(messageId: String) {

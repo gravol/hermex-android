@@ -1,9 +1,9 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-18 (Phase 5D — tool card fix)  
-**Current version:** v0.1.36 (versionCode 36)  
+**Last updated:** 2026-07-18 (Phase 6B — reliable interrupt)  
+**Current version:** v0.1.38 (versionCode 38)  
 **HEAD commit:** `5ff5ac4` — fix tool card display: persist live tool call state through MessageCompleted  
-**Branch:** `master`  
+**Branch:** `master` (uncommitted Phase 5E + Phase 6B changes)  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
 
@@ -19,9 +19,9 @@
 | Latest commit | `5ff5ac4` — fix tool card display (v0.1.36) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.36 (versionCode 36) |
-| Completed phase | **Phase 5D — tool card rendering + approval UI** |
-| Next phase | **Clarify support, or background WebSocket keepalive** |
+| Version | v0.1.38 (versionCode 38) |
+| Completed phase | **Phase 6B — reliable interrupt support** |
+| Next phase | **Background WebSocket keepalive** |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
 
@@ -67,7 +67,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **WebSocket lifecycle** — `WsConnectionManager` handles connect/disconnect/reconnect with exponential backoff
 - **Ticket-based WS auth** — `POST /api/auth/ws-ticket` → 30s single-use ticket → WS upgrade
 - **JSON-RPC request/response** — `JsonRpcClient` with `CompletableDeferred` pending map, timeout handler
-- **Notification routing** — 17 event types parsed (`message.delta`, `thinking.delta`, `reasoning.delta`, `tool.started/progress/completed`, `approval.request`, `clarify.request`, `gateway.ready`, `run.started/completed`, `message.completed`, `session.info`, etc.)
+- **Notification routing** — 18 event types parsed (`message.delta`, `thinking.delta`, `reasoning.delta`, `tool.generating/start/complete`, `approval.request`, `clarify.request`, `gateway.ready`, `run.started/completed`, `message.completed`, `session.info`, etc.)
 - **Session list** — `SessionsViewModel.loadDashboardSessions()` via `session.list` RPC
 - **Session resume** — `DashboardChatViewModel.loadMessages()` via `session.resume` RPC with **session ID normalization** (resolved live sid replaces DB key)
 - **Chat streaming** — `DashboardChatViewModel` sends via `prompt.submit`, consumes notifications for real-time deltas
@@ -76,7 +76,9 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Tool call visualization** — started/progress/completed UI with `ToolCallCard` components. Now correctly parses real server event names (`tool.generating`/`tool.start`/`tool.complete`). Tool cards persist through message completion and session reload.
 - **Keyboard anchoring** — frame-based keyboard settle (replaced fixed delay with `withFrameNanos` × 3)
 - **Reconnect resume** — on WebSocket reconnect, calls `session.resume` to re-register the live session (fixes 4001 error after reconnect)
+- **Stop generation** — `stopStreaming()` sends `session.interrupt` RPC, clears per-message `isStreaming` flag on the last assistant message so blinking cursor / thinking ticker / typing dots disappear immediately, and dismisses any visible approval or clarify dialog. Same fix applied to legacy SSE stack.
 - **Tool approval dialog** — `PendingApproval` state model, Compose `Dialog` with Approve/Deny buttons. Notification handler correctly sets state from `ApprovalRequest` events, no more auto-deny in `JsonRpcClient`.
+- **Clarify dialog** — `PendingClarify` state model, Compose `Dialog` with question display and free-text answer input. `ClarifyRequest` notifications set `pendingClarify` state, `respondToClarify()` calls `clarify.respond` RPC. Cancel sends empty string to unblock the turn.
 - **Approval RPC** — `approvalRespond()` sends correctly-param'd `approval.respond` notification to server (choice: "approve"/"deny", all: bool)
 - **Release CI** — `.github/workflows/release.yml` auto-builds APK and creates GitHub Release on push to master
 - **Debug logging** — in-app ring buffer (1000 entries), exportable from Settings
@@ -89,7 +91,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 
 ### Known issues / NOT yet wired
 - **Approval dialog only fires for dangerous terminal commands** — Server-side `approval.request` notification is emitted only when `detect_dangerous_command()` matches (e.g. `rm -rf`, `curl | bash`). Normal tools like `web_search`, `ls ~/`, `read_file` auto-approve silently. The Android dialog is correctly built but never triggered for everyday commands. This matches Telegram behavior (only dangerous patterns ask for approval).
-- **ClarifyRequest still auto-denied** — `ClarifyRequest` notifications are intercepted in `JsonRpcClient` and auto-denied. No clarify UI has been built yet.
+- ~~**ClarifyRequest still auto-denied**~~ **Clarify dialog implemented** — `PendingClarify` state model with free-text answer input. `ClarifyRequest` notifications set `pendingClarify` in `ChatUiState`, triggering a Compose `Dialog` with the server's question and an answer field. Cancel sends empty string to unblock the turn.
 - **Empty sessions in session.list** — `session.list` may return sessions with zero messages or no content. Need server-side filtering or client-side display filtering.
 - **Legacy REST/SSE stack cleanup deferred** — `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, old `ChatViewModel` still present. Deferred until new stack is proven end-to-end.
 - **No background WebSocket keepalive** — `HermesForegroundService` exists in `core/ui` but is not wired. Phone lock may disconnect WebSocket.
@@ -285,7 +287,27 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
 - `ToolCallCard` renders args text when no preview is available
 - Added `[RPC] ToolEvent` debug logging for all three tool events
 
----
+### Phase 5E — Clarify Dialog UI (v0.1.37)
+- **Problem:** `ClarifyRequest` notifications were auto-denied in `JsonRpcClient` (previously removed) and still auto-denied in `DashboardChatViewModel.handleNotification()`. No UI for the user to provide input.
+- **State model:** Added `PendingClarify` data class (`requestId`, `question`) to `ChatViewModel.kt`. Added `pendingClarify: PendingClarify?` to `ChatUiState` (same pattern as `PendingApproval`).
+- **Contract:** Added `open fun respondToClarify(answer: String)` to `ChatViewModelContract` with no-op default (inherited by legacy SSE `ChatViewModel`).
+- **ViewModel:** `DashboardChatViewModel.handleNotification()` now sets `uiState.pendingClarify` on `ClarifyRequest` instead of auto-denying. `respondToClarify()` calls `rpcClient.clarifyRespond(requestId, answer)` and clears the pending state.
+- **Dialog UI:** Compose `Dialog` in `ChatScreen` showing:
+  - Title: "Clarification Needed"
+  - Server's question text
+  - Free-text `OutlinedTextField` for the user's answer
+  - **Cancel** sends empty string (unblocks the turn)
+  - **Send** sends the user's answer (enabled only when non-blank)
+- **JsonRpcClient:** Auto-deny block was already removed in prior uncommitted change — `ClarifyRequest` notifications pass through to the ViewModel's `notifications` channel.
+- Builds cleanly with no errors.
+
+### Phase 6B — Reliable Interrupt Support (v0.1.38)
+- **Problem:** `stopStreaming()` set `uiState.isStreaming = false` but never cleared `isStreaming` on the individual `UiMessage` object. After pressing Stop, the blinking cursor (▌), thinking ticker, and typing dots persisted visually even though streaming had stopped. Pending approval/clarify dialogs were also left on-screen.
+- **Fix:** `DashboardChatViewModel.stopStreaming()` now:
+  - Finds the last assistant message with `isStreaming == true` and sets it to `false` (same pattern as the error handler in `sendMessage`)
+  - Clears `pendingApproval` and `pendingClarify` so any visible dialog is dismissed
+- **Legacy stack:** Applied the same `isStreaming` cleanup to `ChatViewModel.stopStreaming()` for consistency.
+- Version bumped to v0.1.38.---
 
 ## Session ID Bug — Explanation and Fix
 
@@ -382,9 +404,9 @@ Hermex/
 |---|---|---|
 | `app/.../MainActivity.kt` | 121 | NavGraph, route definitions, dashboard vs legacy routing |
 | `app/.../HermexApplication.kt` | 54 | Startup: ApiClient.init + DashboardApiClient.init |
-| `app/.../DashboardChatViewModel.kt` | ~545 | Dashboard WS chat: connect, resume, send, notification handler, approve/deny |
-| `app/.../ChatScreen.kt` | ~894 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval dialog |
-| `app/.../ChatViewModelContract.kt` | 18 | Abstract contract for both legacy and dashboard VMs |
+| `app/.../DashboardChatViewModel.kt` | 587 | Dashboard WS chat: connect, resume, send, notification handler, approve/deny/clarify, stop generation |
+| `app/.../ChatScreen.kt` | 970 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval/clarify dialogs |
+| `app/.../ChatViewModelContract.kt` | 24 | Abstract contract for both legacy and dashboard VMs |
 | `app/.../ChatViewModel.kt` | 370 | Legacy SSE chat ViewModel (has no-op approve/deny) |
 | `app/.../DashboardSetupScreen.kt` | 150 | URL + password entry screen |
 | `app/.../DashboardSetupViewModel.kt` | 119 | status() → login() flow for dashboard setup |
@@ -394,8 +416,8 @@ Hermex/
 | `app/.../SetupViewModel.kt` | — | Legacy setup ViewModel (will be removed) |
 | `core/network/DashboardApiClient.kt` | 253 | REST client: login, ws-ticket, status, 401 auto-relogin |
 | `core/network/WsConnectionManager.kt` | 215 | WebSocket lifecycle, reconnect, Frame Channel |
-| `core/network/JsonRpcClient.kt` | ~467 | JSON-RPC 2.0: request/response, notifications, approvalRespond, clarifyRespond |
-| `core/network/RpcNotification.kt` | 156 | Sealed class for 17 event types, including ApprovalRequest, ClarifyRequest |
+| `core/network/JsonRpcClient.kt` | 470 | JSON-RPC 2.0: request/response, notifications, approvalRespond, clarifyRespond |
+| `core/network/RpcNotification.kt` | 156 | Sealed class for 18 event types, including ApprovalRequest, ClarifyRequest |
 | `core/network/DebugLog.kt` | — | Ring buffer logger (1000 entries) |
 | `core/network/DebugLoggingInterceptor.kt` | — | HTTP/SSE debug logging |
 | `core/data/KeychainStore.kt` | — | EncryptedSharedPreferences for secrets |
@@ -421,7 +443,7 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 5. **`sessionId` (DB key) immutable; `liveSid` (transient) for routing** — The DB key never changes; the live SID may change on reconnect. Notification filter matches against BOTH. `liveSid` is DEBUG ONLY — never written into `sessionId`.
 
-6. **Approval/clarify notifications flow through ViewModel** — `JsonRpcClient` parses notifications and emits them via `notifications` channel. ViewModel's `handleNotification()` sets state. No auto-deny in client (removed in v0.1.31). Clarify still auto-denied (no UI built yet).
+6. **Approval/clarify notifications flow through ViewModel** — `JsonRpcClient` parses notifications and emits them via `notifications` channel. ViewModel's `handleNotification()` sets state. No auto-deny in client (removed in v0.1.31 for approval, Phase 5E for clarify). User gets a dialog in both cases.
 
 7. **Coexist old and new networking stacks** — Do NOT delete `ApiClient.kt` or related files until the new JSON-RPC/WS stack is proven end-to-end on device.
 
@@ -458,10 +480,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 ## Next Steps
 
-1. **Phase 5E: Clarify support** — Build a clarify dialog UI (free-text input field) to replace the auto-deny in `JsonRpcClient`. Same pattern as approval dialog.
-2. **Background WebSocket keepalive** — Wire `HermesForegroundService` to keep WebSocket alive when phone locks
-3. **Legacy stack cleanup** — Remove `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, `SessionsViewModel`, `ChatViewModel`
-4. **Feature module cleanup** — Delete stub files in `feature/` directories not included in build
-5. **StreamLoop optimization** — Only poll on actual state change instead of 50ms timer; currently wasteful during thinking (no content change)
-6. **Production signing** — Wire proper keystore for release builds
-7. **Make repo public** — So Obtainium can see GitHub Releases and auto-update
+1. **Background WebSocket keepalive** — Wire `HermesForegroundService` to keep WebSocket alive when phone locks
+2. **Legacy stack cleanup** — Remove `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, `SessionsViewModel`, `ChatViewModel`
+3. **Feature module cleanup** — Delete stub files in `feature/` directories not included in build
+4. **StreamLoop optimization** — Only poll on actual state change instead of 50ms timer; currently wasteful during thinking (no content change)
+5. **Production signing** — Wire proper keystore for release builds
+6. **Make repo public** — So Obtainium can see GitHub Releases and auto-update

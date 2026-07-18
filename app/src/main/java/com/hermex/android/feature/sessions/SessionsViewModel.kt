@@ -65,9 +65,14 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
             DebugLog.log("INFO", "SessionsVM", "session.list → ${rpcSessions.size} sessions")
 
             val mapped = rpcSessions.map { it.toSessionSummary() }
+            val filtered = mapped.filter { it.messageCount > 0 }
+            val filteredCount = mapped.size - filtered.size
+            if (filteredCount > 0) {
+                DebugLog.log("INFO", "SessionsVM", "filtered out $filteredCount empty sessions")
+            }
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
-                sessions = mapped,
+                sessions = filtered,
                 error = null,
             )
         } catch (e: Exception) {

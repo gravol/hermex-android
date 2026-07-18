@@ -355,17 +355,10 @@ class JsonRpcClient(
             )
         }
 
-        // Auto-handle clarify in v1: auto-deny
-        when (notification) {
-            is RpcNotification.ClarifyRequest -> {
-                DebugLog.log("RPC", "Clarify", "auto-deny requestId=${notification.requestId}")
-                Log.w("Hermex", "JsonRpcClient: auto-denying clarify request ${notification.requestId}")
-                notify("clarify.respond", mapOf(
-                    "request_id" to notification.requestId,
-                    "answer" to "",
-                ))
-            }
-            else -> { /* pass through to notification channel */ }
+        // ClarifyRequest: pass through to ViewModel for user response
+        // (auto-deny was removed in Phase 5E — user now gets a dialog)
+        if (notification is RpcNotification.ClarifyRequest) {
+            DebugLog.log("RPC", "Clarify", "forwarding to ViewModel: requestId=${notification.requestId}")
         }
 
         notificationChannel.trySend(notification)

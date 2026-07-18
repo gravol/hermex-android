@@ -490,6 +490,70 @@ fun ChatScreen(
             }
         }
     }
+
+    // ── Clarify Dialog ──
+    val pendingClarify = state.pendingClarify
+    if (pendingClarify != null) {
+        var clarifyAnswer by remember { mutableStateOf("") }
+        Dialog(onDismissRequest = { /* must answer */ }) {
+            Card(
+                modifier = Modifier
+                    .widthIn(min = 280.dp, max = 400.dp)
+                    .padding(8.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "Clarification Needed",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (pendingClarify.question.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = pendingClarify.question,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = clarifyAnswer,
+                        onValueChange = { clarifyAnswer = it },
+                        placeholder = { Text("Type your answer...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 4,
+                        shape = RoundedCornerShape(8.dp),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                // Send empty string as "dismiss" to unblock the turn
+                                viewModel.respondToClarify("")
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("Cancel")
+                        }
+                        Button(
+                            onClick = { viewModel.respondToClarify(clarifyAnswer) },
+                            modifier = Modifier.weight(1f),
+                            enabled = clarifyAnswer.isNotBlank(),
+                        ) {
+                            Text("Send")
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ── LIVE THINKING TICKER ──
