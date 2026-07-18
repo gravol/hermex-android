@@ -129,6 +129,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 } ?: emptyList()
                 uiState = uiState.copy(
                     isLoading = false,
+                    isStreaming = false,
                     messages = messages,
                     error = null,
                 )
