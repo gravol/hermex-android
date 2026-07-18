@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hermex.core.network.DebugLog
 import java.time.Instant
@@ -410,6 +412,78 @@ fun ChatScreen(
                                 },
                                 onToggleThinking = { viewModel.toggleThinking(msg.id) },
                             )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Tool Approval Dialog ──
+    val pendingApproval = state.pendingApproval
+    if (pendingApproval != null) {
+        Dialog(onDismissRequest = { /* must approve or deny */ }) {
+            Card(
+                modifier = Modifier
+                    .widthIn(min = 280.dp, max = 400.dp)
+                    .padding(8.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "Approve Tool?",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.tertiary,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = pendingApproval.toolName,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    if (pendingApproval.toolArgs.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                        ) {
+                            Text(
+                                text = pendingApproval.toolArgs,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp),
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = { viewModel.denyCurrentTool() },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("Deny")
+                        }
+                        Button(
+                            onClick = { viewModel.approveCurrentTool() },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("Approve")
                         }
                     }
                 }

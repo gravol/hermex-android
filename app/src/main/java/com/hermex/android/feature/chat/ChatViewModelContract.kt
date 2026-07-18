@@ -15,4 +15,8 @@ abstract class ChatViewModelContract(application: Application) : AndroidViewMode
     abstract fun sendMessage(text: String)
     abstract fun stopStreaming()
     abstract fun toggleThinking(messageId: String)
+    /** Approve the current pending tool approval request. */
+    open fun approveCurrentTool(approveAll: Boolean = false) {}
+    /** Deny the current pending tool approval request. */
+    open fun denyCurrentTool(denyAll: Boolean = false) {}
 }

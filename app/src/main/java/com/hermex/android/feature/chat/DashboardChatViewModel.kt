@@ -218,6 +218,24 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         }
     }
 
+    /** Approve the current pending tool call. */
+    override fun approveCurrentTool(approveAll: Boolean) {
+        val pending = uiState.pendingApproval ?: return
+        DebugLog.log("RPC", "DashboardChat",
+            "approving tool: ${pending.toolName} all=$approveAll")
+        rpcClient.approvalRespond(sessionId, "approve", approveAll)
+        uiState = uiState.copy(pendingApproval = null)
+    }
+
+    /** Deny the current pending tool call. */
+    override fun denyCurrentTool(denyAll: Boolean) {
+        val pending = uiState.pendingApproval ?: return
+        DebugLog.log("RPC", "DashboardChat",
+            "denying tool: ${pending.toolName} all=$denyAll")
+        rpcClient.approvalRespond(sessionId, "deny", denyAll)
+        uiState = uiState.copy(pendingApproval = null)
+    }
+
     override fun toggleThinking(messageId: String) {
         val msgs = uiState.messages.toMutableList()
         val idx = msgs.indexOfFirst { it.id == messageId }
@@ -492,9 +510,14 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ApprovalRequest -> {
-                // Auto-denied by JsonRpcClient — surface as log notice
-                DebugLog.log("RPC", "DashboardChat", "approval request auto-denied: ${n.toolName}")
-                Log.w("Hermex", "DashboardChat: approval auto-denied for ${n.toolName}")
+                DebugLog.log("RPC", "DashboardChat", "approval request received: ${n.toolName}")
+                val argsStr = n.args?.toString() ?: ""
+                uiState = uiState.copy(
+                    pendingApproval = PendingApproval(
+                        toolName = n.toolName ?: "unknown",
+                        toolArgs = argsStr,
+                    )
+                )
             }
 
             is RpcNotification.ClarifyRequest -> {

@@ -59,6 +59,16 @@ data class ChatUiState(
     val isStreaming: Boolean = false,
     val error: String? = null,
     val scrollGeneration: Long = 0L,  // bumped on every SSE-driven list mutation; triggers auto-scroll
+    val pendingApproval: PendingApproval? = null,  // non-null when tool needs approval
+)
+
+/**
+ * A tool call waiting for user approval.
+ */
+data class PendingApproval(
+    val toolName: String,
+    val toolArgs: String = "",
+    val requestId: String = "",
 )
 
 // ── ViewModel ──
