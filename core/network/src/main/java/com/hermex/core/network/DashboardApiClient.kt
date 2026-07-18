@@ -52,25 +52,6 @@ object DashboardApiClient {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            // Trust self-signed cert on Tailscale IP
-            .hostnameVerifier { _, _ -> true }
-            .apply {
-                // Trust-all SSL for self-signed cert on development server
-                val trustAllCerts = object : javax.net.ssl.X509TrustManager {
-                    @Suppress("EmptyFunctionBlock")
-                    override fun checkClientTrusted(
-                        chain: Array<java.security.cert.X509Certificate>, authType: String
-                    ) {}
-                    @Suppress("EmptyFunctionBlock")
-                    override fun checkServerTrusted(
-                        chain: Array<java.security.cert.X509Certificate>, authType: String
-                    ) {}
-                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
-                }
-                val sslContext = javax.net.ssl.SSLContext.getInstance("TLS")
-                sslContext.init(null, arrayOf(trustAllCerts), java.security.SecureRandom())
-                sslSocketFactory(sslContext.socketFactory, trustAllCerts)
-            }
             .build()
 
         Log.d("Hermex", "DashboardApiClient.init: OkHttpClient ready")

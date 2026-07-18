@@ -158,7 +158,7 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
 - `DashboardSetupScreen` — Compose screen for URL + password entry
 - `DashboardSetupViewModel` — `status()` → `login()` flow, credential persistence
 - `MainActivity` — route for `dashboard-setup`, start destination priority: dashboard first, fallback to legacy setup
-- Default URL: `https://100.80.204.66:8443`
+- Default URL was originally `https://100.80.204.66:8443` (changed to `http://100.80.204.66:9119` in v0.1.33)
 
 ### Phase 3 — Dashboard WebSocket + JSON-RPC Chat Pipeline
 - `WsConnectionManager` — full lifecycle: connect, fresh ticket, reconnect loop with exponential backoff, `pingInterval(30s)`
