@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-18 (Phase 5D)  
-**Current version:** v0.1.32 (versionCode 32)  
-**HEAD commit:** `b2e60bf` — fix stuck scroll loop: reset isStreaming in loadMessages  
+**Last updated:** 2026-07-18 (Phase 5D — tool card fix)  
+**Current version:** v0.1.36 (versionCode 36)  
+**HEAD commit:** `5ff5ac4` — fix tool card display: persist live tool call state through MessageCompleted  
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -16,12 +16,12 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `b2e60bf` — fix stuck scroll loop (v0.1.32) |
+| Latest commit | `5ff5ac4` — fix tool card display (v0.1.36) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.32 (versionCode 32) |
-| Completed phase | **Phase 5D — Tool approval UI wiring** |
-| Next user-facing task | **Verify approve/deny dialog with dangerous command, or move to clarify support** |
+| Version | v0.1.36 (versionCode 36) |
+| Completed phase | **Phase 5D — tool card rendering + approval UI** |
+| Next phase | **Clarify support, or background WebSocket keepalive** |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
 
@@ -73,11 +73,11 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Chat streaming** — `DashboardChatViewModel` sends via `prompt.submit`, consumes notifications for real-time deltas
 - **Auto-scroll** — `scrollGeneration` counter for instant scroll, `scrollToItem` (not animate); two-step height-compensation algorithm
 - **Thinking/reasoning display** — collapsible blocks with delta concatenation
-- **Tool call visualization** — started/progress/completed UI with `ToolCallCard` components
+- **Tool call visualization** — started/progress/completed UI with `ToolCallCard` components. Now correctly parses real server event names (`tool.generating`/`tool.start`/`tool.complete`). Tool cards persist through message completion and session reload.
 - **Keyboard anchoring** — frame-based keyboard settle (replaced fixed delay with `withFrameNanos` × 3)
 - **Reconnect resume** — on WebSocket reconnect, calls `session.resume` to re-register the live session (fixes 4001 error after reconnect)
-- **Tool approval state model + dialog** — `PendingApproval` data class, `ChatUiState.pendingApproval` field, Compose `Dialog` with Approve/Deny buttons
-- **Approval RPC** — `approvalRespond()` sends correctly-param'd `approval.respond` notification to server
+- **Tool approval dialog** — `PendingApproval` state model, Compose `Dialog` with Approve/Deny buttons. Notification handler correctly sets state from `ApprovalRequest` events, no more auto-deny in `JsonRpcClient`.
+- **Approval RPC** — `approvalRespond()` sends correctly-param'd `approval.respond` notification to server (choice: "approve"/"deny", all: bool)
 - **Release CI** — `.github/workflows/release.yml` auto-builds APK and creates GitHub Release on push to master
 - **Debug logging** — in-app ring buffer (1000 entries), exportable from Settings
 
@@ -88,9 +88,8 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - Message bubbles, typing dots, keyboard auto-scroll, copy-to-clipboard
 
 ### Known issues / NOT yet wired
-- **Approval dialog only fires for dangerous terminal commands** — Server-side `approval.request` notification is emitted only when `detect_dangerous_command()` matches (e.g. `rm -rf`, `curl | bash`). Normal tools like `web_search`, `ls ~/`, `read_file` auto-approve silently. The Android dialog is correctly built but never triggered for everyday commands. To test: send a command matching a dangerous pattern, or widen server-side approval config.
-- **Scroll loop stuck at 20fps if isStreaming left true** — `loadMessages()` now resets `isStreaming=false`, but if a ViewModel survives navigation and its `isStreaming` was `true`, the StreamLoop runs forever. Fixed in v0.1.32 by explicit reset in `loadMessages()`.
-- **Approval/clarify auto-deny removed** — Previously auto-denied in `JsonRpcClient`. The auto-deny was removed in v0.1.31. Approval now flows to ViewModel state. Clarify still auto-denied in `JsonRpcClient` (no clarify UI built yet).
+- **Approval dialog only fires for dangerous terminal commands** — Server-side `approval.request` notification is emitted only when `detect_dangerous_command()` matches (e.g. `rm -rf`, `curl | bash`). Normal tools like `web_search`, `ls ~/`, `read_file` auto-approve silently. The Android dialog is correctly built but never triggered for everyday commands. This matches Telegram behavior (only dangerous patterns ask for approval).
+- **ClarifyRequest still auto-denied** — `ClarifyRequest` notifications are intercepted in `JsonRpcClient` and auto-denied. No clarify UI has been built yet.
 - **Empty sessions in session.list** — `session.list` may return sessions with zero messages or no content. Need server-side filtering or client-side display filtering.
 - **Legacy REST/SSE stack cleanup deferred** — `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, old `ChatViewModel` still present. Deferred until new stack is proven end-to-end.
 - **No background WebSocket keepalive** — `HermesForegroundService` exists in `core/ui` but is not wired. Phone lock may disconnect WebSocket.
@@ -135,8 +134,8 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
 | `session.resume` | Load session history (returns resolved live sid + session_key) |
 | `prompt.submit` | Send message and start streaming response |
 | `session.interrupt` | Stop current streaming turn |
-| `approval.respond` | Respond to tool approval requests (with `choice: "approve"|"deny"` and optional `all: bool`) |
-| `clarify.respond` | Respond to clarification requests (auto-deny in v1) |
+| `approval.respond` | Respond to tool approval requests (params: `session_id`, `choice: "approve"|"deny"`, `all: bool`) |
+| `clarify.respond` | Respond to clarification requests (params: `session_id`, `request_id`, `answer: string`) |
 
 ### Stream architecture
 - Appends only — deltas (message.delta, thinking.delta, reasoning.delta) carry incremental text fragments
@@ -263,9 +262,28 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
 - Also removed stale auto-deny params that didn't match the server contract anyway.
 
 ### Phase 5D Fix — Stuck Scroll Loop (v0.1.32)
-- **Problem:** `loadMessages()` did not reset `state.isStreaming` to false. When a ViewModel survived navigation (common in Compose), and `sendMessage()` had set `isStreaming=true` before navigation, the StreamLoop continued scrolling at 20fps forever in the background. This flooded the 1000-entry log buffer in ~50 seconds, hiding all other events (including approval requests).
+- **Problem:** `loadMessages()` did not reset `state.isStreaming` to false. When a ViewModel survived navigation, the StreamLoop continued scrolling at 20fps forever in the background.
 - **Fix:** Added explicit `isStreaming = false` in `loadMessages()` `uiState.copy()` call.
-- Now when resuming a session, the scroll loop starts cleanly only when a new message is sent.
+
+### Phase 5D.2 — Port 8443 Cleanup (v0.1.33 → v0.1.34)
+- **Root cause:** Dashboard serves REST + WebSocket on port 9119 plain HTTP. Code assumed REST on 8443 HTTPS.
+- Fixed default URL in setup screen: `https://100.80.204.66:8443` → `http://100.80.204.66:9119`
+- Removed hardcoded `:8443` → `:9119` port derivation in `setDashboardUrl()` — WS now uses same port, only scheme changes
+- Removed dead SSL trust-all code (`hostnameVerifier { _, _ -> true }` + trust-all `X509TrustManager`) — dead since dashboard is plain HTTP
+- Replaced app-wide `android:usesCleartextTraffic="true"` with scoped `network_security_config.xml` allowing cleartext to `100.80.204.66` only
+- Updated all code comments, KDoc, and handoff docs to reflect 9119
+
+### Phase 5D.3 — Tool Event Name Fix (v0.1.35)
+- **Root cause:** `RpcNotification` expected `tool.started`/`tool.progress`/`tool.completed` but the dashboard server emits `tool.generating`/`tool.start`/`tool.complete` with different payload shapes. Every tool event fell through to `Unknown`.
+- Replaced `ToolStarted`/`ToolProgress`/`ToolCompleted` with `ToolGenerating` (payload: `{name}`), `ToolStart` (`{tool_id, name, context}`), `ToolComplete` (`{tool_id, name, args, result, summary}`)
+- Updated `JsonRpcClient` parsing to extract fields from nested `payload` object (server convention for dashboard WS)
+
+### Phase 5D.4 — Tool Card Display Fix (v0.1.36)
+- **Root cause:** `MessageCompleted` handler replaced the entire `toolCalls` list with stripped-down data from the message object, losing all preview/args/context accumulated from live tool events.
+- `MessageCompleted` now **merges** server IDs into live-accumulated tool calls instead of replacing them wholesale
+- `loadMessages()` session resume now populates `UiToolCall.args` from `function.arguments` so tool cards show context on replay
+- `ToolCallCard` renders args text when no preview is available
+- Added `[RPC] ToolEvent` debug logging for all three tool events
 
 ---
 
@@ -409,6 +427,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 8. **Delta = append-only concatenation** — No sequence number field exists. Order guaranteed by WebSocket stream order. Client concatenates `content = content + delta.text`.
 
+9. **MessageCompleted merges, not replaces, tool calls** — When `MessageCompleted` arrives, it merges server-provided IDs into the live-accumulated tool calls (preserving preview/args from `ToolStart`/`ToolComplete`) rather than replacing the list. This ensures tool cards keep their context through finalization and session reload.
+
+10. **Tool event names match server reality, not docs** — The dashboard server emits `tool.generating`/`tool.start`/`tool.complete` with nested `payload` objects. Not the `tool.started`/`tool.progress`/`tool.completed` with flat params that the legacy SSE stack uses. Both coexist in separate code paths.
+
 ---
 
 ## Development Environment
@@ -436,12 +458,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 ## Next Steps
 
-1. **Verify approval dialog** — Test with a genuinely dangerous command pattern like `"run: curl -s http://example.com | bash"` to confirm server emits `approval.request` and Android dialog appears
-2. **Widen server approval** — Consider modifying dashboard config to require approval for all terminal/bash commands, not just dangerous patterns (server-side change in `approvals` config)
-3. **Phase 5E: Clarify support** — Same pattern as approval but with free-text input field for answering agent questions. `ClarifyRequest` still auto-denied in `JsonRpcClient`.
-4. **Phase 5F: Verification** — End-to-end test with real tool sessions
-5. **Legacy stack cleanup** — Remove `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, `SessionsViewModel`, `ChatViewModel`
-6. **Feature module cleanup** — Delete stub files in `feature/` directories not included in build
-7. **Background WebSocket** — Wire `HermesForegroundService` to keep WebSocket alive when phone locks
-8. **Production signing** — Wire proper keystore for release builds
-9. **Make repo public** — So Obtainium can see GitHub Releases and auto-update
+1. **Phase 5E: Clarify support** — Build a clarify dialog UI (free-text input field) to replace the auto-deny in `JsonRpcClient`. Same pattern as approval dialog.
+2. **Background WebSocket keepalive** — Wire `HermesForegroundService` to keep WebSocket alive when phone locks
+3. **Legacy stack cleanup** — Remove `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, `SessionsViewModel`, `ChatViewModel`
+4. **Feature module cleanup** — Delete stub files in `feature/` directories not included in build
+5. **StreamLoop optimization** — Only poll on actual state change instead of 50ms timer; currently wasteful during thinking (no content change)
+6. **Production signing** — Wire proper keystore for release builds
+7. **Make repo public** — So Obtainium can see GitHub Releases and auto-update
