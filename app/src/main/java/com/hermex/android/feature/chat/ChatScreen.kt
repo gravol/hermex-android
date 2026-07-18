@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
@@ -293,16 +294,27 @@ fun ChatScreen(
                             Icon(Icons.Default.Stop, contentDescription = "Stop")
                         }
                     } else {
-                        IconButton(
-                            onClick = {
-                                if (composerText.isNotBlank()) {
-                                    viewModel.sendMessage(composerText)
-                                    composerText = ""
-                                }
-                            },
-                            enabled = composerText.isNotBlank(),
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Default.Send, contentDescription = "Send")
+                            IconButton(
+                                onClick = {
+                                    if (composerText.isNotBlank()) {
+                                        viewModel.sendMessage(composerText)
+                                        composerText = ""
+                                    }
+                                },
+                                enabled = composerText.isNotBlank(),
+                            ) {
+                                Icon(Icons.Default.Send, contentDescription = "Send")
+                            }
+                            // Retry button — visible when not streaming and last msg is assistant
+                            if (!state.isStreaming && state.messages.any { it.role == "assistant" }) {
+                                IconButton(onClick = { viewModel.retry() }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Retry")
+                                }
+                            }
                         }
                     }
                 }

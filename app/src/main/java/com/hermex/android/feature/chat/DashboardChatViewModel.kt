@@ -235,6 +235,59 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         }
     }
 
+    /** Retry the last assistant response. Finds the previous user prompt,
+     * removes the last assistant message, and re-submits the prompt. */
+    override fun retry() {
+        if (sessionId.isEmpty()) return
+
+        val msgs = uiState.messages.toMutableList()
+        val userIdx = msgs.indexOfLast { it.role == "user" }
+        if (userIdx < 0) return
+        val lastUserText = msgs[userIdx].content
+        if (lastUserText.isBlank()) return
+
+        // Remove the last assistant message (the one we're regenerating)
+        val asstIdx = msgs.indexOfLast { it.role == "assistant" }
+        if (asstIdx >= 0) {
+            msgs.removeAt(asstIdx)
+        }
+
+        // Add streaming assistant placeholder
+        val assistantMsgId = "asst_${tempIdCounter.incrementAndGet()}"
+        val now = System.currentTimeMillis()
+        msgs.add(UiMessage(
+            id = assistantMsgId, role = "assistant",
+            isStreaming = true, isWaitingForFirstEvent = true, timestamp = now,
+        ))
+
+        uiState = uiState.copy(
+            messages = msgs,
+            isStreaming = true,
+            error = null,
+            pendingApproval = null,
+            pendingClarify = null,
+        )
+
+        viewModelScope.launch {
+            try {
+                DebugLog.log("RPC", "DashboardChat",
+                    "retry → dbKey=$sessionId liveSid=$liveSid text=\"${lastUserText.take(50)}\"")
+                rpcClient.promptSubmit(sessionId, lastUserText)
+            } catch (e: Exception) {
+                val m = uiState.messages.toMutableList()
+                val idx = m.indexOfLast { it.role == "assistant" && it.isStreaming }
+                if (idx >= 0) {
+                    m[idx] = m[idx].copy(isStreaming = false)
+                }
+                uiState = uiState.copy(
+                    messages = m,
+                    isStreaming = false,
+                    error = e.message ?: "Retry failed",
+                )
+            }
+        }
+    }
+
     /** Approve the current pending tool call. */
     override fun approveCurrentTool(approveAll: Boolean) {
         val pending = uiState.pendingApproval ?: return

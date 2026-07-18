@@ -225,6 +225,80 @@ class ChatViewModel(application: Application) : ChatViewModelContract(applicatio
         uiState = uiState.copy(messages = msgs, isStreaming = false)
     }
 
+    override fun retry() {
+        if (sessionId.isEmpty()) return
+
+        val msgs = uiState.messages.toMutableList()
+        val userIdx = msgs.indexOfLast { it.role == "user" }
+        if (userIdx < 0) return
+        val lastUserText = msgs[userIdx].content
+        if (lastUserText.isBlank()) return
+
+        // Cancel any previous stream
+        activeEventSource?.cancel()
+        activeEventSource = null
+
+        // Remove the last assistant message
+        val asstIdx = msgs.indexOfLast { it.role == "assistant" }
+        if (asstIdx >= 0) {
+            msgs.removeAt(asstIdx)
+        }
+
+        // Add streaming assistant placeholder
+        val assistantMsgId = "asst_${tempIdCounter.incrementAndGet()}"
+        msgs.add(UiMessage(
+            id = assistantMsgId, role = "assistant",
+            isStreaming = true, isWaitingForFirstEvent = true,
+        ))
+
+        uiState = uiState.copy(
+            messages = msgs,
+            isStreaming = true,
+            error = null,
+        )
+
+        SseParser.reset()
+
+        activeEventSource = ApiClient.openChatStream(
+            sessionId = sessionId,
+            message = lastUserText,
+            listener = object : EventSourceListener() {
+                override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
+                    if (!type.isNullOrBlank()) {
+                        SseParser.feed("event: $type")
+                    }
+                    SseParser.feed("data: $data")
+                    val parsed = SseParser.feed("")
+                    if (parsed != null) handleSseEvent(parsed)
+                }
+
+                override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                    val code = response?.code
+                    val errMsg = when {
+                        t != null -> t.message ?: "Stream connection lost"
+                        code != null -> "Server error ($code)"
+                        else -> "Stream connection lost"
+                    }
+                    val m = uiState.messages.toMutableList()
+                    val idx = m.indexOfLast { it.role == "assistant" && it.isStreaming }
+                    if (idx >= 0) {
+                        m[idx] = m[idx].copy(isStreaming = false)
+                    }
+                    uiState = uiState.copy(messages = m, isStreaming = false, error = errMsg)
+                }
+
+                override fun onClosed(eventSource: EventSource) {
+                    val m = uiState.messages.toMutableList()
+                    val idx = m.indexOfLast { it.role == "assistant" && it.isStreaming }
+                    if (idx >= 0) {
+                        m[idx] = m[idx].copy(isStreaming = false)
+                    }
+                    uiState = uiState.copy(messages = m, isStreaming = false)
+                }
+            },
+        )
+    }
+
     override fun toggleThinking(messageId: String) {
         val msgs = uiState.messages.toMutableList()
         val idx = msgs.indexOfFirst { it.id == messageId }

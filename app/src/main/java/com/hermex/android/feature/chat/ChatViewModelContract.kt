@@ -14,6 +14,8 @@ abstract class ChatViewModelContract(application: Application) : AndroidViewMode
     abstract fun loadMessages()
     abstract fun sendMessage(text: String)
     abstract fun stopStreaming()
+    /** Retry the last assistant response — re-send the previous user prompt. */
+    abstract fun retry()
     abstract fun toggleThinking(messageId: String)
     /** Approve the current pending tool approval request. */
     open fun approveCurrentTool(approveAll: Boolean = false) {}
