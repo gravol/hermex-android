@@ -168,12 +168,16 @@ fun ChatScreen(
                 "firstVisibleBefore=$prevFirstVisible " +
                 "viewportHeightBefore=$prevViewportHeight")
         }
-        if (justOpened && state.messages.isNotEmpty()) {
-            // Log window/inset height before scroll
-            DebugLog.log("UI", "Keyboard",
-                "keyboard open details: ime=${imeBottom}px " +
-                "sysBottom=${sysBottom}px sysTop=${sysTop}px " +
-                "density=${density.density}")
+
+        // Scroll adjustment on EVERY imeBottom change while open (tracks animation)
+        if (isOpen && state.messages.isNotEmpty()) {
+            // Log scroll-relevant metrics on first open frame (transition only)
+            if (justOpened) {
+                DebugLog.log("UI", "Keyboard",
+                    "keyboard open details: ime=${imeBottom}px " +
+                    "sysBottom=${sysBottom}px sysTop=${sysTop}px " +
+                    "density=${density.density}")
+            }
 
             // Wait for keyboard animation + layout to settle.
             // Uses frame-based waits (not a fixed delay) so we re-check
@@ -183,8 +187,10 @@ fun ChatScreen(
                 withFrameNanos { }
                 val currentHeight = listState.layoutInfo.viewportSize.height
                 if (currentHeight != prevHeight) {
-                    DebugLog.log("UI", "Keyboard",
-                        "frame $attempt: viewportHeight changed $prevHeight→$currentHeight (waiting for settle)")
+                    if (justOpened) {
+                        DebugLog.log("UI", "Keyboard",
+                            "frame $attempt: viewportHeight changed $prevHeight→$currentHeight (waiting for settle)")
+                    }
                     prevHeight = currentHeight
                 }
             }
@@ -194,12 +200,15 @@ fun ChatScreen(
             val firstVis = layoutInfo.visibleItemsInfo.firstOrNull()
             val lastVis = layoutInfo.visibleItemsInfo.lastOrNull()
             val targetIdx = state.messages.lastIndex
-            DebugLog.log("SCROLL", "Keyboard",
-                "reason=keyboard_open ime=${imeBottom}px " +
-                "target=$targetIdx totalItems=${state.messages.size} " +
-                "viewportBefore=[${firstVis?.index}..${lastVis?.index}] " +
-                "viewportHeight=${layoutInfo.viewportSize.height} " +
-                "totalViewportItems=${layoutInfo.visibleItemsInfo.size}")
+            val viewportHeightBefore = layoutInfo.viewportSize.height
+            if (justOpened) {
+                DebugLog.log("SCROLL", "Keyboard",
+                    "reason=keyboard_open ime=${imeBottom}px " +
+                    "target=$targetIdx totalItems=${state.messages.size} " +
+                    "viewportBefore=[${firstVis?.index}..${lastVis?.index}] " +
+                    "viewportHeight=$viewportHeightBefore " +
+                    "totalViewportItems=${layoutInfo.visibleItemsInfo.size}")
+            }
 
             autoScrollToBottom(
                 listState = listState,
@@ -208,6 +217,15 @@ fun ChatScreen(
                 scrollGeneration = state.scrollGeneration,
                 reason = "Keyboard",
             )
+            if (justOpened) {
+                val viewportHeightAfter = listState.layoutInfo.viewportSize.height
+                val firstVisAfter = listState.layoutInfo.visibleItemsInfo.firstOrNull()
+                val lastVisAfter = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+                DebugLog.log("SCROLL", "Keyboard",
+                    "scroll_result: target=$targetIdx " +
+                    "firstVisible=${firstVisAfter?.index} lastVisible=${lastVisAfter?.index} " +
+                    "viewportHeight=$viewportHeightAfter→$viewportHeightBefore")
+            }
         }
     }
 
