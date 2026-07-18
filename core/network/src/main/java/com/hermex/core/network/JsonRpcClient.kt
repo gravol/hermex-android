@@ -444,14 +444,24 @@ class JsonRpcClient(
     suspend fun sessionInterrupt(sessionId: String): JsonObject =
         request("session.interrupt", mapOf("session_id" to sessionId))
 
-    fun approvalRespond(sessionKey: String, approved: Boolean, reason: String? = null) {
+    /**
+     * Respond to a tool approval request.
+     * Server expects session_id (DB key), choice ("approve"|"deny"), and optional all.
+     * Uses notify() (fire-and-forget) — the server processes it either way.
+     */
+    fun approvalRespond(sessionId: String, choice: String, all: Boolean = false) {
         notify("approval.respond", mapOf(
-            "session_key" to sessionKey,
-            "approved" to approved,
-            "reason" to reason,
+            "session_id" to sessionId,
+            "choice" to choice,
+            "all" to all.takeIf { it },
         ))
     }
 
+    /**
+     * Respond to a clarify request.
+     * Server expects request_id and answer.
+     * Uses notify() (fire-and-forget).
+     */
     fun clarifyRespond(requestId: String, answer: String) {
         notify("clarify.respond", mapOf(
             "request_id" to requestId,
