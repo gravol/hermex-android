@@ -249,10 +249,35 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     "(sessionId=$sessionId liveSid=$liveSid)")
 
                 // Monitor WS state transitions
+                var previousWsState: Any? = null
                 launch {
                     wsConnection.state.collect { wsState ->
                         DebugLog.log("WS", "ChatVM",
                             "state=$wsState (sessionId=$sessionId liveSid=$liveSid)")
+                        // Detect reconnect: state changed TO Connected
+                        if (wsState.toString().uppercase() == "CONNECTED"
+                            && previousWsState != null
+                            && previousWsState.toString().uppercase() != "CONNECTED") {
+                            DebugLog.log("WS", "DashboardChat",
+                                "reconnect detected — re-registering session $sessionId")
+                            viewModelScope.launch {
+                                try {
+                                    val result = rpcClient.sessionResume(sessionId)
+                                    resumeCount++
+                                    liveSid = result.session_id
+                                    resumedSessionId = result.resumed ?: sessionId
+                                    DebugLog.log("STATE", "SessionID",
+                                        "reconnect resume(#${resumeCount}): " +
+                                        "dbKey=$sessionId liveSid=$liveSid " +
+                                        "resumed=$resumedSessionId")
+                                } catch (e: Exception) {
+                                    Log.e("Hermex", "DashboardChat: reconnect resume failed", e)
+                                    DebugLog.log("ERROR", "DashboardChat",
+                                        "reconnect resume failed: ${e.message}")
+                                }
+                            }
+                        }
+                        previousWsState = wsState
                     }
                 }
 
