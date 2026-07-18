@@ -104,10 +104,10 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 
 ### Auth chain
 ```
-1. POST /auth/password-login {"provider":"basic","username":"jeff","password":"***"}
+1. POST http://100.80.204.66:9119/auth/password-login {"provider":"basic","username":"jeff","password":"***"}
    → session cookies (hermes_session_at 12h, hermes_session_rt 30d) stored in CookiePersistor
 
-2. POST /api/auth/ws-ticket (cookie-authenticated)
+2. POST http://100.80.204.66:9119/api/auth/ws-ticket (cookie-authenticated)
    → {"ticket":"...", "ttl_seconds":30}  # single-use, 30s TTL
 
 3. ws://100.80.204.66:9119/api/ws?ticket=...
@@ -414,8 +414,7 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ## Development Environment
 
 ### Server
-- Hermes Dashboard at `https://100.80.204.66:8443` (TLS, self-signed cert, Tailscale IP)
-- WebSocket at `ws://100.80.204.66:9119/api/ws?ticket=...` (plain WS, inside Tailscale)
+- Hermes Dashboard at `http://100.80.204.66:9119` (REST + WebSocket, plain HTTP, Tailscale IP)
 - Legacy API at `http://100.80.204.66:8650` (plain HTTP, Hermes API Server)
 
 ### Device

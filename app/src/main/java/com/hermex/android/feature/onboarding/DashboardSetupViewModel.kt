@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class DashboardSetupUiState(
-    val dashboardUrl: String = "https://100.80.204.66:8443",
+    val dashboardUrl: String = "http://100.80.204.66:9119",
     val dashboardPassword: String = "",
     val isLoading: Boolean = false,
     val connectionOk: Boolean = false,

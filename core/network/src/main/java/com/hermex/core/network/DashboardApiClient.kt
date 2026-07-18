@@ -15,13 +15,13 @@ import okhttp3.Route
 import java.util.concurrent.TimeUnit
 
 /**
- * REST client for the Hermes Dashboard (port 8443 REST, 9119 WebSocket).
+ * REST client for the Hermes Dashboard (port 9119 REST + WebSocket).
  *
  * Auth chain: password-login → session cookies → ws-ticket → WebSocket.
  * Separate from [ApiClient] (port 8650 Bearer-auth REST+SSE).
  * Both coexist in the same codebase.
  *
- * REST calls use [restUrl] (port 8443 HTTPS). WebSocket upgrades use [wsUrl]
+ * REST calls use [restUrl] (port 9119 HTTP). WebSocket upgrades use [wsUrl]
  * (port 9119 WS), derived automatically from [restUrl] in [setDashboardUrl].
  */
 object DashboardApiClient {
@@ -29,7 +29,7 @@ object DashboardApiClient {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
     private val mediaTypeJson = "application/json".toMediaType()
 
-    private var restUrl: String = ""            // e.g. "https://100.80.204.66:8443"
+    private var restUrl: String = ""            // e.g. "http://100.80.204.66:9119"
     private var wsUrl: String = ""              // e.g. "ws://100.80.204.66:9119"  (derived)
     private var dashboardPassword: String = ""
     private lateinit var httpClient: OkHttpClient
@@ -79,11 +79,10 @@ object DashboardApiClient {
 
     fun setDashboardUrl(url: String) {
         restUrl = url.trimEnd('/')
-        // Derive the WebSocket URL: same host, port 9119, ws:///wss:// scheme
+        // Derive the WebSocket URL: same host and port, ws:///wss:// scheme only
         wsUrl = restUrl
             .replace("https://", "wss://")
             .replace("http://", "ws://")
-            .replace(":8443", ":9119")
     }
 
     fun setPassword(password: String) {
@@ -93,7 +92,7 @@ object DashboardApiClient {
     /** Expose the HTTP client for ticket-fetch + WS creation. */
     fun httpClient(): OkHttpClient = httpClient
 
-    /** REST base URL (port 8443 HTTPS). Used for login, ws-ticket, status. */
+    /** REST base URL (port 9119 HTTP). Used for login, ws-ticket, status. */
     fun baseUrl(): String = restUrl
 
     /** WebSocket base URL (port 9119 WS/WSS). Used for WS upgrade. */
