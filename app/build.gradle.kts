@@ -14,8 +14,8 @@ android {
         applicationId = "com.hermex.android"
         minSdk = 34
         targetSdk = 34
-        versionCode = 39
-        versionName = "0.1.39"
+        versionCode = 40
+        versionName = "0.1.40"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -142,6 +142,7 @@ dependencies {
 
     // Coil
     implementation(libs.coil.compose)
+    implementation("com.mikepenz:multiplatform-markdown-renderer-m3:0.33.0")
 
     // DataStore
     implementation(libs.datastore.preferences)

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
+import com.mikepenz.markdown.m3.Markdown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -716,9 +717,11 @@ private fun MessageBubble(
 
             // Content
             if (message.content.isNotBlank()) {
-                Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyMedium,
+                val mdState = com.mikepenz.markdown.model.rememberMarkdownState(
+                    content = message.content,
+                )
+                Markdown(
+                    markdownState = mdState,
                 )
                 if (message.isStreaming) {
                     Text(

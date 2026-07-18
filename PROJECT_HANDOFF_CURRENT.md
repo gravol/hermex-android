@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-18 (Phase 6E — tool card improvements)  
-**Current version:** v0.1.39 (versionCode 39)  
+**Last updated:** 2026-07-18 (Phase 7A — markdown rendering)  
+**Current version:** v0.1.40 (versionCode 40)  
 **HEAD commit:** `e97e236` — Add retry button: re-send last user prompt, remove failed assistant message  
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -19,8 +19,8 @@
 | Latest commit | `e97e236` — Add retry button (v0.1.38) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.39 (versionCode 39) |
-| Completed phase | **Phase 6E — tool card improvements** |
+| Version | v0.1.40 (versionCode 40) |
+| Completed phase | **Phase 7A — markdown rendering** |
 | Next phase | **Background WebSocket keepalive** |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -83,6 +83,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Release CI** — `.github/workflows/release.yml` auto-builds APK and creates GitHub Release on push to master
 - **Debug logging** — in-app ring buffer (1000 entries), exportable from Settings
 - **Retry/regenerate** — `retry()` finds the last user prompt, removes the last assistant message, and re-submits via `promptSubmit`. Retry button (Refresh icon) shown in the bottom bar when an assistant response exists. Same functionality in legacy SSE stack.
+- **Markdown rendering** — Assistant and user messages are rendered with the `multiplatform-markdown-renderer` library (v0.33.0, `-m3` module). Supports headings, bold, italic, code, fenced code blocks, tables, quotes, lists, and task lists. Streaming cursor preserved after markdown block. Uses `rememberMarkdownState` for efficient re-composition on delta updates.
 
 ### What works (Legacy REST+SSE stack — fallback)
 - Setup screen with server URL + API key entry
@@ -329,7 +330,12 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
   - **Result preview:** Full tool result (up to 500 chars) shown in expanded section, replacing the old flat 200-char preview
 - Version bumped to v0.1.39.
 
-## Session ID Bug — Explanation and Fix
+### Phase 7A — Markdown Rendering (v0.1.40)
+- **Dependency:** Added `com.mikepenz:multiplatform-markdown-renderer-m3:0.33.0` (Maven Central, no repo changes needed).
+- **Implementation:** Replaced the plain `Text(content = message.content)` in `MessageBubble` with `Markdown(markdownState = rememberMarkdownState(content = message.content))`.
+- **Features rendered:** headings (`#`), bold (`**`), italic (`*`), inline code (`` ` ``), fenced code blocks (``` ```), tables, blockquotes (`>`), ordered/unordered lists (`-`/`1.`), and task lists (`- [x]`).
+- **Streaming compatibility:** The streaming cursor (" ▌") is rendered outside the markdown block. `rememberMarkdownState` re-parses the full content on each delta, which is acceptable since chat messages are typically short-to-medium length.
+- Version bumped to v0.1.40.## Session ID Bug — Explanation and Fix
 
 ### Problem
 When a user taps a session in the session list, a DB session key (e.g., `20260717_205748_97c893e8`) is passed to the chat screen. `session.resume` is called with this key, and the server returns a live session ID (e.g., `f4c9982c`). However, subsequent calls like `prompt.submit` were still using the original DB key, causing a 4001 "session not found" error because the DB key is not a valid runtime session ID.
@@ -425,7 +431,7 @@ Hermex/
 | `app/.../MainActivity.kt` | 121 | NavGraph, route definitions, dashboard vs legacy routing |
 | `app/.../HermexApplication.kt` | 54 | Startup: ApiClient.init + DashboardApiClient.init |
 | `app/.../DashboardChatViewModel.kt` | 587 | Dashboard WS chat: connect, resume, send, notification handler, approve/deny/clarify, stop generation |
-| `app/.../ChatScreen.kt` | 1091 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval/clarify dialogs, retry button, enhanced tool cards |
+| `app/.../ChatScreen.kt` | 1094 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval/clarify dialogs, retry button, enhanced tool cards, markdown rendering |
 | `app/.../ChatViewModelContract.kt` | 24 | Abstract contract for both legacy and dashboard VMs |
 | `app/.../ChatViewModel.kt` | 471 | Legacy SSE chat ViewModel (has no-op approve/deny, retry) |
 | `app/.../DashboardSetupScreen.kt` | 150 | URL + password entry screen |
@@ -472,6 +478,8 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 9. **MessageCompleted merges, not replaces, tool calls** — When `MessageCompleted` arrives, it merges server-provided IDs into the live-accumulated tool calls (preserving preview/args from `ToolStart`/`ToolComplete`) rather than replacing the list. This ensures tool cards keep their context through finalization and session reload.
 
 10. **Tool event names match server reality, not docs** — The dashboard server emits `tool.generating`/`tool.start`/`tool.complete` with nested `payload` objects. Not the `tool.started`/`tool.progress`/`tool.completed` with flat params that the legacy SSE stack uses. Both coexist in separate code paths.
+
+11. **Markdown via multiplatform-markdown-renderer** — Messages are rendered using `com.mikepenz:multiplatform-markdown-renderer-m3` (v0.33.0), chosen because it's on Maven Central (no repo changes), is native Compose (not a View wrapper), and supports Material 3 theming out of the box. Uses Maven Central artifact `com.mikepenz:multiplatform-markdown-renderer-m3`. Streaming performance is acceptable since chat messages are short-to-medium length and `rememberMarkdownState` re-parses the full string on each delta.
 
 ---
 
