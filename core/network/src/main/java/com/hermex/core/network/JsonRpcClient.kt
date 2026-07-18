@@ -345,17 +345,8 @@ class JsonRpcClient(
             )
         }
 
-        // Auto-handle approval/clarify in v1: auto-deny
+        // Auto-handle clarify in v1: auto-deny
         when (notification) {
-            is RpcNotification.ApprovalRequest -> {
-                DebugLog.log("RPC", "Approval", "auto-deny sessionKey=${notification.sessionKey} tool=${notification.toolName}")
-                Log.w("Hermex", "JsonRpcClient: auto-denying approval for ${notification.toolName}")
-                notify("approval.respond", mapOf(
-                    "session_key" to notification.sessionKey,
-                    "approved" to false,
-                    "reason" to "Auto-denied (v1 — approval UI not yet implemented)",
-                ))
-            }
             is RpcNotification.ClarifyRequest -> {
                 DebugLog.log("RPC", "Clarify", "auto-deny requestId=${notification.requestId}")
                 Log.w("Hermex", "JsonRpcClient: auto-denying clarify request ${notification.requestId}")
