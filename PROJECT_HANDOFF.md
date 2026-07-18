@@ -1,7 +1,9 @@
 # Hermex Android — Project Handoff
 
-**Last updated:** 2026-07-17  
-**Current version:** 0.1.7 (versionCode 8)  
+**⚠️ This file is superseded by `PROJECT_HANDOFF_CURRENT.md` — see that file for the latest state.**
+
+**Last updated:** 2026-07-18  
+**Current version:** v0.1.32 (see PROJECT_HANDOFF_CURRENT.md for full details)  
 **Repository:** `git@github.com:gravol/hermes-android.git`  
 **Working directory:** `~/HermexAndroid`
 
