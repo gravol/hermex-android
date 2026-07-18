@@ -527,6 +527,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                         if (tc.toolName == n.toolName) tc.copy(
                             id = n.toolId,
                             preview = n.context,
+                            startedAt = System.currentTimeMillis(),
                         ) else tc
                     }
                     msgs[idx] = cur.copy(toolCalls = updated)
@@ -543,6 +544,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                             completed = true,
                             args = n.args?.toString() ?: tc.args,
                             preview = n.summary ?: tc.preview,
+                            result = n.result?.toString(),
+                            summary = n.summary,
                         ) else tc
                     }
                     msgs[idx] = cur.copy(toolCalls = updated)

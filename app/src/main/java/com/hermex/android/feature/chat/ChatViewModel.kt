@@ -42,6 +42,9 @@ data class UiToolCall(
     val toolName: String,
     val preview: String? = null,
     val args: String? = null,
+    val result: String? = null,
+    val summary: String? = null,
+    val startedAt: Long? = null,
     val completed: Boolean = false,
 )
 

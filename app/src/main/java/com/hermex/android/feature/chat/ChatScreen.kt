@@ -810,51 +810,160 @@ private fun ThinkingToggle(
 
 @Composable
 private fun ToolCallCard(toolCall: UiToolCall) {
+    var expanded by remember { mutableStateOf(false) }
+    val now by remember { mutableStateOf(System.currentTimeMillis()) }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
         shape = RoundedCornerShape(8.dp),
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // ── Header row: icon + name + elapsed + expand arrow ──
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable { expanded = !expanded },
+            ) {
+                // Tool icon
                 Text(
-                    text = if (toolCall.completed) "✓" else "◌",
-                    color = if (toolCall.completed) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelMedium,
+                    text = toolIcon(toolCall.toolName),
+                    style = MaterialTheme.typography.labelLarge,
                 )
                 Spacer(Modifier.width(6.dp))
+                // Tool name
                 Text(
                     text = toolCall.toolName,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
+                Spacer(Modifier.width(8.dp))
+                // Elapsed time
+                Text(
+                    text = formatElapsed(toolCall.startedAt, now, toolCall.completed),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+                Spacer(Modifier.weight(1f))
+                // Status + expand arrow
+                Text(
+                    text = if (toolCall.completed) "✓" else "◌",
+                    color = if (toolCall.completed) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = if (expanded) "▲" else "▼",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                )
             }
-            toolCall.preview?.let { preview ->
-                if (preview.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = preview.take(200),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
+
+            // ── Preview (always visible, one line) ──
+            val previewText = toolCall.preview
+                ?: toolCall.summary
+                ?: toolCall.args?.take(100)
+            if (!previewText.isNullOrBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = previewText,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
             }
-            toolCall.args?.let { args ->
-                if (args.isNotBlank() && (toolCall.preview?.isNotBlank() != true)) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = args.take(200),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    )
+
+            // ── Expandable detail section ──
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically(),
+            ) {
+                Column {
+                    // Args section
+                    if (!toolCall.args.isNullOrBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Arguments",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(4.dp),
+                        ) {
+                            Text(
+                                text = toolCall.args,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(6.dp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
+
+                    // Result section (completed only)
+                    if (toolCall.completed && !toolCall.result.isNullOrBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Result",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(4.dp),
+                        ) {
+                            Text(
+                                text = toolCall.result.take(500),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(6.dp),
+                                maxLines = 10,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/** Map tool name to an icon character. */
+private fun toolIcon(name: String): String = when {
+    name.contains("web_search", ignoreCase = true) -> "🔍"
+    name.contains("web_fetch", ignoreCase = true) || name.contains("http", ignoreCase = true) -> "🌐"
+    name.contains("read_file", ignoreCase = true) || name.contains("cat", ignoreCase = true) -> "📄"
+    name.contains("write_file", ignoreCase = true) || name.contains("edit", ignoreCase = true) -> "✏️"
+    name.contains("bash", ignoreCase = true) || name.contains("terminal", ignoreCase = true) ||
+        name.contains("command", ignoreCase = true) || name.contains("shell", ignoreCase = true) -> "💻"
+    name.contains("python", ignoreCase = true) || name.contains("code", ignoreCase = true) ||
+        name.contains("run", ignoreCase = true) -> "▶️"
+    name.contains("search", ignoreCase = true) -> "🔎"
+    name.contains("list", ignoreCase = true) || name.contains("dir", ignoreCase = true) -> "📋"
+    name.contains("think", ignoreCase = true) -> "🧠"
+    else -> "⚙️"
+}
+
+/** Format elapsed time for a tool call. Shows live duration for running tools. */
+private fun formatElapsed(startedAt: Long?, now: Long, completed: Boolean): String {
+    val start = startedAt ?: return ""
+    val elapsedMs = now - start
+    val seconds = elapsedMs / 1000
+    val millis = elapsedMs % 1000
+    return if (completed || seconds >= 60) {
+        // Show mm:ss for long or completed tools
+        val m = seconds / 60
+        val s = seconds % 60
+        if (m > 0) "${m}m ${s}s" else "${seconds}.${millis / 100}s"
+    } else {
+        // Show X.Xs for short running tools
+        "${seconds}.${millis / 100}s"
     }
 }
 

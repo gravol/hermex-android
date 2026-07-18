@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-18 (Phase 6C — regenerate)  
-**Current version:** v0.1.38 (versionCode 38)  
+**Last updated:** 2026-07-18 (Phase 6E — tool card improvements)  
+**Current version:** v0.1.39 (versionCode 39)  
 **HEAD commit:** `e97e236` — Add retry button: re-send last user prompt, remove failed assistant message  
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -19,8 +19,8 @@
 | Latest commit | `e97e236` — Add retry button (v0.1.38) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.38 (versionCode 38) |
-| Completed phase | **Phase 6C — regenerate responses** |
+| Version | v0.1.39 (versionCode 39) |
+| Completed phase | **Phase 6E — tool card improvements** |
 | Next phase | **Background WebSocket keepalive** |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -73,7 +73,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Chat streaming** — `DashboardChatViewModel` sends via `prompt.submit`, consumes notifications for real-time deltas
 - **Auto-scroll** — `scrollGeneration` counter for instant scroll, `scrollToItem` (not animate); two-step height-compensation algorithm
 - **Thinking/reasoning display** — collapsible blocks with delta concatenation
-- **Tool call visualization** — started/progress/completed UI with `ToolCallCard` components. Now correctly parses real server event names (`tool.generating`/`tool.start`/`tool.complete`). Tool cards persist through message completion and session reload.
+- **Tool call visualization** — started/progress/completed UI with `ToolCallCard` components. Now correctly parses real server event names (`tool.generating`/`tool.start`/`tool.complete`). Tool cards persist through message completion and session reload. Enhanced with tool-specific emoji icons, elapsed time display, expand/collapse with full Arguments and Result sections, and `result`/`summary`/`startedAt` captured from server notifications.
 - **Keyboard anchoring** — frame-based keyboard settle (replaced fixed delay with `withFrameNanos` × 3)
 - **Reconnect resume** — on WebSocket reconnect, calls `session.resume` to re-register the live session (fixes 4001 error after reconnect)
 - **Stop generation** — `stopStreaming()` sends `session.interrupt` RPC, clears per-message `isStreaming` flag on the last assistant message so blinking cursor / thinking ticker / typing dots disappear immediately, and dismisses any visible approval or clarify dialog. Same fix applied to legacy SSE stack.
@@ -319,6 +319,16 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
 - **UI:** Retry button (`Icons.Default.Refresh`) appears in the bottom bar next to the Send button when the last message is an assistant response and not streaming.
 - Version bumped to v0.1.38.
 
+### Phase 6E — Tool Card Improvements (v0.1.39)
+- **UiToolCall enhanced:** Added `result: String?`, `summary: String?`, `startedAt: Long?` fields. The server's `ToolComplete` notification carries `result` and `summary` — these are now captured instead of being dropped.
+- **Tool event handling:** `ToolStart` handler now records `startedAt = System.currentTimeMillis()` for elapsed time calculation. `ToolComplete` populates `result` and `summary` in addition to existing fields.
+- **ToolCallCard redesigned:**
+  - **Icons:** Context-aware emoji icons mapped from tool name (`web_search`→🔍, `bash`→💻, `read_file`→📄, etc.)
+  - **Elapsed time:** Shows duration since `startedAt` (e.g. "3.2s" for short tools, "1m 42s" for long/completed)
+  - **Expand/collapse:** Click the card header to toggle. Collapsed view shows icon + name + elapsed + status + one-line preview. Expanded view reveals full Arguments and Result sections in styled surfaces
+  - **Result preview:** Full tool result (up to 500 chars) shown in expanded section, replacing the old flat 200-char preview
+- Version bumped to v0.1.39.
+
 ## Session ID Bug — Explanation and Fix
 
 ### Problem
@@ -415,7 +425,7 @@ Hermex/
 | `app/.../MainActivity.kt` | 121 | NavGraph, route definitions, dashboard vs legacy routing |
 | `app/.../HermexApplication.kt` | 54 | Startup: ApiClient.init + DashboardApiClient.init |
 | `app/.../DashboardChatViewModel.kt` | 587 | Dashboard WS chat: connect, resume, send, notification handler, approve/deny/clarify, stop generation |
-| `app/.../ChatScreen.kt` | 970 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval/clarify dialogs |
+| `app/.../ChatScreen.kt` | 1091 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval/clarify dialogs, retry button, enhanced tool cards |
 | `app/.../ChatViewModelContract.kt` | 24 | Abstract contract for both legacy and dashboard VMs |
 | `app/.../ChatViewModel.kt` | 471 | Legacy SSE chat ViewModel (has no-op approve/deny, retry) |
 | `app/.../DashboardSetupScreen.kt` | 150 | URL + password entry screen |
