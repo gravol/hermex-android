@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownTypography
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -126,20 +127,25 @@ fun ChatScreen(
     // slow enough to avoid CPU churn.
     // Respects manual scrolling: skips when userScrolledUp=true, resumes
     // automatically when user returns to bottom (userScrolledUp→false).
+    // Uses a 100ms interval (was 50ms) to reduce scroll compensation
+    // fighting with markdown layout settling.
     LaunchedEffect(state.isStreaming) {
         if (state.isStreaming && state.messages.isNotEmpty()) {
+            var lastTargetIndex = -1
             DebugLog.log("SCROLL", "StreamLoop", "started (messages=${state.messages.size})")
             while (state.isStreaming && state.messages.isNotEmpty()) {
-                if (!userScrolledUp) {
+                val target = state.messages.lastIndex
+                if (!userScrolledUp && target != lastTargetIndex) {
                     autoScrollToBottom(
                         listState = listState,
-                        targetIndex = state.messages.lastIndex,
+                        targetIndex = target,
                         totalItems = state.messages.size,
                         scrollGeneration = state.scrollGeneration,
                         reason = "StreamLoop",
                     )
+                    lastTargetIndex = target
                 }
-                delay(50)
+                delay(100)
             }
             DebugLog.log("SCROLL", "StreamLoop", "ended (isStreaming=${state.isStreaming} messages=${state.messages.size})")
         }
@@ -717,11 +723,26 @@ private fun MessageBubble(
 
             // Content
             if (message.content.isNotBlank()) {
+                // Use immediate=true to avoid Loading→Success height oscillation
+                // during streaming (fixes scroll-crazy feedback loop).
+                // Override heading typography with reasonable sizes (not
+                // displayLarge ~57sp which "balloons" text in the bubble).
                 val mdState = com.mikepenz.markdown.model.rememberMarkdownState(
                     content = message.content,
+                    immediate = true,
                 )
                 Markdown(
                     markdownState = mdState,
+                    modifier = Modifier.widthIn(max = 400.dp),
+                    typography = markdownTypography(
+                        h1 = MaterialTheme.typography.titleLarge,
+                        h2 = MaterialTheme.typography.titleMedium,
+                        h3 = MaterialTheme.typography.titleSmall,
+                        h4 = MaterialTheme.typography.bodyLarge,
+                        h5 = MaterialTheme.typography.bodyMedium,
+                        h6 = MaterialTheme.typography.bodyMedium,
+                        text = MaterialTheme.typography.bodyMedium,
+                    ),
                 )
                 if (message.isStreaming) {
                     Text(
