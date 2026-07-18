@@ -48,24 +48,31 @@ sealed class RpcNotification {
     ) : RpcNotification()
 
     // ── Tool events ──
+    // Server emits: tool.generating, tool.start, tool.complete
+    // (NOT tool.started, tool.progress, tool.completed as earlier assumed)
 
-    data class ToolStarted(
+    /** Model is generating a tool call (tool.generating). Payload: {name}. */
+    data class ToolGenerating(
         override val sessionId: String,
         val toolName: String,
-        val messageId: String? = null,
-        val preview: String? = null,
+    ) : RpcNotification()
+
+    /** Tool is actually running (tool.start). Payload: {tool_id, name, context}. */
+    data class ToolStart(
+        override val sessionId: String,
+        val toolId: String,
+        val toolName: String,
+        val context: String? = null,
+    ) : RpcNotification()
+
+    /** Tool finished (tool.complete). Payload: {tool_id, name, args, result, summary}. */
+    data class ToolComplete(
+        override val sessionId: String,
+        val toolId: String,
+        val toolName: String,
         val args: JsonElement? = null,
-    ) : RpcNotification()
-
-    data class ToolProgress(
-        override val sessionId: String,
-        val toolName: String,
-        val delta: String? = null,
-    ) : RpcNotification()
-
-    data class ToolCompleted(
-        override val sessionId: String,
-        val toolName: String,
+        val result: JsonElement? = null,
+        val summary: String? = null,
     ) : RpcNotification()
 
     // ── Run lifecycle ──

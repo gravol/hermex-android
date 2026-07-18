@@ -420,17 +420,15 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 }
             }
 
-            is RpcNotification.ToolStarted -> {
+            is RpcNotification.ToolGenerating -> {
                 val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val existing = cur.toolCalls.toMutableList()
                     if (n.toolName != "_thinking") {
                         val tc = UiToolCall(
-                            id = n.messageId ?: "tc_${existing.size}",
+                            id = "tc_${existing.size}",
                             toolName = n.toolName,
-                            preview = n.preview,
-                            args = n.args?.toString(),
                         )
                         existing.add(tc)
                     }
@@ -441,26 +439,30 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 }
             }
 
-            is RpcNotification.ToolProgress -> {
-                if (n.toolName == "_thinking" && n.delta != null) {
-                    val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                    if (idx >= 0) {
-                        val cur = msgs[idx]
-                        val existing = cur.thinkingText ?: ""
-                        msgs[idx] = cur.copy(
-                            thinkingText = existing + n.delta,
-                            isWaitingForFirstEvent = false,
-                        )
-                    }
-                }
-            }
-
-            is RpcNotification.ToolCompleted -> {
+            is RpcNotification.ToolStart -> {
                 val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val updated = cur.toolCalls.map { tc ->
-                        if (tc.toolName == n.toolName) tc.copy(completed = true) else tc
+                        if (tc.toolName == n.toolName) tc.copy(
+                            id = n.toolId,
+                            preview = n.context,
+                        ) else tc
+                    }
+                    msgs[idx] = cur.copy(toolCalls = updated)
+                }
+            }
+
+            is RpcNotification.ToolComplete -> {
+                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+                if (idx >= 0) {
+                    val cur = msgs[idx]
+                    val updated = cur.toolCalls.map { tc ->
+                        if (tc.id == n.toolId || tc.toolName == n.toolName) tc.copy(
+                            completed = true,
+                            args = n.args?.toString() ?: tc.args,
+                            preview = n.summary ?: tc.preview,
+                        ) else tc
                     }
                     msgs[idx] = cur.copy(toolCalls = updated)
                 }

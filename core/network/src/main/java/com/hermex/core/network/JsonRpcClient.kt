@@ -278,25 +278,35 @@ class JsonRpcClient(
                 RpcNotification.ReasoningDelta(sessionId ?: "", text)
             }
 
-            "tool.started" -> RpcNotification.ToolStarted(
-                sessionId = sessionId ?: "",
-                toolName = params["tool_name"]?.jsonPrimitive?.content ?: "unknown",
-                messageId = params["message_id"]?.jsonPrimitive?.content,
-                preview = params["preview"]?.jsonPrimitive?.content,
-                args = params["args"],
-            )
+            "tool.generating" -> {
+                val payload = params["payload"]?.jsonObject
+                RpcNotification.ToolGenerating(
+                    sessionId = sessionId ?: "",
+                    toolName = payload?.get("name")?.jsonPrimitive?.content ?: "unknown",
+                )
+            }
 
-            "tool.progress" -> RpcNotification.ToolProgress(
-                sessionId = sessionId ?: "",
-                toolName = params["tool_name"]?.jsonPrimitive?.content ?: "unknown",
-                delta = params["delta"]?.jsonPrimitive?.content
-                    ?: params["payload"]?.jsonObject?.get("text")?.jsonPrimitive?.content,
-            )
+            "tool.start" -> {
+                val payload = params["payload"]?.jsonObject
+                RpcNotification.ToolStart(
+                    sessionId = sessionId ?: "",
+                    toolId = payload?.get("tool_id")?.jsonPrimitive?.content ?: "",
+                    toolName = payload?.get("name")?.jsonPrimitive?.content ?: "unknown",
+                    context = payload?.get("context")?.jsonPrimitive?.content,
+                )
+            }
 
-            "tool.completed" -> RpcNotification.ToolCompleted(
-                sessionId = sessionId ?: "",
-                toolName = params["tool_name"]?.jsonPrimitive?.content ?: "unknown",
-            )
+            "tool.complete" -> {
+                val payload = params["payload"]?.jsonObject
+                RpcNotification.ToolComplete(
+                    sessionId = sessionId ?: "",
+                    toolId = payload?.get("tool_id")?.jsonPrimitive?.content ?: "",
+                    toolName = payload?.get("name")?.jsonPrimitive?.content ?: "unknown",
+                    args = payload?.get("args"),
+                    result = payload?.get("result"),
+                    summary = payload?.get("summary")?.jsonPrimitive?.content,
+                )
+            }
 
             "run.started" -> RpcNotification.RunStarted(sessionId ?: "")
 
