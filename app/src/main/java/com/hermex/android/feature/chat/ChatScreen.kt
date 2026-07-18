@@ -766,6 +766,18 @@ private fun ToolCallCard(toolCall: UiToolCall) {
                     )
                 }
             }
+            toolCall.args?.let { args ->
+                if (args.isNotBlank() && (toolCall.preview?.isNotBlank() != true)) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = args.take(200),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    )
+                }
+            }
         }
     }
 }

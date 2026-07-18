@@ -121,6 +121,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                             UiToolCall(
                                 id = tc.id ?: "tc",
                                 toolName = tc.function?.name ?: "unknown",
+                                args = tc.function?.arguments,
                                 completed = true,
                             )
                         } ?: emptyList(),
@@ -421,6 +422,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ToolGenerating -> {
+                DebugLog.log("RPC", "ToolEvent", "generating: ${n.toolName}")
                 val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
@@ -440,6 +442,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ToolStart -> {
+                DebugLog.log("RPC", "ToolEvent", "start: toolId=${n.toolId} name=${n.toolName} context=${n.context ?: ""}")
                 val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
@@ -454,6 +457,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ToolComplete -> {
+                DebugLog.log("RPC", "ToolEvent", "complete: toolId=${n.toolId} name=${n.toolName} summary=${n.summary ?: ""} args=${n.args?.toString()?.take(100) ?: ""}")
                 val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
@@ -474,13 +478,20 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val finalContent = n.content?.takeIf { it.isNotBlank() } ?: cur.content
-                    val finalTools = n.toolCalls?.map {
-                        UiToolCall(
-                            id = it.id ?: "tc",
-                            toolName = it.function?.name ?: "unknown",
+                    // Keep live-accumulated tool calls (preserve preview/args from
+                    // ToolGenerating/ToolStart/ToolComplete). Only copy server IDs
+                    // from message.tool_calls so tool cards don't lose their context
+                    // when MessageCompleted replaces the list wholesale.
+                    val serverTools = n.toolCalls.orEmpty()
+                    val finalTools = cur.toolCalls.map { liveTc ->
+                        val serverMatch = serverTools.firstOrNull {
+                            it.function?.name == liveTc.toolName
+                        }
+                        liveTc.copy(
+                            id = serverMatch?.id ?: liveTc.id,
                             completed = true,
                         )
-                    } ?: cur.toolCalls
+                    }
                     val usage = n.usage?.let {
                         UiUsage(
                             it.promptTokens ?: 0,
