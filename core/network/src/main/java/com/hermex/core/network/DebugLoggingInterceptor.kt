@@ -73,7 +73,7 @@ class DebugLoggingInterceptor : Interceptor {
             body = responseBodyStr,
         )
 
-        if (!response.isSuccessful) {
+        if (!response.isSuccessful && response.code != 101) {
             DebugLog.log("ERROR", "HTTP", "Non-success response: ${response.code} ${response.message}")
         }
 

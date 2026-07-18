@@ -149,16 +149,26 @@ fun ChatScreen(
     val imeBottom = WindowInsets.ime.getBottom(density)
     val sysBottom = WindowInsets.systemBars.getBottom(density)
     val sysTop = WindowInsets.systemBars.getTop(density)
+    val keyboardOpen = imeBottom > 0
+    var wasKeyboardOpen by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(imeBottom) {
         val prevFirstVisible = listState.firstVisibleItemIndex
         val prevTotalItems = state.messages.size
         val prevViewportHeight = listState.layoutInfo.viewportSize.height
-        DebugLog.log("UI", "Keyboard",
-            "event=${if (imeBottom > 0) "OPEN" else "CLOSE"} " +
-            "imeHeight=${imeBottom}px messages=$prevTotalItems " +
-            "firstVisibleBefore=$prevFirstVisible " +
-            "viewportHeightBefore=$prevViewportHeight")
-        if (imeBottom > 0 && state.messages.isNotEmpty()) {
+        val isOpen = imeBottom > 0
+        val justOpened = isOpen && wasKeyboardOpen != true
+        val justClosed = !isOpen && wasKeyboardOpen == true
+        wasKeyboardOpen = isOpen
+
+        // Log only on state transitions, not every intermediate frame
+        if (justOpened || justClosed) {
+            DebugLog.log("UI", "Keyboard",
+                "event=${if (isOpen) "OPEN" else "CLOSE"} " +
+                "imeHeight=${imeBottom}px messages=$prevTotalItems " +
+                "firstVisibleBefore=$prevFirstVisible " +
+                "viewportHeightBefore=$prevViewportHeight")
+        }
+        if (justOpened && state.messages.isNotEmpty()) {
             // Log window/inset height before scroll
             DebugLog.log("UI", "Keyboard",
                 "keyboard open details: ime=${imeBottom}px " +
