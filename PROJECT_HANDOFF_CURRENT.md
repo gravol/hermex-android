@@ -1,9 +1,9 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-18 (Phase 6B — reliable interrupt)  
+**Last updated:** 2026-07-18 (Phase 6C — regenerate)  
 **Current version:** v0.1.38 (versionCode 38)  
-**HEAD commit:** `5ff5ac4` — fix tool card display: persist live tool call state through MessageCompleted  
-**Branch:** `master` (uncommitted Phase 5E + Phase 6B changes)  
+**HEAD commit:** `e97e236` — Add retry button: re-send last user prompt, remove failed assistant message  
+**Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
 
@@ -16,11 +16,11 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `5ff5ac4` — fix tool card display (v0.1.36) |
+| Latest commit | `e97e236` — Add retry button (v0.1.38) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
 | Version | v0.1.38 (versionCode 38) |
-| Completed phase | **Phase 6B — reliable interrupt support** |
+| Completed phase | **Phase 6C — regenerate responses** |
 | Next phase | **Background WebSocket keepalive** |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -82,6 +82,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Approval RPC** — `approvalRespond()` sends correctly-param'd `approval.respond` notification to server (choice: "approve"/"deny", all: bool)
 - **Release CI** — `.github/workflows/release.yml` auto-builds APK and creates GitHub Release on push to master
 - **Debug logging** — in-app ring buffer (1000 entries), exportable from Settings
+- **Retry/regenerate** — `retry()` finds the last user prompt, removes the last assistant message, and re-submits via `promptSubmit`. Retry button (Refresh icon) shown in the bottom bar when an assistant response exists. Same functionality in legacy SSE stack.
 
 ### What works (Legacy REST+SSE stack — fallback)
 - Setup screen with server URL + API key entry
@@ -307,7 +308,16 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
   - Finds the last assistant message with `isStreaming == true` and sets it to `false` (same pattern as the error handler in `sendMessage`)
   - Clears `pendingApproval` and `pendingClarify` so any visible dialog is dismissed
 - **Legacy stack:** Applied the same `isStreaming` cleanup to `ChatViewModel.stopStreaming()` for consistency.
-- Version bumped to v0.1.38.---
+- Version bumped to v0.1.38.
+
+### Phase 6C — Regenerate Responses (v0.1.38)
+- **Feature:** Users can now retry the last assistant response, similar to ChatGPT's regenerate.
+- **Implementation:**
+  - Added `abstract fun retry()` to `ChatViewModelContract`
+  - `DashboardChatViewModel.retry()` finds the last user message's text, removes the last assistant message, adds a new streaming placeholder, and calls `rpcClient.promptSubmit(sessionId, text)`
+  - `ChatViewModel.retry()` reuses the same approach with the legacy SSE `ApiClient.openChatStream()`
+- **UI:** Retry button (`Icons.Default.Refresh`) appears in the bottom bar next to the Send button when the last message is an assistant response and not streaming.
+- Version bumped to v0.1.38.
 
 ## Session ID Bug — Explanation and Fix
 
@@ -407,7 +417,7 @@ Hermex/
 | `app/.../DashboardChatViewModel.kt` | 587 | Dashboard WS chat: connect, resume, send, notification handler, approve/deny/clarify, stop generation |
 | `app/.../ChatScreen.kt` | 970 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval/clarify dialogs |
 | `app/.../ChatViewModelContract.kt` | 24 | Abstract contract for both legacy and dashboard VMs |
-| `app/.../ChatViewModel.kt` | 370 | Legacy SSE chat ViewModel (has no-op approve/deny) |
+| `app/.../ChatViewModel.kt` | 471 | Legacy SSE chat ViewModel (has no-op approve/deny, retry) |
 | `app/.../DashboardSetupScreen.kt` | 150 | URL + password entry screen |
 | `app/.../DashboardSetupViewModel.kt` | 119 | status() → login() flow for dashboard setup |
 | `app/.../SessionsScreen.kt` | 165 | Session list UI |
