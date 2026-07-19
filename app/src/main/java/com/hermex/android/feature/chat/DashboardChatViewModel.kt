@@ -2,6 +2,7 @@ package com.hermex.android.feature.chat
 
 import android.app.Application
 import android.util.Log
+import com.hermex.android.service.WsKeepaliveService
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -329,6 +330,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             "onCleared: sessionId=$sessionId liveSid=$liveSid resumeCount=$resumeCount")
         super.onCleared()
         notificationCollectorJob?.cancel()
+        WsKeepaliveService.stop(getApplication())
         wsConnection.disconnect()
     }
 
@@ -344,6 +346,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 DebugLog.log("WS", "DashboardChat",
                     "WebSocket connected in ${connectDuration}ms — starting RPC " +
                     "(sessionId=$sessionId liveSid=$liveSid)")
+
+                // Start foreground service to keep the process alive
+                // (prevents WS disconnect when phone locks or app backgrounds)
+                WsKeepaliveService.start(getApplication())
 
                 // Monitor WS state transitions
                 var previousWsState: Any? = null

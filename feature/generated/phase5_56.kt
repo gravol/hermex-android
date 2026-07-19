@@ -1,1 +1,0 @@
-modifier = Modifier.pullToRefresh(refreshState)

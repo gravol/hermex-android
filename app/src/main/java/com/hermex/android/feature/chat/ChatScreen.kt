@@ -30,6 +30,9 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
+import com.mikepenz.markdown.compose.components.markdownComponents
+import com.mikepenz.markdown.compose.elements.highlightedCodeBlock
+import com.mikepenz.markdown.compose.elements.highlightedCodeFence
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
 import androidx.compose.material3.*
@@ -742,6 +745,10 @@ private fun MessageBubble(
                         h5 = MaterialTheme.typography.bodyMedium,
                         h6 = MaterialTheme.typography.bodyMedium,
                         text = MaterialTheme.typography.bodyMedium,
+                    ),
+                    components = markdownComponents(
+                        codeBlock = highlightedCodeBlock,
+                        codeFence = highlightedCodeFence,
                     ),
                 )
                 if (message.isStreaming) {

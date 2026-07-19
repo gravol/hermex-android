@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-18 (Phase 7A — markdown rendering)  
-**Current version:** v0.1.40 (versionCode 40)  
-**HEAD commit:** `e97e236` — Add retry button: re-send last user prompt, remove failed assistant message  
+**Last updated:** 2026-07-19 (Phase 7C — syntax highlighting)  
+**Current version:** v0.1.42 (versionCode 42)  
+**HEAD commit:** `(working tree — uncommitted)`  
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -16,12 +16,12 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `e97e236` — Add retry button (v0.1.38) |
+| Latest commit | `(working tree — uncommitted)` |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.40 (versionCode 40) |
-| Completed phase | **Phase 7A — markdown rendering** |
-| Next phase | **Background WebSocket keepalive** |
+| Version | v0.1.42 (versionCode 42) |
+| Completed phase | **Phase 7C — syntax highlighting** |
+| Next phase | **StreamLoop optimization** |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
 
@@ -83,7 +83,8 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Release CI** — `.github/workflows/release.yml` auto-builds APK and creates GitHub Release on push to master
 - **Debug logging** — in-app ring buffer (1000 entries), exportable from Settings
 - **Retry/regenerate** — `retry()` finds the last user prompt, removes the last assistant message, and re-submits via `promptSubmit`. Retry button (Refresh icon) shown in the bottom bar when an assistant response exists. Same functionality in legacy SSE stack.
-- **Markdown rendering** — Assistant and user messages are rendered with the `multiplatform-markdown-renderer` library (v0.33.0, `-m3` module). Supports headings, bold, italic, code, fenced code blocks, tables, quotes, lists, and task lists. Streaming cursor preserved after markdown block. Uses `rememberMarkdownState` for efficient re-composition on delta updates.
+- **Markdown rendering** — Assistant and user messages are rendered with the `multiplatform-markdown-renderer` library (v0.34.0, `-m3` module). Supports headings, bold, italic, code, fenced code blocks, tables, quotes, lists, and task lists. **Syntax highlighting** for code blocks (Kotlin, Java, Python, Bash, JSON, XML, Markdown) via the `-code` module and Highlights library. Streaming cursor preserved after markdown block. Uses `rememberMarkdownState` for efficient re-composition on delta updates.
+- **Background keepalive** — `WsKeepaliveService` foreground service keeps the process alive while the chat WebSocket is active. Started on WS connect, stopped on ViewModel clear. Uses `dataSync` foreground service type with a low-importance persistent notification.
 
 ### What works (Legacy REST+SSE stack — fallback)
 - Setup screen with server URL + API key entry
@@ -95,8 +96,8 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Approval dialog only fires for dangerous terminal commands** — Server-side `approval.request` notification is emitted only when `detect_dangerous_command()` matches (e.g. `rm -rf`, `curl | bash`). Normal tools like `web_search`, `ls ~/`, `read_file` auto-approve silently. The Android dialog is correctly built but never triggered for everyday commands. This matches Telegram behavior (only dangerous patterns ask for approval).
 - ~~**ClarifyRequest still auto-denied**~~ **Clarify dialog implemented** — `PendingClarify` state model with free-text answer input. `ClarifyRequest` notifications set `pendingClarify` in `ChatUiState`, triggering a Compose `Dialog` with the server's question and an answer field. Cancel sends empty string to unblock the turn.
 - **Empty sessions in session.list** — `session.list` may return sessions with zero messages or no content. Need server-side filtering or client-side display filtering.
-- **Legacy REST/SSE stack cleanup deferred** — `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, old `ChatViewModel` still present. Deferred until new stack is proven end-to-end.
-- **No background WebSocket keepalive** — `HermesForegroundService` exists in `core/ui` but is not wired. Phone lock may disconnect WebSocket.
+- ~~**Legacy REST/SSE stack cleanup deferred**~~ **Legacy stack cleaned up (Phase 7C)** — `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, old `ChatViewModel`, `HermesForegroundService` stub, and orphaned `feature/` modules all removed.
+- ~~**No background WebSocket keepalive**~~ **Background keepalive implemented (Phase 7B)** — `WsKeepaliveService` foreground service wired into `DashboardChatViewModel`. Starts on WS connect, stops on ViewModel clear. The old `HermesForegroundService` template in `core/ui` (SSE-based, dead code) should be removed during legacy cleanup.
 - **Feature modules contain dead code** — `feature/chat/`, `feature/session/`, `feature/skills/`, etc. contain auto-generated `Component_*.kt` stubs. Not included in `settings.gradle.kts` — do not compile. Safe to delete.
 - **Debug APK is large** — 63MB debug build vs 28MB release (ProGuard + R8). Expected.
 - **Signed with debug key** — Release builds use `signingConfigs.getByName("debug")`. Need real keystore before production distribution.
@@ -335,7 +336,41 @@ UI Layer (DashboardChatViewModel, SessionsViewModel)
 - **Implementation:** Replaced the plain `Text(content = message.content)` in `MessageBubble` with `Markdown(markdownState = rememberMarkdownState(content = message.content))`.
 - **Features rendered:** headings (`#`), bold (`**`), italic (`*`), inline code (`` ` ``), fenced code blocks (``` ```), tables, blockquotes (`>`), ordered/unordered lists (`-`/`1.`), and task lists (`- [x]`).
 - **Streaming compatibility:** The streaming cursor (" ▌") is rendered outside the markdown block. `rememberMarkdownState` re-parses the full content on each delta, which is acceptable since chat messages are typically short-to-medium length.
-- Version bumped to v0.1.40.## Session ID Bug — Explanation and Fix
+- Version bumped to v0.1.40.
+
+### Phase 7B — Background WebSocket Keepalive (v0.1.41)
+- **Problem:** Phone lock caused Android to kill the process or throttle network, disconnecting the WebSocket. The existing `pingInterval(30s)` in `WsConnectionManager` only helped while the process stayed alive.
+- **New file:** `app/.../service/WsKeepaliveService.kt` — foreground service that keeps the process alive while the chat WebSocket is active.
+  - `START_STICKY` restart behavior
+  - Notification channel `hermex_keepalive_channel` (LOW importance, silent, no badge)
+  - Persistent notification "Hermex AI — Connected" with tap-to-open
+  - Companion `start(context)` / `stop(context)` helpers
+- **Manifest:** Added `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` permissions and `<service foregroundServiceType="dataSync">` declaration.
+- **ViewModel wiring:** `DashboardChatViewModel.connectWsAndStart()` calls `WsKeepaliveService.start()` after WS connects; `onCleared()` calls `stop()`.
+- The service does NOT own the WebSocket — it only keeps the process alive so `WsConnectionManager` (owned by the ViewModel) can continue uninterrupted.
+- Builds and assembles cleanly. Version bumped to v0.1.41.
+
+### Phase 7C — Syntax Highlighting & Legacy Stack Cleanup (v0.1.42)
+- **Dependency upgrade:** `multiplatform-markdown-renderer-m3` from 0.33.0 → 0.34.0. Added `multiplatform-markdown-renderer-code:0.34.0` for syntax highlighting via the Highlights library.
+- **Syntax highlighting wired:** `highlightedCodeBlock` and `highlightedCodeFence` components passed to `Markdown` composable via `markdownComponents()`. Languages supported: Kotlin, Java, Python, Bash, JSON, XML, Markdown.
+- **Streaming compatible:** Syntax highlighting re-parses on each delta via `rememberMarkdownState(immediate=true)`, same as the existing markdown pipeline. No performance regression for typical chat message lengths.
+- **Legacy stack cleanup — Phase 1-3 (zero-risk):**
+  - Deleted orphaned `feature/` directory (11 subdirs, 32 tracked files — not in `settings.gradle.kts`)
+  - Deleted dead `core/ui/` files (`HermesForegroundService.kt`, `DeepLinkHandler.kt`, `ChatNotificationManager.kt`)
+  - Deleted legacy `SetupScreen.kt`, `SetupViewModel.kt`, removed `"setup"` nav route from `MainActivity.kt`
+- **Legacy stack cleanup — Phase 4-7 (core):**
+  - `HermexApplication.kt`: removed `ApiClient.init()`, credential restore, and `ApiClient` import
+  - `SettingsScreen.kt`: replaced `ApiClient.baseUrl()` with `DashboardApiClient.baseUrl()`
+  - Deleted legacy `ChatViewModel.kt`, removed conditional in `MainActivity.kt` chat route (always `DashboardChatViewModel`)
+  - `SessionsViewModel.kt`: removed `loadLegacySessions()` and `ApiClient`/`NetworkResult` imports
+  - Extracted shared UI models (`UiMessage`, `ChatUiState`, `PendingApproval`, etc.) from legacy `ChatViewModel.kt` into new `UiModels.kt`
+  - Extracted `SessionSummary` from `DTOs.kt` into its own file
+  - Deleted `ApiClient.kt` and `DTOs.kt`
+- Builds and assembles cleanly. Version bumped to v0.1.42.
+
+---
+
+## Session ID Bug — Explanation and Fix
 
 ### Problem
 When a user taps a session in the session list, a DB session key (e.g., `20260717_205748_97c893e8`) is passed to the chat screen. `session.resume` is called with this key, and the server returns a live session ID (e.g., `f4c9982c`). However, subsequent calls like `prompt.submit` were still using the original DB key, causing a 4001 "session not found" error because the DB key is not a valid runtime session ID.
@@ -448,6 +483,8 @@ Hermex/
 | `core/network/DebugLoggingInterceptor.kt` | — | HTTP/SSE debug logging |
 | `core/data/KeychainStore.kt` | — | EncryptedSharedPreferences for secrets |
 
+| `app/.../service/WsKeepaliveService.kt` | 104 | Foreground service — keeps process alive during chat WS connection |
+
 ### Routes
 ```
 dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{title}
@@ -479,7 +516,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 10. **Tool event names match server reality, not docs** — The dashboard server emits `tool.generating`/`tool.start`/`tool.complete` with nested `payload` objects. Not the `tool.started`/`tool.progress`/`tool.completed` with flat params that the legacy SSE stack uses. Both coexist in separate code paths.
 
-11. **Markdown via multiplatform-markdown-renderer** — Messages are rendered using `com.mikepenz:multiplatform-markdown-renderer-m3` (v0.33.0), chosen because it's on Maven Central (no repo changes), is native Compose (not a View wrapper), and supports Material 3 theming out of the box. Uses Maven Central artifact `com.mikepenz:multiplatform-markdown-renderer-m3`. Streaming performance is acceptable since chat messages are short-to-medium length and `rememberMarkdownState` re-parses the full string on each delta.
+11. **Markdown via multiplatform-markdown-renderer** — Messages are rendered using `com.mikepenz:multiplatform-markdown-renderer-m3` (v0.34.0), chosen because it's on Maven Central (no repo changes), is native Compose (not a View wrapper), and supports Material 3 theming out of the box. Uses Maven Central artifact `com.mikepenz:multiplatform-markdown-renderer-m3`. Streaming performance is acceptable since chat messages are short-to-medium length and `rememberMarkdownState` re-parses the full string on each delta. Code syntax highlighting is provided by the companion `multiplatform-markdown-renderer-code` module (Highlights library), wired via `highlightedCodeBlock`/`highlightedCodeFence` custom components.
+
+12. **Foreground service for process keepalive, not for WS ownership** — `WsKeepaliveService` is a lightweight `START_STICKY` foreground service that keeps the Android process alive but does NOT own the WebSocket connection. The `WsConnectionManager` remains owned by `DashboardChatViewModel` (tied to `viewModelScope`). The service only prevents the OS from killing the process or throttling network when the phone locks. When the ViewModel is cleared (user leaves chat), the service stops and the WS disconnects. This separation keeps the WebSocket lifecycle simple and avoids dual-connection issues.
 
 ---
 
@@ -508,9 +547,6 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 ## Next Steps
 
-1. **Background WebSocket keepalive** — Wire `HermesForegroundService` to keep WebSocket alive when phone locks
-2. **Legacy stack cleanup** — Remove `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, `SessionsViewModel`, `ChatViewModel`
-3. **Feature module cleanup** — Delete stub files in `feature/` directories not included in build
-4. **StreamLoop optimization** — Only poll on actual state change instead of 50ms timer; currently wasteful during thinking (no content change)
-5. **Production signing** — Wire proper keystore for release builds
-6. **Make repo public** — So Obtainium can see GitHub Releases and auto-update
+1. **StreamLoop optimization** — Only poll on actual state change instead of 50ms timer; currently wasteful during thinking (no content change)
+2. **Production signing** — Wire proper keystore for release builds
+3. **Make repo public** — So Obtainium can see GitHub Releases and auto-update

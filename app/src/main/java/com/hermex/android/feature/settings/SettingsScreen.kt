@@ -20,7 +20,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
-import com.hermex.core.network.ApiClient
+import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -60,7 +60,7 @@ fun SettingsScreen(
             Text("App Info", style = MaterialTheme.typography.titleSmall)
             val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             Text("Version: ${pkgInfo.versionName} (${pkgInfo.longVersionCode})", style = MaterialTheme.typography.bodyMedium)
-            Text("Server: ${ApiClient.baseUrl()}", style = MaterialTheme.typography.bodyMedium)
+            Text("Server: ${DashboardApiClient.baseUrl()}", style = MaterialTheme.typography.bodyMedium)
             Text(
                 "Device: ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
                 style = MaterialTheme.typography.bodyMedium,
@@ -112,7 +112,7 @@ private suspend fun exportAndShare(context: Context) {
             val content = DebugLog.export(
                 appVersion = appVersion,
                 deviceInfo = deviceInfo,
-                serverUrl = ApiClient.baseUrl(),
+                serverUrl = DashboardApiClient.baseUrl(),
             )
 
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -149,7 +149,7 @@ private fun copyToClipboard(context: Context) {
         val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         val appVersion = "${pkgInfo.versionName} (${pkgInfo.longVersionCode})"
 
-        val content = DebugLog.exportShort(appVersion, ApiClient.baseUrl())
+        val content = DebugLog.exportShort(appVersion, DashboardApiClient.baseUrl())
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("Hermex Debug Log", content))
         Toast.makeText(context, "Debug log copied to clipboard", Toast.LENGTH_SHORT).show()

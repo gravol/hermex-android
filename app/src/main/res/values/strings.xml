@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Hermex</string>
+    <!-- Foreground service notification channel -->
+    <string name="notification_channel_name">Hermex Connection</string>
+    <string name="notification_channel_description">Keeps the chat connection alive when the app is in the background</string>
+    <string name="notification_title">Hermex AI</string>
+    <string name="notification_text">Connected</string>
 </resources>

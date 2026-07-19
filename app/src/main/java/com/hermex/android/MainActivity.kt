@@ -12,13 +12,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.hermex.android.feature.chat.ChatScreen
-import com.hermex.android.feature.chat.ChatViewModel
 import com.hermex.android.feature.chat.DashboardChatViewModel
 import com.hermex.android.feature.onboarding.DashboardSetupScreen
-import com.hermex.android.feature.onboarding.SetupScreen
 import com.hermex.android.feature.sessions.SessionsScreen
 import com.hermex.android.feature.settings.SettingsScreen
-import com.hermex.core.network.ApiClient
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import com.hermex.android.ui.theme.HermexTheme
@@ -40,20 +37,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HermexNavGraph() {
     val navController = rememberNavController()
-    // Dashboard is the primary path. Legacy API fallback is only reachable
-    // via explicit navigation to "setup" — never auto-selected at startup.
-    // Old legacy credentials will not prevent the dashboard setup screen.
+    // Dashboard is the primary path. If not configured, user goes through
+    // dashboard-setup flow. Legacy stack cleanup in progress.
     val startDest = when {
         DashboardApiClient.isConfigured -> {
             DebugLog.log("ROUTE", "MainActivity", "startup → home (dashboard configured)")
             "home"
         }
         else -> {
-            if (ApiClient.isConfigured) {
-                DebugLog.log("ROUTE", "MainActivity", "startup → dashboard-setup (legacy API exists but dashboard not configured)")
-            } else {
-                DebugLog.log("ROUTE", "MainActivity", "startup → dashboard-setup (neither configured)")
-            }
+            DebugLog.log("ROUTE", "MainActivity", "startup → dashboard-setup")
             "dashboard-setup"
         }
     }
@@ -64,15 +56,6 @@ fun HermexNavGraph() {
                 onDone = {
                     navController.navigate("home") {
                         popUpTo("dashboard-setup") { inclusive = true }
-                    }
-                }
-            )
-        }
-        composable("setup") {
-            SetupScreen(
-                onDone = {
-                    navController.navigate("home") {
-                        popUpTo("setup") { inclusive = true }
                     }
                 }
             )
@@ -103,13 +86,8 @@ fun HermexNavGraph() {
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
             val encodedTitle = backStackEntry.arguments?.getString("title") ?: ""
             val title = URLDecoder.decode(encodedTitle, "UTF-8")
-            val chatViewModel = if (DashboardApiClient.isConfigured) {
-                DebugLog.log("ROUTE", "MainActivity", "chat → DashboardChatViewModel")
-                viewModel<DashboardChatViewModel>()
-            } else {
-                DebugLog.log("ROUTE", "MainActivity", "chat → LEGACY ChatViewModel (dashboard not configured)")
-                viewModel<ChatViewModel>()
-            }
+            val chatViewModel = viewModel<DashboardChatViewModel>()
+            DebugLog.log("ROUTE", "MainActivity", "chat → DashboardChatViewModel")
             ChatScreen(
                 sessionId = sessionId,
                 sessionTitle = title,

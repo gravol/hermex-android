@@ -4,11 +4,8 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.hermex.core.network.ApiClient
-import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import com.hermex.core.network.JsonRpcClient
-import com.hermex.core.network.NetworkResult
 import com.hermex.core.network.SessionSummary
 import com.hermex.core.network.WsConnectionManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,12 +34,7 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
     fun loadSessions() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-
-            if (DashboardApiClient.isConfigured) {
-                loadDashboardSessions()
-            } else {
-                loadLegacySessions()
-            }
+            loadDashboardSessions()
         }
     }
 
@@ -84,41 +76,6 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
             )
         } finally {
             wsConnection.disconnect()
-        }
-    }
-
-    // ── Legacy API fallback ──
-
-    private suspend fun loadLegacySessions() {
-        DebugLog.log("INFO", "SessionsVM", "loadSessions via LEGACY ApiClient.sessions()")
-        try {
-            when (val result = ApiClient.sessions()) {
-                is NetworkResult.Success -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        sessions = result.data.data,
-                        error = null,
-                    )
-                }
-                is NetworkResult.HttpError -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Server error (${result.code})",
-                    )
-                }
-                is NetworkResult.Error -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = result.exception.message ?: "Failed to load sessions",
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("Hermex", "loadSessions crashed", e)
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                error = e.message ?: "Unexpected error",
-            )
         }
     }
 
