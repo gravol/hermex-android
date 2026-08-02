@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-07-19 (Phase 7C — syntax highlighting)  
-**Current version:** v0.1.42 (versionCode 42)  
-**HEAD commit:** `(working tree — uncommitted)`  
+**Last updated:** 2026-08-02 (v0.1.43 — Compose/Kotlin/AGP version alignment fix)  
+**Current version:** v0.1.43 (versionCode 43)  
+**HEAD commit:** `afa63ec` (v0.1.43 — fix crash opening sessions)  
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -16,11 +16,11 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `(working tree — uncommitted)` |
+| Latest commit | `afa63ec` (v0.1.43) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.42 (versionCode 42) |
-| Completed phase | **Phase 7C — syntax highlighting** |
+| Version | v0.1.43 (versionCode 43) |
+| Completed phase | **Phase 7C — syntax highlighting** + v0.1.43 dependency alignment |
 | Next phase | **StreamLoop optimization** |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
