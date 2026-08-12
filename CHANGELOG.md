@@ -14,7 +14,128 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PROJECT_HANDOFF_CURRENT.md realigned with repo reality** — production signing marked DONE (keystore + CI secrets since 2026-07-17), toolchain table corrected (Kotlin 2.1.20 / BOM 2025.05.00 / AGP 8.6.1 / KSP / compileSdk 35), legacy two-stack architecture claims removed (stack fully deleted in v0.1.42), StreamLoop interval corrected 50ms → 100ms, HEAD updated to `bd41033`.
 - **AGENTS.md** — repo visibility PUBLIC, StreamLoop interval 100ms.
 
-> **Note:** CHANGELOG entries for v0.1.22 → v0.1.43 are missing (last entry is 0.1.21). Backfill from PROJECT_HANDOFF_CURRENT.md phase history when convenient.
+> **Backfilled 2026-08-12** from git history + PROJECT_HANDOFF_CURRENT.md phase records.
+
+## [0.1.43] — 2026-08-02 — Dependency alignment (crash fix)
+
+### Fixed
+- **Crash opening any session** (`NoSuchMethodError: BasicText-CL7eQgs`) — `multiplatform-markdown-renderer-m3:0.34.0` was compiled against Compose foundation 1.8.0, but the app shipped BOM 2024.06.00 (foundation 1.6.x). Full version cascade: Compose BOM 2024.06.00 → **2025.05.00**, Kotlin 2.0.20 → **2.1.20** (Compose compiler ships with Kotlin), KSP → **2.1.20-1.0.32**, AGP 8.5.0 → **8.6.1** (Gradle 8.7 caps AGP at 8.6.x), compileSdk 34 → **35**. All interdependent — bump together.
+
+## [0.1.42] — 2026-07-19 — Phase 7C: Syntax highlighting & legacy stack cleanup
+
+### Added
+- **Syntax highlighting** for code blocks (Kotlin, Java, Python, Bash, JSON, XML, Markdown) via `multiplatform-markdown-renderer-code:0.34.0` + Highlights library.
+
+### Removed
+- **Legacy REST+SSE stack fully deleted** — `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, `SetupScreen`/`SetupViewModel`, legacy `ChatViewModel`, `HermesForegroundService`, orphaned `feature/` modules (11 subdirs, 32 files). App is dashboard JSON-RPC/WebSocket only.
+
+## [0.1.41] — 2026-07-18 — Phase 7B: Background WebSocket keepalive
+
+### Added
+- `WsKeepaliveService` — `START_STICKY` foreground service (`dataSync` type, LOW-importance silent notification) that keeps the process alive while the chat WebSocket is active. Started on WS connect, stopped on ViewModel clear. Does NOT own the WS — only prevents the OS from killing the process when the phone locks.
+
+> Note: v0.1.41 tag exists but no GitHub Release was created (superseded by v0.1.42).
+
+## [0.1.40] — 2026-07-18 — Phase 7A: Markdown rendering
+
+### Added
+- **Markdown message rendering** via `multiplatform-markdown-renderer-m3:0.33.0` — headings, bold/italic, inline code, fenced code blocks, tables, blockquotes, lists, task lists. Streaming cursor preserved outside the markdown block; `rememberMarkdownState` re-parses per delta.
+
+## [0.1.39] — 2026-07-18 — Phase 6E: Tool card improvements
+
+### Added
+- Tool cards capture `result`, `summary`, `startedAt` from `ToolComplete` notifications; context-aware emoji icons per tool; elapsed-time display; expand/collapse with full Arguments + Result sections (result preview up to 500 chars).
+
+## [0.1.38] — 2026-07-18 — Phase 6B + 6C: Reliable interrupt & regenerate
+
+### Fixed
+- **Stop button left stale UI** — `stopStreaming()` now clears `isStreaming` on the last assistant message (blinking cursor, thinking ticker, typing dots disappear) and dismisses pending approval/clarify dialogs.
+
+### Added
+- **Retry/regenerate button** — Refresh icon in composer bottom bar re-sends the last user prompt after removing the last assistant message.
+
+## [0.1.37] — 2026-07-18 — Phase 5E: Clarify dialog UI
+
+### Added
+- `PendingClarify` state model + Compose dialog with free-text answer input. `ClarifyRequest` notifications flow through to the ViewModel (auto-deny removed in `JsonRpcClient`); Cancel sends empty string to unblock the turn.
+
+## [0.1.36] — 2026-07-18 — Phase 5D.4: Tool card display fix
+
+### Fixed
+- `MessageCompleted` **merges** server IDs into live-accumulated tool calls instead of replacing the list — tool cards keep preview/args/context through finalization and session reload. `loadMessages()` populates `UiToolCall.args` from `function.arguments` so replayed cards show context.
+
+## [0.1.35] — 2026-07-18 — Phase 5D.3: Tool event name fix
+
+### Fixed
+- Tool events parsed as `Unknown` — dashboard server emits `tool.generating` / `tool.start` / `tool.complete` (payload nested under `params["payload"]`), not the assumed `tool.started`/`tool.progress`/`tool.completed`. New `ToolGenerating`/`ToolStart`/`ToolComplete` classes; `tool_id` correlates start→complete.
+
+## [0.1.34] — 2026-07-18 — Phase 5D.2: Remove trust-all SSL, scope cleartext
+
+### Changed
+- Removed `hostnameVerifier { _, _ -> true }`, trust-all `X509TrustManager`, and `sslSocketFactory()` override (dead code on plain-HTTP dashboard).
+- Replaced app-wide `android:usesCleartextTraffic="true"` with `network_security_config.xml` scoping cleartext to `100.80.204.66` only.
+
+## [0.1.33] — 2026-07-18 — Phase 5D.2: Port 8443 cleanup
+
+### Fixed
+- Dashboard serves REST + WebSocket on **9119** plain HTTP — code assumed 8443 HTTPS. `setDashboardUrl()` now derives WS URL by scheme-only swap (port preserved); default URL updated to `http://100.80.204.66:9119`.
+
+## [0.1.32] — 2026-07-18 — Phase 5D fix: Stuck scroll loop
+
+### Fixed
+- `loadMessages()` did not reset `isStreaming` — ViewModel surviving navigation kept the StreamLoop scrolling at 20fps forever. Explicit `isStreaming = false` added to the state copy.
+
+## [0.1.31] — 2026-07-18 — Phase 5D: Remove JsonRpcClient auto-deny
+
+### Fixed
+- `JsonRpcClient.parseNotification()` auto-denied `ApprovalRequest` before the ViewModel saw it. Removed the auto-deny block — approvals now flow server → WS → client → ViewModel → dialog.
+
+## [0.1.30] — 2026-07-18 — Phase 5B+5C: Approval dialog UI
+
+### Added
+- `PendingApproval` state model (`toolName`, `toolArgs`, `requestId`) + Compose `Dialog` with Approve/Deny buttons. `approveCurrentTool(approveAll)` / `denyCurrentTool(denyAll)` wired to `approval.respond` RPC.
+
+## [0.1.29] — 2026-07-18 — Phase 5A: approval.respond params fix
+
+### Fixed
+- `JsonRpcClient.approvalRespond()` sent wrong params (`session_key`, boolean `approved`) — corrected to server contract: `session_id`, `choice: "approve"|"deny"`, `all: Boolean`.
+
+## [0.1.28] — 2026-07-18 — Phase 4L.4: Reconnect session re-registration
+
+### Fixed
+- **4001 after WebSocket reconnect** — on every `Connected` transition the ViewModel calls `session.resume` to re-register the live session with the server's new runtime (does not reload history).
+- Keyboard bottom-lock regression — `imePadding()` + `navigationBarsPadding()` in Scaffold; replaced with `WindowInsets.ime`-only calculation.
+
+## [0.1.27] — 2026-07-18 — Keyboard bottom-lock fix
+
+### Fixed
+- Composer sat below the keyboard after IME open — scroll compensates on every `imeBottom` change (frame-based settle via `withFrameNanos` × 3).
+
+## [0.1.26] — 2026-07-18 — Phase 4L.3: Log cleanup
+
+### Fixed
+- WS 101 false error — OkHttp `normalClose()` logged a fake `onFailure` when the server sent close frame 1000; early-return after close frame processed.
+- Keyboard log spam — scroll logging gated on `LOG_SCROLL` env var + >50px viewport delta.
+
+## [0.1.25] — 2026-07-17 — Phase 4L.1: Session lifecycle fix
+
+### Fixed
+- **Session ID mismatch root cause** — `prompt.submit` was sending the live SID after `session.resume`; server `_sess_nowait` returns a 3-tuple resolving DB key → live SID. `sessionId` (DB key, immutable) split from `liveSid` (transient, routing); `prompt.submit` always sends the DB key. Comprehensive session-ID logging added (`dbKey=… liveSid=…`).
+
+## [0.1.24] — 2026-07-17 — 4001 session-not-found fix
+
+### Fixed
+- **4001 on resume** — client normalized `sessionId` to the resolved live SID after `session.resume`; notification filter matches against BOTH DB key and live SID (two-phase matching, Phase 4L.2).
+
+## [0.1.23] — 2026-07-17 — Phase 4L: Chat viewport & keyboard anchoring
+
+### Added
+- `autoScrollToBottom()` two-step helper — `scrollToItem(targetIndex)` then `scrollBy(remaining)` when the streaming bubble grows taller than the viewport; unified across SessionOpen / AutoScroll / StreamEnd / Keyboard.
+- `scrollGeneration` counter + 50ms polling loop while streaming (later raised to 100ms).
+- `session_key` field on `SessionResumeResult`; debug logging in `sessionResume`.
+- **Production signing introduced** — `hermex-release.keystore` + `keystore.properties` + 4 CI signing secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`).
+
+> Note: v0.1.22 had no tag/release — interim version folded into v0.1.23.
 
 ## [0.1.21] — 2026-07-18 — Phase 4K: Chat Viewport Stabilization
 
