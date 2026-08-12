@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-12 (v0.1.44 — StreamLoop optimization + 4001 session self-heal)  
-**Current version:** v0.1.44 (versionCode 44)  
-**HEAD commit:** `bd41033` (docs: AGENTS.md + handoff header to v0.1.43)  
+**Last updated:** 2026-08-12 (v0.1.45 — StreamLoop auto-scroll fix)
+**Current version:** v0.1.45 (versionCode 45)
+**HEAD commit:** `44268b3` (fix: StreamLoop snapshotFlow reads stale state — auto-scroll never re-fires during streaming)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -19,8 +19,8 @@
 | Latest commit | `bd41033` (docs update on top of `afa63ec` v0.1.43) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.44 (versionCode 44) |
-| Completed phase | **v0.1.44 — StreamLoop optimization + 4001 self-heal** (on top of Phase 7C + v0.1.43 dependency alignment + 2026-08-12 docs realignment) |
+| Version | v0.1.45 (versionCode 45) |
+| Completed phase | **v0.1.45 — StreamLoop auto-scroll fix** (v0.1.44 regression: snapshotFlow read stale captured state, never re-fired) |
 | Next phase | **Optional cleanup** (below) |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.45 (2026-08-12)
+- **StreamLoop auto-scroll fix (v0.1.44 regression):** the `snapshotFlow` block read `state.messages` / `content.length` / `toolCalls.size` off the captured `ChatUiState` instance — plain field reads, zero snapshot-state reads, so the flow emitted exactly once at stream start and never re-fired as deltas grew the bubble. Fixed by reading `viewModel.uiState` (the `MutableState` getter) inside both the block and the `collect`. Key now covers `thinkingText` growth; effect gated on message presence (not `isStreaming`) so a session resumed mid-response still tracks. (`ChatScreen.kt`, commit `44268b3`)
 
 ### DONE in v0.1.44 (2026-08-12)
 - StreamLoop: 100ms poll → `snapshotFlow` + `distinctUntilChanged` keyed on (message count, content length, toolCalls size) — fixes same-message growth gap + kills no-op wake-ups during thinking (`ChatScreen.kt`).
