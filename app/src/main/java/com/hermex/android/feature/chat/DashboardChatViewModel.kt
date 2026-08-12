@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import com.hermex.core.network.DebugLog
 import com.hermex.core.network.JsonRpcClient
+import com.hermex.core.network.JsonRpcException
 import com.hermex.core.network.RpcNotification
 import com.hermex.core.network.WsConnectionManager
 import kotlinx.coroutines.Job
@@ -150,6 +151,33 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         }
     }
 
+    /**
+     * Submit a prompt, self-healing a reaped/stale session.
+     *
+     * The dashboard reaps live sessions whose WebSocket went orphaned
+     * (ws_orphan_reap / idle_timeout / lru_evict) and the client gets no
+     * signal — the next prompt.submit then fails with JSON-RPC 4001
+     * "session not found". On 4001 we re-register via session.resume
+     * (which re-materializes the session from the DB) and retry once.
+     * Any other error, or a second failure, propagates to the caller.
+     */
+    private suspend fun submitWithSelfHeal(text: String) {
+        try {
+            rpcClient.promptSubmit(sessionId, text)
+        } catch (e: JsonRpcException) {
+            if (e.code != 4001) throw e
+            DebugLog.log("STATE", "SessionID",
+                "prompt.submit 4001 (session reaped) — re-registering via session.resume: dbKey=$sessionId")
+            val result = rpcClient.sessionResume(sessionId)
+            resumeCount++
+            liveSid = result.session_id                    // debug only — never write into sessionId
+            resumedSessionId = result.resumed ?: sessionId
+            DebugLog.log("STATE", "SessionID",
+                "self-heal resume(#$resumeCount): dbKey=$sessionId liveSid=$liveSid — retrying submit")
+            rpcClient.promptSubmit(sessionId, text)
+        }
+    }
+
     override fun sendMessage(text: String) {
         if (text.isBlank() || sessionId.isEmpty()) return
 
@@ -189,7 +217,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     "resumeCount=$resumeCount")
                 DebugLog.log("RPC", "DashboardChat",
                     "prompt.submit → dbKey=$sessionId liveSid=$liveSid text=\"${text.take(50)}\"")
-                rpcClient.promptSubmit(sessionId, text)
+                submitWithSelfHeal(text)
                 DebugLog.log("STATE", "SessionID",
                     "prompt.submit OK: sessionId=$sessionId")
             } catch (e: Exception) {
@@ -273,7 +301,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             try {
                 DebugLog.log("RPC", "DashboardChat",
                     "retry → dbKey=$sessionId liveSid=$liveSid text=\"${lastUserText.take(50)}\"")
-                rpcClient.promptSubmit(sessionId, lastUserText)
+                submitWithSelfHeal(lastUserText)
             } catch (e: Exception) {
                 val m = uiState.messages.toMutableList()
                 val idx = m.indexOfLast { it.role == "assistant" && it.isStreaming }
