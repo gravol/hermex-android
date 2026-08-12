@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-02 (v0.1.43 — Compose/Kotlin/AGP version alignment fix)  
+**Last updated:** 2026-08-12 (docs realignment: signing DONE, toolchain table fixed, repo public, 100ms StreamLoop)  
 **Current version:** v0.1.43 (versionCode 43)  
-**HEAD commit:** `afa63ec` (v0.1.43 — fix crash opening sessions)  
+**HEAD commit:** `bd41033` (docs: AGENTS.md + handoff header to v0.1.43)  
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -16,11 +16,11 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `afa63ec` (v0.1.43) |
+| Latest commit | `bd41033` (docs update on top of `afa63ec` v0.1.43) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
 | Version | v0.1.43 (versionCode 43) |
-| Completed phase | **Phase 7C — syntax highlighting** + v0.1.43 dependency alignment |
+| Completed phase | **Phase 7C — syntax highlighting** + v0.1.43 dependency alignment + 2026-08-12 docs realignment |
 | Next phase | **StreamLoop optimization** |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -36,16 +36,14 @@ Hermex Android is a native Kotlin/Compose chat client for the **Hermes Agent** A
 - **Kotlin + Jetpack Compose** (Material 3) — single-module app with core library modules
 - **MVVM with Compose snapshot state** — `mutableStateOf` used instead of `StateFlow` to avoid conflation during rapid streaming events
 - **Plain OkHttp** — no Retrofit, no Hilt/Dagger. Manual DI via `AppModule` singleton
-- **Two networking stacks coexist:**
-  1. **JSON-RPC/WebSocket (port 9119)** — `DashboardApiClient` + `WsConnectionManager` + `JsonRpcClient` — primary path
-  2. **Legacy REST+SSE (port 8650)** — `ApiClient` + `SseParser` — fallback, cleanup deferred
+- **Single networking stack (since v0.1.42):** **JSON-RPC/WebSocket (port 9119)** — `DashboardApiClient` + `WsConnectionManager` + `JsonRpcClient`. Legacy REST+SSE (`ApiClient`, `SseParser`, port 8650) fully deleted in Phase 7C (v0.1.42).
 
 ### Key technologies
 | Layer | Library | Version |
 |---|---|---|
-| Language | Kotlin | 2.0.20 |
-| UI | Jetpack Compose (Material 3) | BOM 2024.06.00 |
-| Build | AGP + Gradle | 8.5.0 |
+| Language | Kotlin | 2.1.20 |
+| UI | Jetpack Compose (Material 3) | BOM 2025.05.00 (foundation 1.8.1) |
+| Build | AGP + Gradle | 8.6.1 (KSP 2.1.20-1.0.32, compileSdk 35) |
 | HTTP/WS | OkHttp | 4.12.0 |
 | Serialization | kotlinx.serialization | 1.7.3 |
 | Persistence | Room + EncryptedSharedPreferences + DataStore | Room 2.6.1 |
@@ -86,21 +84,18 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Markdown rendering** — Assistant and user messages are rendered with the `multiplatform-markdown-renderer` library (v0.34.0, `-m3` module). Supports headings, bold, italic, code, fenced code blocks, tables, quotes, lists, and task lists. **Syntax highlighting** for code blocks (Kotlin, Java, Python, Bash, JSON, XML, Markdown) via the `-code` module and Highlights library. Streaming cursor preserved after markdown block. Uses `rememberMarkdownState` for efficient re-composition on delta updates.
 - **Background keepalive** — `WsKeepaliveService` foreground service keeps the process alive while the chat WebSocket is active. Started on WS connect, stopped on ViewModel clear. Uses `dataSync` foreground service type with a low-importance persistent notification.
 
-### What works (Legacy REST+SSE stack — fallback)
-- Setup screen with server URL + API key entry
-- Session list via `GET /api/sessions`
-- Chat screen with SSE streaming
-- Message bubbles, typing dots, keyboard auto-scroll, copy-to-clipboard
+### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)
+`ApiClient`, `DTOs`, `SseParser`, `SetupScreen`/`SetupViewModel`, legacy `ChatViewModel`, and `HermesForegroundService` were fully deleted in v0.1.42. The app is dashboard JSON-RPC/WebSocket only.
 
 ### Known issues / NOT yet wired
 - **Approval dialog only fires for dangerous terminal commands** — Server-side `approval.request` notification is emitted only when `detect_dangerous_command()` matches (e.g. `rm -rf`, `curl | bash`). Normal tools like `web_search`, `ls ~/`, `read_file` auto-approve silently. The Android dialog is correctly built but never triggered for everyday commands. This matches Telegram behavior (only dangerous patterns ask for approval).
 - ~~**ClarifyRequest still auto-denied**~~ **Clarify dialog implemented** — `PendingClarify` state model with free-text answer input. `ClarifyRequest` notifications set `pendingClarify` in `ChatUiState`, triggering a Compose `Dialog` with the server's question and an answer field. Cancel sends empty string to unblock the turn.
 - **Empty sessions in session.list** — `session.list` may return sessions with zero messages or no content. Need server-side filtering or client-side display filtering.
 - ~~**Legacy REST/SSE stack cleanup deferred**~~ **Legacy stack cleaned up (Phase 7C)** — `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, old `ChatViewModel`, `HermesForegroundService` stub, and orphaned `feature/` modules all removed.
-- ~~**No background WebSocket keepalive**~~ **Background keepalive implemented (Phase 7B)** — `WsKeepaliveService` foreground service wired into `DashboardChatViewModel`. Starts on WS connect, stops on ViewModel clear. The old `HermesForegroundService` template in `core/ui` (SSE-based, dead code) should be removed during legacy cleanup.
+- ~~**No background WebSocket keepalive**~~ **Background keepalive implemented (Phase 7B)** — `WsKeepaliveService` foreground service wired into `DashboardChatViewModel`. Starts on WS connect, stops on ViewModel clear. (The old `HermesForegroundService` template was removed in Phase 7C.)
 - **Feature modules contain dead code** — `feature/chat/`, `feature/session/`, `feature/skills/`, etc. contain auto-generated `Component_*.kt` stubs. Not included in `settings.gradle.kts` — do not compile. Safe to delete.
 - **Debug APK is large** — 63MB debug build vs 28MB release (ProGuard + R8). Expected.
-- **Signed with debug key** — Release builds use `signingConfigs.getByName("debug")`. Need real keystore before production distribution.
+- ~~**Signed with debug key**~~ **Production signing DONE (2026-07-17)** — `keystore.properties` + `hermex-release.keystore` (both gitignored) + 4 CI secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`). Release builds sign with the real keystore.
 
 ---
 
@@ -445,7 +440,7 @@ The `.github/workflows/release.yml` workflow triggers on push to `main`/`master`
 4. Creates and pushes tag
 5. Creates GitHub Release with APK attached
 
-**Caveat:** The repo is private. GitHub Releases are created but APK attachments are invisible to Obtainium while the repo remains private.
+**Note:** Repo is **public** (since 2026-08-12) — Obtainium sees GitHub Releases APKs without any PAT.
 
 ---
 
@@ -464,17 +459,16 @@ Hermex/
 | File | Lines | Purpose |
 |---|---|---|
 | `app/.../MainActivity.kt` | 121 | NavGraph, route definitions, dashboard vs legacy routing |
-| `app/.../HermexApplication.kt` | 54 | Startup: ApiClient.init + DashboardApiClient.init |
+| `app/.../HermexApplication.kt` | 54 | Startup: DashboardApiClient.init (legacy ApiClient init removed v0.1.42) |
 | `app/.../DashboardChatViewModel.kt` | 587 | Dashboard WS chat: connect, resume, send, notification handler, approve/deny/clarify, stop generation |
 | `app/.../ChatScreen.kt` | 1094 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval/clarify dialogs, retry button, enhanced tool cards, markdown rendering |
 | `app/.../ChatViewModelContract.kt` | 24 | Abstract contract for both legacy and dashboard VMs |
-| `app/.../ChatViewModel.kt` | 471 | Legacy SSE chat ViewModel (has no-op approve/deny, retry) |
+| ~~`ChatViewModel.kt`~~ | — | Legacy SSE ViewModel — DELETED in v0.1.42; `DashboardChatViewModel` is the only chat VM |
 | `app/.../DashboardSetupScreen.kt` | 150 | URL + password entry screen |
 | `app/.../DashboardSetupViewModel.kt` | 119 | status() → login() flow for dashboard setup |
 | `app/.../SessionsScreen.kt` | 165 | Session list UI |
-| `app/.../SessionsViewModel.kt` | 153 | Session list loading (dashboard via RPC, legacy fallback) |
-| `app/.../SetupScreen.kt` | — | Legacy setup screen (will be removed) |
-| `app/.../SetupViewModel.kt` | — | Legacy setup ViewModel (will be removed) |
+| `app/.../SessionsViewModel.kt` | 153 | Session list loading (dashboard via RPC) |
+| ~~`SetupScreen.kt` / `SetupViewModel.kt`~~ | — | Legacy setup — DELETED in v0.1.42 |
 | `core/network/DashboardApiClient.kt` | 253 | REST client: login, ws-ticket, status, 401 auto-relogin |
 | `core/network/WsConnectionManager.kt` | 215 | WebSocket lifecycle, reconnect, Frame Channel |
 | `core/network/JsonRpcClient.kt` | 470 | JSON-RPC 2.0: request/response, notifications, approvalRespond, clarifyRespond |
@@ -500,7 +494,7 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 2. **`scrollToItem`, not `animateScrollToItem`** — Spring animation (~200-300ms) is constantly cancelled and restarted by rapid deltas, causing viewport drift. Instant scroll completes in one frame.
 
-3. **`scrollGeneration` counter + polling loop** — Monotonic counter bumped on every list mutation. Combined with 50ms polling while `isStreaming`, ensures auto-scroll keeps up with rapid content growth. Polling loop replaced the earlier `scrollGeneration`-keyed LaunchedEffect approach.
+3. **`scrollGeneration` counter + polling loop** — Monotonic counter bumped on every list mutation. Combined with 100ms polling while `isStreaming`, ensures auto-scroll keeps up with rapid content growth. Polling loop replaced the earlier `scrollGeneration`-keyed LaunchedEffect approach (interval was 50ms at introduction, raised to 100ms to reduce fighting with markdown layout settling).
 
 4. **Fresh ticket every reconnect** — WebSocket ticket is single-use with 30s TTL. Never cached or reused. Every reconnect cycle fetches a fresh ticket.
 
@@ -508,7 +502,7 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 6. **Approval/clarify notifications flow through ViewModel** — `JsonRpcClient` parses notifications and emits them via `notifications` channel. ViewModel's `handleNotification()` sets state. No auto-deny in client (removed in v0.1.31 for approval, Phase 5E for clarify). User gets a dialog in both cases.
 
-7. **Coexist old and new networking stacks** — Do NOT delete `ApiClient.kt` or related files until the new JSON-RPC/WS stack is proven end-to-end on device.
+7. ~~**Coexist old and new networking stacks**~~ **OBSOLETE (Phase 7C, v0.1.42)** — Legacy stack proven unnecessary and fully deleted (`ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, `Setup*`, legacy `ChatViewModel`). Single-stack app.
 
 8. **Delta = append-only concatenation** — No sequence number field exists. Order guaranteed by WebSocket stream order. Client concatenates `content = content + delta.text`.
 
@@ -535,7 +529,7 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### Required secrets
 - Dashboard password (stored in `KeychainStore` as `dashboard_password`)
 - Hermes API Server bearer key (stored as `api_key` — legacy)
-- Obtainium needs GitHub PAT with `repo` scope for private repo access
+- Obtainium fetches from the public GitHub Releases (no PAT needed since repo went public 2026-08-12)
 
 ### Build machine (BigRed)
 - Linux 6.8.0 (tailscale-connected)
@@ -548,5 +542,4 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ## Next Steps
 
 1. **StreamLoop optimization** — Only poll on actual state change instead of 50ms timer; currently wasteful during thinking (no content change)
-2. **Production signing** — Wire proper keystore for release builds
-3. **Make repo public** — So Obtainium can see GitHub Releases and auto-update
+2. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)

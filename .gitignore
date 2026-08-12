@@ -8,3 +8,4 @@ keystore.properties
 *.log
 .kotlin/
 *.keystore
+.hermes/

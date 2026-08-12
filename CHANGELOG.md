@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — 2026-08-12 — Docs realignment
+
+### Changed
+- **Repo made public** — Obtainium can now see GitHub Releases APKs without a PAT (`gh repo edit gravol/hermex-android --visibility public`).
+- **PROJECT_HANDOFF_CURRENT.md realigned with repo reality** — production signing marked DONE (keystore + CI secrets since 2026-07-17), toolchain table corrected (Kotlin 2.1.20 / BOM 2025.05.00 / AGP 8.6.1 / KSP / compileSdk 35), legacy two-stack architecture claims removed (stack fully deleted in v0.1.42), StreamLoop interval corrected 50ms → 100ms, HEAD updated to `bd41033`.
+- **AGENTS.md** — repo visibility PUBLIC, StreamLoop interval 100ms.
+
+> **Note:** CHANGELOG entries for v0.1.22 → v0.1.43 are missing (last entry is 0.1.21). Backfill from PROJECT_HANDOFF_CURRENT.md phase history when convenient.
+
 ## [0.1.21] — 2026-07-18 — Phase 4K: Chat Viewport Stabilization
 
 ### Fixed
