@@ -125,33 +125,43 @@ fun ChatScreen(
     // ─── Streaming auto-scroll: state-change driven (replaces 100ms poll) ───
     // Single source of truth for auto-scroll during streaming.
     // snapshotFlow + distinctUntilChanged fires ONLY when the last message's
-    // visible content actually changes (text growth, new message, tool card),
-    // instead of waking every 100ms — kills the no-op wake-ups during thinking.
+    // visible content actually changes (text growth, thinking growth, new
+    // message, tool card), instead of waking every 100ms — kills the no-op
+    // wake-ups during thinking.
+    // CRITICAL: read state via viewModel.uiState (the MutableState getter), NOT
+    // the captured `state` val — a plain field read on the captured instance
+    // registers no snapshot read, so snapshotFlow emits exactly once and never
+    // re-fires (v0.1.44 regression: stream only scrolled at placeholder
+    // creation, viewport never tracked the growing bubble).
     // The collect block runs to completion per emission in one coroutine; it is
     // NOT cancelled by rapid state writes (unlike the old LaunchedEffect keyed
     // on scrollGeneration), so the two-step scrollToItem+scrollBy compensation
     // still never gets interrupted mid-flight.
     // Respects manual scrolling: skips when userScrolledUp=true, resumes
     // automatically when user returns to bottom (userScrolledUp→false).
-    LaunchedEffect(state.isStreaming) {
-        if (state.isStreaming && state.messages.isNotEmpty()) {
+    // Gated on message presence (not isStreaming) so a session resumed while
+    // the assistant is mid-response still tracks the stream.
+    LaunchedEffect(state.isStreaming, state.messages.isNotEmpty()) {
+        if (state.messages.isNotEmpty()) {
             DebugLog.log("SCROLL", "StreamLoop", "started (messages=${state.messages.size})")
             snapshotFlow {
-                val last = state.messages.last()
+                val s = viewModel.uiState
+                val last = s.messages.last()
                 Triple(
-                    state.messages.size,
-                    last.content.length,
+                    s.messages.size,
+                    last.content.length + (last.thinkingText?.length ?: 0),
                     last.toolCalls.size,
                 )
             }
                 .distinctUntilChanged()
                 .collect {
-                    if (!userScrolledUp) {
+                    val s = viewModel.uiState
+                    if (!userScrolledUp && s.messages.isNotEmpty()) {
                         autoScrollToBottom(
                             listState = listState,
-                            targetIndex = state.messages.lastIndex,
-                            totalItems = state.messages.size,
-                            scrollGeneration = state.scrollGeneration,
+                            targetIndex = s.messages.lastIndex,
+                            totalItems = s.messages.size,
+                            scrollGeneration = s.scrollGeneration,
                             reason = "StreamLoop",
                         )
                     }
