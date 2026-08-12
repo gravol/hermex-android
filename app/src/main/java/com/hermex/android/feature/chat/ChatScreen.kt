@@ -62,7 +62,7 @@ import com.hermex.core.network.DebugLog
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -122,34 +122,40 @@ fun ChatScreen(
         }
     }
 
-    // ─── Streaming auto-scroll: continuous polling loop ───
+    // ─── Streaming auto-scroll: state-change driven (replaces 100ms poll) ───
     // Single source of truth for auto-scroll during streaming.
-    // Replaces scrollGeneration-keyed LaunchedEffect (which restarted on every
-    // SSE event, cancelling the scrollBy compensation mid-flight).
-    // Polls every 50ms — fast enough to keep up with rapid content growth,
-    // slow enough to avoid CPU churn.
+    // snapshotFlow + distinctUntilChanged fires ONLY when the last message's
+    // visible content actually changes (text growth, new message, tool card),
+    // instead of waking every 100ms — kills the no-op wake-ups during thinking.
+    // The collect block runs to completion per emission in one coroutine; it is
+    // NOT cancelled by rapid state writes (unlike the old LaunchedEffect keyed
+    // on scrollGeneration), so the two-step scrollToItem+scrollBy compensation
+    // still never gets interrupted mid-flight.
     // Respects manual scrolling: skips when userScrolledUp=true, resumes
     // automatically when user returns to bottom (userScrolledUp→false).
-    // Uses a 100ms interval (was 50ms) to reduce scroll compensation
-    // fighting with markdown layout settling.
     LaunchedEffect(state.isStreaming) {
         if (state.isStreaming && state.messages.isNotEmpty()) {
-            var lastTargetIndex = -1
             DebugLog.log("SCROLL", "StreamLoop", "started (messages=${state.messages.size})")
-            while (state.isStreaming && state.messages.isNotEmpty()) {
-                val target = state.messages.lastIndex
-                if (!userScrolledUp && target != lastTargetIndex) {
-                    autoScrollToBottom(
-                        listState = listState,
-                        targetIndex = target,
-                        totalItems = state.messages.size,
-                        scrollGeneration = state.scrollGeneration,
-                        reason = "StreamLoop",
-                    )
-                    lastTargetIndex = target
-                }
-                delay(100)
+            snapshotFlow {
+                val last = state.messages.last()
+                Triple(
+                    state.messages.size,
+                    last.content.length,
+                    last.toolCalls.size,
+                )
             }
+                .distinctUntilChanged()
+                .collect {
+                    if (!userScrolledUp) {
+                        autoScrollToBottom(
+                            listState = listState,
+                            targetIndex = state.messages.lastIndex,
+                            totalItems = state.messages.size,
+                            scrollGeneration = state.scrollGeneration,
+                            reason = "StreamLoop",
+                        )
+                    }
+                }
             DebugLog.log("SCROLL", "StreamLoop", "ended (isStreaming=${state.isStreaming} messages=${state.messages.size})")
         }
     }
