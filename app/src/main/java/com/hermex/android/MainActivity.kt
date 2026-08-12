@@ -5,6 +5,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -15,6 +22,7 @@ import com.hermex.android.feature.chat.ChatScreen
 import com.hermex.android.feature.chat.DashboardChatViewModel
 import com.hermex.android.feature.onboarding.DashboardSetupScreen
 import com.hermex.android.feature.sessions.SessionsScreen
+import com.hermex.android.feature.settings.SettingsRepository
 import com.hermex.android.feature.settings.SettingsScreen
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
@@ -28,7 +36,21 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             HermexTheme {
-                HermexNavGraph()
+                // Display preferences: UI zoom (dp) + text scale (sp), applied
+                // as a density override so every screen picks them up with no
+                // per-screen changes. Text scales by zoom × textScale.
+                val appContext = LocalContext.current.applicationContext
+                val settingsRepo = remember { SettingsRepository(appContext) }
+                val zoomPercent by settingsRepo.uiZoomPercent.collectAsState(initial = 100)
+                val textPercent by settingsRepo.textScalePercent.collectAsState(initial = 100)
+                val baseDensity = LocalDensity.current
+                val scaledDensity = Density(
+                    density = baseDensity.density * (zoomPercent / 100f),
+                    fontScale = baseDensity.fontScale * (textPercent / 100f),
+                )
+                CompositionLocalProvider(LocalDensity provides scaledDensity) {
+                    HermexNavGraph()
+                }
             }
         }
     }

@@ -13,7 +13,13 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -22,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -64,6 +71,44 @@ fun SettingsScreen(
             Text(
                 "Device: ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
                 style = MaterialTheme.typography.bodyMedium,
+            )
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Text("Display", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Applies live to every screen. Text size stacks on top of UI zoom.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            val settingsRepo = remember { SettingsRepository(context) }
+            val savedZoom by settingsRepo.uiZoomPercent.collectAsState(initial = 100)
+            val savedText by settingsRepo.textScalePercent.collectAsState(initial = 100)
+            var zoomPercent by remember { mutableStateOf(savedZoom) }
+            var textPercent by remember { mutableStateOf(savedText) }
+            // Keep local slider state in sync if the persisted value changes externally
+            LaunchedEffect(savedZoom) { zoomPercent = savedZoom }
+            LaunchedEffect(savedText) { textPercent = savedText }
+
+            Text("UI zoom: $zoomPercent%", style = MaterialTheme.typography.bodyMedium)
+            Slider(
+                value = zoomPercent.toFloat(),
+                onValueChange = { v ->
+                    zoomPercent = v.roundToInt()
+                    scope.launch { settingsRepo.setUiZoomPercent(zoomPercent) }
+                },
+                valueRange = 80f..130f,
+            )
+
+            Text("Text size: $textPercent%", style = MaterialTheme.typography.bodyMedium)
+            Slider(
+                value = textPercent.toFloat(),
+                onValueChange = { v ->
+                    textPercent = v.roundToInt()
+                    scope.launch { settingsRepo.setTextScalePercent(textPercent) }
+                },
+                valueRange = 80f..150f,
             )
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.46] — 2026-08-12 — Display settings: UI zoom + text size
+
+### Added
+- **Display settings (Settings → Display)** — two sliders applied live to every screen via a `LocalDensity` override at the app root (`MainActivity`):
+  - **UI zoom** 80–130% — scales the whole UI (dp: spacing, icons, bubbles)
+  - **Text size** 80–150% — scales text (sp) on top of zoom
+  - Persisted per-app in the existing "hermex_settings" DataStore (`SettingsRepository`, int percentages — no core-module changes). Sliders save on every change, so the UI previews the scale live as you drag.
+
 ## [0.1.45] — 2026-08-12 — StreamLoop auto-scroll fix (v0.1.44 regression)
 
 ### Fixed
