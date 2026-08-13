@@ -13,6 +13,7 @@ import com.hermex.core.network.JsonRpcException
 import com.hermex.core.network.RpcNotification
 import com.hermex.core.network.WsConnectionManager
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -849,19 +850,29 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         // rebuild (e.g. auto-compression), and per-turn session.info events
         // aren't guaranteed to reach this client (single-owner transport).
         // A lightweight resume (messages omitted) gets us usage fresh.
+        // v0.1.69: keep retrying (burst then 5s poll) until the gauge has
+        // real data — the server always has it for a live session; a null
+        // reading is just a transient rebuild/compression window.
         if (visible && sessionId.isNotEmpty()) {
             viewModelScope.launch {
-                try {
-                    val result = rpcClient.sessionResume(sessionId, omitMessages = true)
-                    val ctx = parseContextUsage(result.info)
-                    if (ctx.first != null || ctx.second != null) {
-                        uiState = uiState.copy(
-                            contextUsed = ctx.first ?: uiState.contextUsed,
-                            contextMax = ctx.second ?: uiState.contextMax,
-                        )
+                var attempts = 0
+                while (screenVisible &&
+                    (uiState.contextUsed == null || uiState.contextMax == null)
+                ) {
+                    attempts++
+                    try {
+                        val result = rpcClient.sessionResume(sessionId, omitMessages = true)
+                        val ctx = parseContextUsage(result.info)
+                        if (ctx.first != null || ctx.second != null) {
+                            uiState = uiState.copy(
+                                contextUsed = ctx.first ?: uiState.contextUsed,
+                                contextMax = ctx.second ?: uiState.contextMax,
+                            )
+                        }
+                    } catch (_: Exception) {
+                        // Best-effort — loop back and try again.
                     }
-                } catch (_: Exception) {
-                    // Best-effort — the normal loadMessages path covers this.
+                    delay(if (attempts <= 3) 2_000 else 5_000)
                 }
             }
         }
