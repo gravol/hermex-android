@@ -875,20 +875,11 @@ fun ChatScreen(
                                 ThinkingScrollBox(text = msg.thinkingText)
                             }
 
-                            // Tool calls render ABOVE the response (desktop-style:
-                            // tool activity first, the reply lands last at the
-                            // bottom — no scrolling up past cards to read it).
+                            // Tool calls render ABOVE the response in one
+                            // scrollable box (v0.1.68); tap a row for the full
+                            // card (args/diff).
                             if (msg.role == "assistant" && msg.toolCalls.isNotEmpty() && !msg.isStreaming) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                                ) {
-                                    msg.toolCalls.forEach { tc ->
-                                        ToolCallCard(toolCall = tc)
-                                        Spacer(Modifier.height(4.dp))
-                                    }
-                                }
+                                ToolScrollBox(toolCalls = msg.toolCalls)
                             }
 
                             MessageBubble(
@@ -1818,43 +1809,7 @@ private fun LiveActivityPanel(
                 // itemsIndexed (positional key): tool ids can duplicate (history
                 // replay defaults them to "tc") — an explicit key would crash.
                 itemsIndexed(toolCalls) { _, tc ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = toolIcon(tc.toolName),
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = tc.toolName,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            text = formatElapsed(tc.startedAt, now, tc.completed),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        if (tc.completed) {
-                            Text(
-                                text = "✓",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color(0xFF4CAF50),
-                            )
-                        } else {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(12.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
+                    ToolActivityRow(toolCall = tc, now = now)
                 }
             }
             // Auto-scroll the panel to the newest activity
@@ -1863,6 +1818,152 @@ private fun LiveActivityPanel(
                 if (count > 0) listState.scrollToItem(count - 1)
             }
         }
+    }
+}
+
+/** One compact tool row: icon · name · elapsed · spinner-or-check. */
+@Composable
+private fun ToolActivityRow(toolCall: UiToolCall, now: Long) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = toolIcon(toolCall.toolName),
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = toolCall.toolName,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = formatElapsed(toolCall.startedAt, now, toolCall.completed),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(6.dp))
+        if (toolCall.completed) {
+            Text(
+                text = "✓",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF4CAF50),
+            )
+        } else {
+            CircularProgressIndicator(
+                modifier = Modifier.size(12.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+/**
+ * Scrollable tool-call box shown above the finished answer (v0.1.68).
+ * Compact rows; tap a row for the full card (args/diff/preview).
+ */
+@Composable
+private fun ToolScrollBox(toolCalls: List<UiToolCall>) {
+    val now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var detail by remember { mutableStateOf<UiToolCall?>(null) }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        shape = RoundedCornerShape(10.dp),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "TOOLS · ${toolCalls.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "tap a tool for details",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 160.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                toolCalls.forEach { tc ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { detail = tc },
+                    ) {
+                        ToolActivityRow(toolCall = tc, now = now)
+                    }
+                }
+            }
+        }
+    }
+
+    detail?.let { tc ->
+        AlertDialog(
+            onDismissRequest = { detail = null },
+            title = { Text(tc.toolName) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .heightIn(max = 420.dp),
+                ) {
+                    if (tc.preview != null) {
+                        Text(
+                            text = "CALL",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(tc.preview, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (tc.args != null) {
+                        Text(
+                            text = "ARGS",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = tc.args,
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            fontSize = 11.sp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (tc.inlineDiff != null) {
+                        DiffView(diffText = tc.inlineDiff)
+                    } else if (tc.summary != null) {
+                        Text(
+                            text = "RESULT",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(tc.summary, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { detail = null }) { Text("Close") }
+            },
+        )
     }
 }
 
