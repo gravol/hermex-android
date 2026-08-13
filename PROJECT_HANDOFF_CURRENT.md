@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.59 — context gauge fix)
-**Current version:** v0.1.59 (versionCode 59)
-**HEAD commit:** `6307cce` (v0.1.59 — context gauge fix)
+**Last updated:** 2026-08-13 (v0.1.60 — session activity)
+**Current version:** v0.1.60 (versionCode 60)
+**HEAD commit:** `9f36602` (v0.1.60 — session activity)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.60 (2026-08-13)
+- **Session activity indicators** — `ChatVmsHolder.activeSessions: StateFlow<Map<sessionId, isStreaming>>` (snapshotFlow over each held VM's `uiState.isStreaming`, distinctUntilChanged). Session list shows spinner + "working" (card rows) / "● working…" + spinner (drawer rows) for chats with a background turn. **Completed-while-away banner**: `ChatUiState.completedWhileAway`, set in `onTurnFinished()` (message.completed/run.completed) when the screen isn't visible (`setScreenVisible` via DisposableEffect in ChatScreen); re-entry shows "✓ Turn finished while you were away" + View latest (clears + scrolls). (`ChatVmsHolder`, `DashboardChatViewModel`, `UiModels`, `ChatViewModelContract` +2 open funs, `ChatScreen` banner, `SessionsScreen` isActive param.)
 
 ### DONE in v0.1.59 (2026-08-13)
 - **Context gauge fix** — `JsonRpcClient` parsed `session.info` with `info = params` (whole event object) instead of `params.payload` (the info dict with `usage.context_used/context_max`). `parseContextUsage` always missed → after an app restart the gauge never came back (resume reports a fresh agent with no context data yet, and per-turn `session.info` updates were silently dropped). Fixed; gauge now live-updates after every turn. (`JsonRpcClient.kt` session.info branch.)
