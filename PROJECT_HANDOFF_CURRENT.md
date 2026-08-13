@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.58 — Terminal mono + mint text)
-**Current version:** v0.1.58 (versionCode 58)
-**HEAD commit:** `55ba6ee` (v0.1.58 — Terminal mono + mint text)
+**Last updated:** 2026-08-13 (v0.1.59 — context gauge fix)
+**Current version:** v0.1.59 (versionCode 59)
+**HEAD commit:** `6307cce` (v0.1.59 — context gauge fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.59 (2026-08-13)
+- **Context gauge fix** — `JsonRpcClient` parsed `session.info` with `info = params` (whole event object) instead of `params.payload` (the info dict with `usage.context_used/context_max`). `parseContextUsage` always missed → after an app restart the gauge never came back (resume reports a fresh agent with no context data yet, and per-turn `session.info` updates were silently dropped). Fixed; gauge now live-updates after every turn. (`JsonRpcClient.kt` session.info branch.)
 
 ### DONE in v0.1.58 (2026-08-13)
 - **Terminal preset: monospace + mint text** — the "all black" complaint was missing green entirely. Now the preset also sets: **text override `#A5D6A7`** (soft green-white onSurface/onBackground; onSurfaceVariant = 72% alpha → muted mint labels/timestamps/icons like the desktop) and **monospace font everywhere** (`MonoTypography` in Type.kt, `HermexTheme(monospace=)` param). New Appearance controls work with any theme: Text color swatch row + Monospace switch. `UiColorOverrides.text`, `SettingsRepository.uiTextHex`/`uiMonospace` + `applyAppearance` 5-arg, MainActivity wiring. Terminal preset now: accent `#00FF41`, bg `#0A0C0A`, user `#1E3D24`, assistant `#0A0C0A`, text `#A5D6A7`, mono on.
