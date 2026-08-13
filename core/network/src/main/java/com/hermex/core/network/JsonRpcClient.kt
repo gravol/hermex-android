@@ -346,7 +346,12 @@ class JsonRpcClient(
 
             "session.info" -> RpcNotification.SessionInfo(
                 sessionId = sessionId ?: "",
-                info = params,
+                // Server emits _event_frame("session.info", sid, info) → the
+                // info dict (with usage.context_used/context_max) is in
+                // params.payload, NOT params itself. Passing `params` here made
+                // parseContextUsage always miss → the context gauge never
+                // live-updated after an app restart.
+                info = params["payload"]?.jsonObject ?: params,
             )
 
             else -> RpcNotification.Unknown(
