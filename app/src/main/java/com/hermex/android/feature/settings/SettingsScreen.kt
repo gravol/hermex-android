@@ -167,9 +167,9 @@ fun SettingsScreen(
                 )
                 FilterChip(
                     selected = savedAccent.equals("#00FF41", ignoreCase = true) &&
-                        savedBg.equals("#0A1A15", ignoreCase = true),
+                        savedBg.equals("#0A0C0A", ignoreCase = true),
                     onClick = {
-                        scope.launch { settingsRepo.applyAppearance("#00FF41", "#0A1A15", null, null) }
+                        scope.launch { settingsRepo.applyAppearance("#00FF41", "#0A0C0A", null, null) }
                     },
                     label = { Text("Terminal") },
                 )
