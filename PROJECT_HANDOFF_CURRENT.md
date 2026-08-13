@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.69 — gauge retry + slash fixes)
-**Current version:** v0.1.69 (versionCode 69)
-**HEAD commit:** `232cf98` (v0.1.69 — gauge retry + poll)
+**Last updated:** 2026-08-13 (v0.1.70 — slash spinner)
+**Current version:** v0.1.70 (versionCode 70)
+**HEAD commit:** `052f701` (v0.1.70 — slash spinner)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.70 (2026-08-13)
+- **Slash commands show a working spinner** — `/compress` ran silently for minutes (user: "doesn't seem to do anything"). `sendSlashCommand` now inserts a streaming placeholder message (spinner) before the RPC and resolves it with the output or error when done. (`DashboardChatViewModel.sendSlashCommand`.)
 
 ### DONE in v0.1.69 (2026-08-13)
 - **Context gauge self-heals, guaranteed** — verified live via WS probe: server always reports `usage.context_used/context_max` on both full and omit-messages resumes (255k/1.0M at probe time); the app was catching a transient null reading (agent rebuild/compression window) with no retry. `setScreenVisible(true)` now re-resumes in a burst (2s ×3) then polls every 5s while the chat is visible until the gauge has real data. Cannot stay hidden while the server has data. (`DashboardChatViewModel.setScreenVisible`.)
