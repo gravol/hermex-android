@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.69 — slash fixes)
+**Last updated:** 2026-08-13 (v0.1.69 — gauge retry + slash fixes)
 **Current version:** v0.1.69 (versionCode 69)
-**HEAD commit:** `3b5051e` (v0.1.69 — slash fixes)
+**HEAD commit:** `232cf98` (v0.1.69 — gauge retry + poll)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.69 (2026-08-13)
+- **Context gauge self-heals, guaranteed** — verified live via WS probe: server always reports `usage.context_used/context_max` on both full and omit-messages resumes (255k/1.0M at probe time); the app was catching a transient null reading (agent rebuild/compression window) with no retry. `setScreenVisible(true)` now re-resumes in a burst (2s ×3) then polls every 5s while the chat is visible until the gauge has real data. Cannot stay hidden while the server has data. (`DashboardChatViewModel.setScreenVisible`.)
+- **Slash fixes (committed by parallel Telegram session, `3b5051e`)** — slash.exec timeout raised 180s (compression can take >30s), and selecting a slash menu item keeps `/` in the composer for chaining. Both commits ship in v0.1.69.
 
 ### DONE in v0.1.68 (2026-08-13)
 - **Tool calls fold into a scrollable box** — finished messages no longer stack individual tool cards above the answer; they consolidate into one compact scrollable TOOLS box (icon · name · elapsed · ✓, same row style as the live panel via shared `ToolActivityRow`). Tap a row to expand the full card (call context, args, inline diff, result) in a dialog. Stack: thinking box → tools box → answer. (`ChatScreen.kt` — `ToolScrollBox`, `ToolActivityRow`.)
