@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.63 — gauge self-heal)
-**Current version:** v0.1.63 (versionCode 63)
-**HEAD commit:** `6adabcc` (v0.1.63 — gauge self-heal)
+**Last updated:** 2026-08-13 (v0.1.64 — Live Activity panel)
+**Current version:** v0.1.64 (versionCode 64)
+**HEAD commit:** `f5ac004` (v0.1.64 — Live Activity panel)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.64 (2026-08-13)
+- **Docked Live Activity panel** — while a turn runs, the last streaming message's thinking + tool calls render in a small scrollable panel docked above the composer (`LiveActivityPanel`: "● Live activity" header with working/tool counts, THINKING monospace block, compact tool rows with icon/name/elapsed/spinner-or-✓, auto-scrolls to newest). The streaming answer grows above the panel. On completion the panel vanishes; the finished message shows tools + thinking above the final answer (in-stream thinking ticker + tool cards hidden while streaming to avoid duplication). (`ChatScreen.kt` — `LiveActivityPanel`, item-composable gating on `!msg.isStreaming`.)
 
 ### DONE in v0.1.63 (2026-08-13)
 - **Context gauge self-heals** — phone's debug log showed a full streamed turn with ZERO `session.info` receipts: the gauge only ever got data from the one-time resume snapshot, which can miss real context after a server-side agent rebuild (auto-compression seen in logs: 478k→443k). Fix: on every chat open (`setScreenVisible(true)`) and every WS reconnect, the VM fires a lightweight `session.resume(omit_messages=true)` and parses `usage.context_used/context_max` into the gauge. `session.info` events remain as live per-turn updates when they arrive. (`JsonRpcClient.sessionResume(omitMessages)`, `DashboardChatViewModel.setScreenVisible` + reconnect listener.)
