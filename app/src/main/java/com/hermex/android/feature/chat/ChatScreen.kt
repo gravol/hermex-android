@@ -13,6 +13,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -26,10 +27,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.highlightedCodeBlock
 import com.mikepenz.markdown.compose.elements.highlightedCodeFence
@@ -53,6 +58,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -406,6 +412,17 @@ fun ChatScreen(
                         }
                     }
                 }
+            }
+
+            // Agent task list (todo tool state) — pinned above the messages
+            if (state.todos.isNotEmpty()) {
+                TasksCard(
+                    todos = state.todos,
+                    expanded = state.todosExpanded,
+                    isStreaming = state.isStreaming,
+                    onToggle = { viewModel.toggleTodosExpanded() },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
             }
             when {
                 state.isLoading && state.messages.isEmpty() -> {
@@ -1176,5 +1193,142 @@ private fun formatTokens(tokens: Long): String {
         tokens >= 1_000_000 -> String.format("%.1fM", tokens / 1_000_000f)
         tokens >= 1_000 -> String.format("%.1fk", tokens / 1_000f)
         else -> tokens.toString()
+    }
+}
+
+/**
+ * Collapsible agent task list card, pinned above the messages.
+ * Collapsed: "Tasks 2/5" + active task + thin progress bar.
+ * Expanded: full list with done / active (spinner) / pending states.
+ */
+@Composable
+private fun TasksCard(
+    todos: List<UiTodo>,
+    expanded: Boolean,
+    isStreaming: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val doneCount = todos.count { it.isDone }
+    val active = todos.firstOrNull { it.isActive }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "$doneCount/${todos.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (doneCount == todos.size && todos.isNotEmpty()) {
+                            "All tasks done"
+                        } else {
+                            "Tasks"
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (isStreaming && active != null) {
+                        Text(
+                            text = active.content,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = if (expanded) {
+                        Icons.Filled.ExpandLess
+                    } else {
+                        Icons.Filled.ExpandMore
+                    },
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            LinearProgressIndicator(
+                progress = { if (todos.isEmpty()) 0f else doneCount.toFloat() / todos.size },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
+            AnimatedVisibility(visible = expanded) {
+                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                    todos.forEach { todo ->
+                        TodoRow(todo)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodoRow(todo: UiTodo) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        when {
+            todo.isDone -> Icon(
+                Icons.Filled.CheckCircle,
+                contentDescription = "Done",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+            todo.isActive -> CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            else -> Icon(
+                Icons.Outlined.RadioButtonUnchecked,
+                contentDescription = "Pending",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = todo.content,
+            style = MaterialTheme.typography.bodyMedium,
+            color = when {
+                todo.isDone -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                todo.isActive -> MaterialTheme.colorScheme.onSurface
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            fontWeight = if (todo.isActive) FontWeight.SemiBold else FontWeight.Normal,
+            textDecoration = if (todo.status == "cancelled") TextDecoration.LineThrough else null,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }

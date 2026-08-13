@@ -23,4 +23,6 @@ abstract class ChatViewModelContract(application: Application) : AndroidViewMode
     open fun denyCurrentTool(denyAll: Boolean = false) {}
     /** Respond to the current pending clarify request. */
     open fun respondToClarify(answer: String) {}
+    /** Toggle the Tasks card (agent todo list) expanded state. */
+    open fun toggleTodosExpanded() {}
 }

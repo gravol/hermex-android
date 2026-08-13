@@ -14,7 +14,11 @@ import com.hermex.core.network.RpcNotification
 import com.hermex.core.network.WsConnectionManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -135,6 +139,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     )
                 } ?: emptyList()
                 val context = parseContextUsage(result.info)
+                // Replay the task list: the last todo tool result in history is
+                // the authoritative state (same source the desktop Tasks panel uses).
+                val todos = result.messages
+                    ?.filter { it.role == "tool" && it.name == "todo" }
+                    ?.lastOrNull()
+                    ?.let { parseTodosFromString(it.context) }
                 uiState = uiState.copy(
                     isLoading = false,
                     isStreaming = false,
@@ -142,6 +152,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     error = null,
                     contextUsed = context.first,
                     contextMax = context.second,
+                    todos = todos.orEmpty(),
                 )
                 val loadDuration = if (sessionLoadStartTime > 0) System.currentTimeMillis() - sessionLoadStartTime else -1L
                 DebugLog.log("RPC", "DashboardChat",
@@ -545,7 +556,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val existing = cur.toolCalls.toMutableList()
-                    if (n.toolName != "_thinking") {
+                    // _thinking and todo are rendered as dedicated UI (thinking
+                    // block / Tasks card), not as tool cards.
+                    if (n.toolName != "_thinking" && n.toolName != "todo") {
                         val tc = UiToolCall(
                             id = "tc_${existing.size}",
                             toolName = n.toolName,
@@ -561,6 +574,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
             is RpcNotification.ToolStart -> {
                 DebugLog.log("RPC", "ToolEvent", "start: toolId=${n.toolId} name=${n.toolName} context=${n.context ?: ""}")
+                if (n.toolName == "todo") return
                 val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
@@ -577,6 +591,21 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
             is RpcNotification.ToolComplete -> {
                 DebugLog.log("RPC", "ToolEvent", "complete: toolId=${n.toolId} name=${n.toolName} summary=${n.summary ?: ""} args=${n.args?.toString()?.take(100) ?: ""}")
+                // todo tool.complete is the source of truth for the task list —
+                // update the Tasks card, not a tool card.
+                if (n.toolName == "todo") {
+                    val todos = parseTodos(n.result)
+                    if (todos != null) {
+                        uiState = uiState.copy(
+                            todos = todos,
+                            // Auto-expand the first time a task list appears during
+                            // a turn; once the user collapses it, respect that.
+                            todosExpanded = uiState.todosExpanded ||
+                                (uiState.todos.isEmpty() && uiState.isStreaming),
+                        )
+                    }
+                    return
+                }
                 val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
                 if (idx >= 0) {
                     val cur = msgs[idx]
@@ -689,6 +718,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         )
     }
 
+    override fun toggleTodosExpanded() {
+        uiState = uiState.copy(todosExpanded = !uiState.todosExpanded)
+    }
+
     companion object {
         /**
          * Extract live context-window occupancy from a session.info JSON payload.
@@ -705,6 +738,36 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 used to max
             } catch (_: Exception) {
                 null to null
+            }
+        }
+
+        /** Parse `{"todos": [{id, content, status}, ...]}` from a tool.complete result. */
+        private fun parseTodos(element: JsonElement?): List<UiTodo>? {
+            if (element == null) return null
+            return try {
+                val arr = element.jsonObject["todos"]?.jsonArray ?: return null
+                val todos = arr.mapNotNull { item ->
+                    val obj = item.jsonObject
+                    val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                    UiTodo(
+                        id = id,
+                        content = obj["content"]?.jsonPrimitive?.contentOrNull ?: "",
+                        status = obj["status"]?.jsonPrimitive?.contentOrNull ?: "pending",
+                    )
+                }
+                todos.ifEmpty { null }
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        /** Parse todos from a raw JSON string (tool message `context` in history). */
+        private fun parseTodosFromString(raw: String?): List<UiTodo>? {
+            if (raw.isNullOrBlank()) return null
+            return try {
+                parseTodos(Json.parseToJsonElement(raw))
+            } catch (_: Exception) {
+                null
             }
         }
     }

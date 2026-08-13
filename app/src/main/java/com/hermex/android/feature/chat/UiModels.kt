@@ -37,6 +37,16 @@ data class UiUsage(
     val estimatedCostUsd: Double? = null,
 )
 
+/** One item in the agent's live task list (todo tool state). */
+data class UiTodo(
+    val id: String,
+    val content: String,
+    val status: String = "pending",  // pending | in_progress | completed | cancelled
+) {
+    val isDone: Boolean get() = status == "completed" || status == "cancelled"
+    val isActive: Boolean get() = status == "in_progress"
+}
+
 data class ChatUiState(
     val sessionTitle: String = "",
     val messages: List<UiMessage> = emptyList(),
@@ -50,6 +60,10 @@ data class ChatUiState(
     // Null until the server reports a real reading.
     val contextUsed: Long? = null,
     val contextMax: Long? = null,
+    // Agent task list (todo tool state, from tool.complete events / history replay).
+    // Non-empty = the Tasks card shows above the message list.
+    val todos: List<UiTodo> = emptyList(),
+    val todosExpanded: Boolean = false,
 )
 
 /**
