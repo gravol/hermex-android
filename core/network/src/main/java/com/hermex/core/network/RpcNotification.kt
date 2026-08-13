@@ -73,6 +73,7 @@ sealed class RpcNotification {
         val args: JsonElement? = null,
         val result: JsonElement? = null,
         val summary: String? = null,
+        val inlineDiff: String? = null,
     ) : RpcNotification()
 
     // ── Run lifecycle ──

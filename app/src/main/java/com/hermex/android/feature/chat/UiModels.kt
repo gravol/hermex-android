@@ -28,6 +28,7 @@ data class UiToolCall(
     val summary: String? = null,
     val startedAt: Long? = null,
     val completed: Boolean = false,
+    val inlineDiff: String? = null,
 )
 
 data class UiUsage(

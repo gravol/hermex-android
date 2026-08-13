@@ -17,6 +17,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -1032,10 +1034,106 @@ private fun ToolCallCard(toolCall: UiToolCall) {
                             )
                         }
                     }
+
+                    // Diff section (file edits — server inline_diff, desktop-style)
+                    if (!toolCall.inlineDiff.isNullOrBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Diff",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        DiffView(toolCall.inlineDiff)
+                    }
                 }
             }
         }
     }
+}
+
+/**
+ * Desktop-style unified diff: monospace lines with red/green tinting for
+ * removed/added lines, highlighted hunk headers and file lines. The server's
+ * inline_diff carries ANSI color codes (terminal rendering) — we strip them
+ * and re-classify by line prefix so colors follow the app theme.
+ */
+@Composable
+private fun DiffView(diffText: String) {
+    val lines = remember(diffText) { parseDiffLines(diffText) }
+    Surface(
+        color = Color(0xFF0D1117),
+        shape = RoundedCornerShape(6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 280.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 4.dp),
+        ) {
+            lines.forEach { line ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(line.bgColor),
+                ) {
+                    Text(
+                        text = line.text,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                        ),
+                        color = line.textColor,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 1.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private enum class DiffKind { FILE, HUNK, ADD, DEL, CONTEXT, OTHER }
+
+private data class DiffLine(val text: String, val kind: DiffKind) {
+    val textColor: Color
+        get() = when (kind) {
+            DiffKind.ADD -> Color(0xFFA5D6A7)
+            DiffKind.DEL -> Color(0xFFEF9A9A)
+            DiffKind.HUNK -> Color(0xFF82B1FF)
+            DiffKind.FILE -> Color(0xFF80CBC4)
+            else -> Color(0xFFB0BEC5)
+        }
+    val bgColor: Color
+        get() = when (kind) {
+            DiffKind.ADD -> Color(0x1F2E7D32)
+            DiffKind.DEL -> Color(0x1FB71C1C)
+            else -> Color.Transparent
+        }
+}
+
+private val ansiRegex = Regex("\u001B\\[[0-9;]*[A-Za-z]")
+
+private fun stripAnsi(text: String): String = ansiRegex.replace(text, "")
+
+/** Parse ANSI-stripped inline_diff text into classified lines (desktop-style). */
+private fun parseDiffLines(raw: String): List<DiffLine> {
+    return raw.lineSequence().mapNotNull { rawLine ->
+        val line = stripAnsi(rawLine).trimEnd('\r')
+        if (line.isBlank() && !rawLine.startsWith(" ")) return@mapNotNull null
+        val kind = when {
+            line.startsWith("@@") -> DiffKind.HUNK
+            line.startsWith("+") && !line.startsWith("+++") -> DiffKind.ADD
+            line.startsWith("-") && !line.startsWith("---") -> DiffKind.DEL
+            line.startsWith(" ") -> DiffKind.CONTEXT
+            line.startsWith("a/") || line.startsWith("b/") || line.contains("→") -> DiffKind.FILE
+            else -> DiffKind.OTHER
+        }
+        DiffLine(line, kind)
+    }.toList()
 }
 
 /** Map tool name to an icon character. */

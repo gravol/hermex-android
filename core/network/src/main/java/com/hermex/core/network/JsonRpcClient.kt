@@ -305,6 +305,7 @@ class JsonRpcClient(
                     args = payload?.get("args"),
                     result = payload?.get("result"),
                     summary = payload?.get("summary")?.jsonPrimitive?.content,
+                    inlineDiff = payload?.get("inline_diff")?.jsonPrimitive?.content,
                 )
             }
 

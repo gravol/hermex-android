@@ -625,6 +625,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                             preview = n.summary ?: tc.preview,
                             result = n.result?.toString(),
                             summary = n.summary,
+                            inlineDiff = n.inlineDiff ?: tc.inlineDiff,
                         ) else tc
                     }
                     msgs[idx] = cur.copy(toolCalls = updated)
