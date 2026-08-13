@@ -467,6 +467,12 @@ class JsonRpcClient(
         return result.items
     }
 
+    /** Execute a slash command (v0.1.67) — same path the desktop/TUI use. */
+    suspend fun slashExec(sessionId: String, command: String): JsonObject {
+        DebugLog.log("RPC", "JsonRpc", "slash.exec: $command")
+        return request("slash.exec", mapOf("session_id" to sessionId, "command" to command))
+    }
+
     /**
      * Stage an image into the session (base64 bytes → gateway images dir).
      * The NEXT prompt.submit carries the staged image automatically.

@@ -199,6 +199,14 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     override fun sendMessage(text: String) {
         if (text.isBlank() || sessionId.isEmpty()) return
 
+        // Slash commands (v0.1.67): messages starting with "/" route to
+        // slash.exec (same path as desktop/TUI) instead of the agent. The
+        // output lands as an assistant message.
+        if (text.startsWith("/") && text.length > 1 && !text.startsWith("//")) {
+            sendSlashCommand(text)
+            return
+        }
+
         val userMsgId = "user_${tempIdCounter.incrementAndGet()}"
         val assistantMsgId = "asst_${tempIdCounter.incrementAndGet()}"
         val now = System.currentTimeMillis()
@@ -252,6 +260,56 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     isStreaming = false,
                     error = e.message ?: "Send failed",
                 )
+            }
+        }
+    }
+
+    /** Execute a slash command via slash.exec and surface its output. */
+    private fun sendSlashCommand(command: String) {
+        val userMsgId = "user_${tempIdCounter.incrementAndGet()}"
+        val now = System.currentTimeMillis()
+        val userMsg = UiMessage(id = userMsgId, role = "user", content = command, timestamp = now)
+        val current = uiState.messages.toMutableList()
+        current.add(userMsg)
+        uiState = uiState.copy(messages = current, error = null)
+        viewModelScope.launch {
+            try {
+                val result = rpcClient.slashExec(sessionId, command)
+                val output = result["output"]?.jsonPrimitive?.contentOrNull
+                    ?: result.toString()
+                val msgs = uiState.messages.toMutableList()
+                msgs.add(
+                    UiMessage(
+                        id = "slash_${tempIdCounter.incrementAndGet()}",
+                        role = "assistant",
+                        content = output,
+                        timestamp = System.currentTimeMillis(),
+                    )
+                )
+                uiState = uiState.copy(messages = msgs)
+                // Slash commands can change context (e.g. /compress) — refresh gauge
+                try {
+                    val res = rpcClient.sessionResume(sessionId, omitMessages = true)
+                    val ctx = parseContextUsage(res.info)
+                    if (ctx.first != null || ctx.second != null) {
+                        uiState = uiState.copy(
+                            contextUsed = ctx.first ?: uiState.contextUsed,
+                            contextMax = ctx.second ?: uiState.contextMax,
+                        )
+                    }
+                } catch (_: Exception) { }
+            } catch (e: Exception) {
+                Log.e("Hermex", "slash.exec failed", e)
+                val msgs = uiState.messages.toMutableList()
+                msgs.add(
+                    UiMessage(
+                        id = "slash_err_${tempIdCounter.incrementAndGet()}",
+                        role = "assistant",
+                        content = "⚠️ Command failed: ${e.message}",
+                        timestamp = System.currentTimeMillis(),
+                    )
+                )
+                uiState = uiState.copy(messages = msgs)
             }
         }
     }

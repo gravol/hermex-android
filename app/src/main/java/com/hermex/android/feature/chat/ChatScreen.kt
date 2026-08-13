@@ -25,6 +25,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
@@ -1226,6 +1227,13 @@ private fun MessageBubble(
             modifier = bubbleWidthModifier
                 .clip(bubbleShape)
                 .background(bubbleColor)
+                // Border in the context-gauge color (primary) — subtle outline
+                // around each message (v0.1.67).
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+                    shape = bubbleShape,
+                )
                 .combinedClickable(
                     onClick = {},
                     onLongClick = onLongPress,
