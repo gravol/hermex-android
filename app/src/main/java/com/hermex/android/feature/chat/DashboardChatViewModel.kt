@@ -623,7 +623,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val updated = cur.toolCalls.map { tc ->
-                        if (tc.toolName == n.toolName) tc.copy(
+                        // Match by id, or the FIRST not-yet-started card with this
+                        // name (a tool that runs twice must not overwrite the
+                        // previous run's id — that created duplicate ids → crash).
+                        if (tc.id == n.toolId || (tc.toolName == n.toolName && tc.startedAt == null)) tc.copy(
                             id = n.toolId,
                             preview = n.context,
                             startedAt = System.currentTimeMillis(),
@@ -654,7 +657,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 if (idx >= 0) {
                     val cur = msgs[idx]
                     val updated = cur.toolCalls.map { tc ->
-                        if (tc.id == n.toolId || tc.toolName == n.toolName) tc.copy(
+                        // Match by id, or the first not-yet-completed card with
+                        // this name (repeated tool runs must update THEIR card).
+                        if (tc.id == n.toolId || (tc.toolName == n.toolName && !tc.completed)) tc.copy(
                             completed = true,
                             args = n.args?.toString() ?: tc.args,
                             preview = n.summary ?: tc.preview,
@@ -768,6 +773,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     override fun toggleTodosExpanded() {
         uiState = uiState.copy(todosExpanded = !uiState.todosExpanded)
     }
+
+    override suspend fun completeSlash(text: String): List<JsonRpcClient.SlashItem> =
+        rpcClient.completeSlash(text)
 
     /** Whether the chat screen is currently visible (background-turn tracking). */
     private var screenVisible = true

@@ -86,6 +86,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
+import com.hermex.core.network.JsonRpcClient
 import com.hermex.core.network.NetworkResult
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -248,6 +249,21 @@ fun ChatScreen(
         composerText = ""
         pendingImageB64 = null
         pendingImageUri = null
+    }
+
+    // ── Slash-command completions (v0.1.65) ──
+    var composerFocused by remember { mutableStateOf(false) }
+    var slashItems by remember { mutableStateOf<List<JsonRpcClient.SlashItem>?>(null) }
+    LaunchedEffect(composerText, composerFocused, state.isStreaming) {
+        val text = composerText
+        if (composerFocused && !state.isStreaming && text.startsWith("/")) {
+            delay(150)  // debounce while typing
+            slashItems = runCatching { viewModel.completeSlash(text) }
+                .getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+        } else {
+            slashItems = null
+        }
     }
 
     // Track whether user has manually scrolled away from the bottom
@@ -427,7 +443,6 @@ fun ChatScreen(
     }
 
     // Track composer focus separately (for other uses if needed)
-    var composerFocused by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -549,6 +564,67 @@ fun ChatScreen(
                                     Color(0xFFFF3B30)
                                 },
                             )
+                        }
+                    }
+                    // Slash-command completions — pop up above the composer
+                    if (slashItems != null) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                        ) {
+                            LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
+                                itemsIndexed(slashItems!!) { _, item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                composerText = item.text
+                                                slashItems = null
+                                                focusRequester.requestFocus()
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = item.display ?: item.text,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontFamily = FontFamily.Monospace,
+                                            ),
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (item.kind == "skill") {
+                                                MaterialTheme.colorScheme.tertiary
+                                            } else {
+                                                MaterialTheme.colorScheme.primary
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        if (item.kind == "skill") {
+                                            Text(
+                                                text = "skill",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.tertiary,
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                        }
+                                        item.meta?.let { meta ->
+                                            if (meta.isNotBlank()) {
+                                                Text(
+                                                    text = meta,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(0.9f),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     Row(
@@ -1090,40 +1166,9 @@ private fun MessageBubble(
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            // Thinking block (collapsed toggle — only when thinking has content or is done)
-            val showToggle = message.role == "assistant"
-                    && message.thinkingText != null
-                    && (message.thinkingHasContent || !message.isStreaming)
-            if (showToggle) {
-                ThinkingToggle(
-                    expanded = message.thinkingExpanded,
-                    onToggle = onToggleThinking,
-                )
-                AnimatedVisibility(
-                    visible = message.thinkingExpanded,
-                    enter = expandVertically(),
-                    exit = shrinkVertically(),
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Text(
-                            text = message.thinkingText ?: "",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
-                                lineHeight = 16.sp,
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            modifier = Modifier.padding(8.dp),
-                        )
-                    }
-                }
-                if (message.content.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                }
-            }
+            // Thinking no longer renders in the message (v0.1.65): it streams
+            // in the docked Live Activity panel while working — showing it here
+            // too caused double-thinking. Tool cards above the answer remain.
 
             // Content
             if (message.content.isNotBlank()) {
@@ -1696,7 +1741,9 @@ private fun LiveActivityPanel(
                         }
                     }
                 }
-                items(toolCalls, key = { it.id }) { tc ->
+                // itemsIndexed (positional key): tool ids can duplicate (history
+                // replay defaults them to "tc") — an explicit key would crash.
+                itemsIndexed(toolCalls) { _, tc ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

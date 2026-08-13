@@ -2,6 +2,7 @@ package com.hermex.android.feature.chat
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import com.hermex.core.network.JsonRpcClient
 
 /**
  * Shared contract for chat ViewModels — both the legacy SSE [ChatViewModel]
@@ -31,4 +32,6 @@ abstract class ChatViewModelContract(application: Application) : AndroidViewMode
     open fun setScreenVisible(visible: Boolean) {}
     /** Dismiss the "completed while away" banner. */
     open fun clearCompletedWhileAway() {}
+    /** Slash-command completion (server-ranked). */
+    open suspend fun completeSlash(text: String): List<JsonRpcClient.SlashItem> = emptyList()
 }

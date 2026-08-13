@@ -385,6 +385,18 @@ class JsonRpcClient(
     )
 
     @Serializable
+    data class SlashCompletionResult(val items: List<SlashItem> = emptyList())
+
+    /** One slash-command completion from complete.slash. */
+    @Serializable
+    data class SlashItem(
+        val text: String = "",
+        val display: String? = null,
+        val meta: String? = null,
+        val kind: String? = null,  // "command" | "skill"
+    )
+
+    @Serializable
     data class SessionInfo(
         val id: String,
         val title: String? = null,
@@ -444,6 +456,15 @@ class JsonRpcClient(
         )
         return result.session_id
             ?: throw JsonRpcException(-1, "session.create returned no session_id")
+    }
+
+    /**
+     * Slash-command completion (v0.1.65). Params: {text: "/..."}. Server ranks
+     * and filters via SlashCommandCompleter — returns matching commands/skills.
+     */
+    suspend fun completeSlash(text: String): List<SlashItem> {
+        val result: SlashCompletionResult = request("complete.slash", mapOf("text" to text))
+        return result.items
     }
 
     /**
