@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.50 — compact session browser)
-**Current version:** v0.1.50 (versionCode 50)
-**HEAD commit:** `24ccd4b` (v0.1.50 — compact session browser)
+**Last updated:** 2026-08-13 (v0.1.51 — Tasks panel)
+**Current version:** v0.1.51 (versionCode 51)
+**HEAD commit:** `9d7c0cb` (v0.1.51 — Tasks panel)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.51 (2026-08-13)
+- **Tasks panel** — collapsible card pinned above the chat messages showing the agent's live todo list ("Tasks 2/5" + active task + progress bar; expand → done ✓ / active spinner / pending ○, cancelled struck through). Source: `tool.complete` events with `name == "todo"` (server's `payload.todos` — the documented source of truth), plus history replay on `session.resume` (last tool message `role=="tool" && name=="todo"`). Auto-expands on first appearance mid-turn, respects manual collapse. `todo` excluded from tool-card rendering (dedicated UI). (`ChatScreen.kt` TasksCard/TodoRow, `DashboardChatViewModel.parseTodos/parseTodosFromString`, `UiTodo`, `ChatUiState.todos/todosExpanded`, `ChatViewModelContract.toggleTodosExpanded`.)
 
 ### DONE in v0.1.50 (2026-08-13)
 - **Compact session browser** — menu (drawer): pinned + **RECENT (top 5)** + expandable "All sessions (N)" (grouped by source, scrollable in-menu). Search still matches everything. Main page trimmed to pinned + recent 5 + "Browse all sessions" row (opens menu); no full list on main. Empty state gets a New session button. (`SessionsScreen.kt` — `RECENT_LIMIT = 5`, `showAllSessions` expander.)
