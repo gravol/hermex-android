@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.61 — System panels)
-**Current version:** v0.1.61 (versionCode 61)
-**HEAD commit:** `e3a1d5f` (v0.1.61 — System panels)
+**Last updated:** 2026-08-13 (v0.1.62 — tool cards above response)
+**Current version:** v0.1.62 (versionCode 62)
+**HEAD commit:** `f2dfed4` (v0.1.62 — tool cards above response)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.62 (2026-08-13)
+- **Tool cards above the response** — tool cards were rendered inside the assistant bubble AFTER the content; long tool runs pushed the reply below the fold. Now rendered ABOVE the bubble in the message item (desktop-style: tool activity first, response lands last at the bottom). (`ChatScreen.kt` — moved the toolCalls block out of `MessageBubble` to the item composable.)
 
 ### DONE in v0.1.61 (2026-08-13)
 - **System panels** — menu drawer gains a SYSTEM section (Cron Jobs / Skills & Tools / Config (core / soul)). `DashboardApiClient` +7 cookie-authed REST calls + DTOs (`cronJobs`, `cronAction` pause/resume/trigger, `skillsList`, `skillContent`, `toggleSkill`, `configRaw`, `saveConfigRaw` — note: PUT config body is `yaml_text`, verified against `RawConfigUpdate`; all shapes verified live before shipping). `feature/system/SystemScreens.kt`: CronScreen (list + state chip + pause/resume/run-now), SkillsScreen (list + enable switch), SkillDetailScreen (raw SKILL.md viewer), ConfigScreen (live config.yaml editor, monospace, warning banner, Save-when-changed). Routes `cron`/`skills`/`skills/{name}`/`config` in MainActivity.
