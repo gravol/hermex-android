@@ -867,6 +867,13 @@ fun ChatScreen(
                                 LiveThinkingTicker(text = msg.thinkingText)
                             }
 
+                            // After the turn, thinking persists as a scrollable
+                            // box above the tools+answer (during streaming it
+                            // lives in the docked live panel instead).
+                            if (msg.role == "assistant" && msg.thinkingText?.isNotBlank() == true && !msg.isStreaming) {
+                                ThinkingScrollBox(text = msg.thinkingText)
+                            }
+
                             // Tool calls render ABOVE the response (desktop-style:
                             // tool activity first, the reply lands last at the
                             // bottom — no scrolling up past cards to read it).
@@ -1057,6 +1064,59 @@ fun ChatScreen(
 // ── LIVE THINKING TICKER ──
 // Shown above the assistant bubble while the model is thinking
 // and no real content has arrived yet. Dimmed, italic, live-updating.
+
+/**
+ * Scrollable thinking box shown above the final answer once the turn is done
+ * (v0.1.66). During streaming the live docked panel owns thinking instead.
+ */
+@Composable
+private fun ThinkingScrollBox(text: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        shape = RoundedCornerShape(10.dp),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "THINKING",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "scroll for more",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 180.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(10.dp),
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun LiveThinkingTicker(text: String) {
