@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.66 — persistent thinking box)
-**Current version:** v0.1.66 (versionCode 66)
-**HEAD commit:** `8cc2a76` (v0.1.66 — thinking persists as scrollable box)
+**Last updated:** 2026-08-13 (v0.1.67 — slash exec + borders)
+**Current version:** v0.1.67 (versionCode 67)
+**HEAD commit:** `0b93449` (v0.1.67 — slash exec + borders)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.67 (2026-08-13)
+- **Slash commands execute** — messages starting with `/` route to `slash.exec` (same path as desktop/TUI) instead of `prompt.submit`; output lands as an assistant message; context gauge refreshes after (compress changes it). `/compress`, `/model`, `/new` etc. now work from the phone. (`JsonRpcClient.slashExec`, `DashboardChatViewModel.sendSlashCommand`.)
+- **Message borders** — assistant + user bubbles get a 1dp outline in the context-gauge color (primary, 28% alpha) — first pass at "borders around conversations". (`MessageBubble`.)
 
 ### DONE in v0.1.66 (2026-08-13)
 - **Thinking persists after the turn** — finished messages now keep a capped scrollable THINKING box (max 180dp, monospace, "scroll for more") above the tool cards + answer; during streaming the live docked panel owns thinking instead. (`ThinkingScrollBox` in ChatScreen.)
