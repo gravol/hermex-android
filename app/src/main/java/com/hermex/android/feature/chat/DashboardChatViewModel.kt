@@ -447,7 +447,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                 "reconnect detected — re-registering session $sessionId")
                             viewModelScope.launch {
                                 try {
-                                    val result = rpcClient.sessionResume(sessionId)
+                                    val result = rpcClient.sessionResume(sessionId, omitMessages = true)
                                     resumeCount++
                                     liveSid = result.session_id
                                     resumedSessionId = result.resumed ?: sessionId
@@ -455,6 +455,14 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                         "reconnect resume(#${resumeCount}): " +
                                         "dbKey=$sessionId liveSid=$liveSid " +
                                         "resumed=$resumedSessionId")
+                                    // Refresh the context gauge on reconnect too
+                                    val ctx = parseContextUsage(result.info)
+                                    if (ctx.first != null || ctx.second != null) {
+                                        uiState = uiState.copy(
+                                            contextUsed = ctx.first ?: uiState.contextUsed,
+                                            contextMax = ctx.second ?: uiState.contextMax,
+                                        )
+                                    }
                                 } catch (e: Exception) {
                                     Log.e("Hermex", "DashboardChat: reconnect resume failed", e)
                                     DebugLog.log("ERROR", "DashboardChat",
@@ -769,6 +777,27 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         // If the turn finished while away, the banner shows on re-entry
         if (visible && uiState.completedWhileAway) {
             DebugLog.log("RPC", "DashboardChat", "re-entered chat — completedWhileAway banner shown")
+        }
+        // Re-fetch live context on every chat open (v0.1.63): the one-time
+        // resume snapshot can miss real context after a server-side agent
+        // rebuild (e.g. auto-compression), and per-turn session.info events
+        // aren't guaranteed to reach this client (single-owner transport).
+        // A lightweight resume (messages omitted) gets us usage fresh.
+        if (visible && sessionId.isNotEmpty()) {
+            viewModelScope.launch {
+                try {
+                    val result = rpcClient.sessionResume(sessionId, omitMessages = true)
+                    val ctx = parseContextUsage(result.info)
+                    if (ctx.first != null || ctx.second != null) {
+                        uiState = uiState.copy(
+                            contextUsed = ctx.first ?: uiState.contextUsed,
+                            contextMax = ctx.second ?: uiState.contextMax,
+                        )
+                    }
+                } catch (_: Exception) {
+                    // Best-effort — the normal loadMessages path covers this.
+                }
+            }
         }
     }
 

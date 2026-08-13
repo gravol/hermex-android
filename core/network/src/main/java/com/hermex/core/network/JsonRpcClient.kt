@@ -461,11 +461,12 @@ class JsonRpcClient(
         return request("image.attach_bytes", params)
     }
 
-    suspend fun sessionResume(sessionId: String): SessionResumeResult {
+    suspend fun sessionResume(sessionId: String, omitMessages: Boolean = false): SessionResumeResult {
         DebugLog.log("STATE", "SessionID",
-            "sessionResume called with sessionId=$sessionId")
-        val result: SessionResumeResult =
-            request("session.resume", mapOf("session_id" to sessionId))
+            "sessionResume called with sessionId=$sessionId omitMessages=$omitMessages")
+        val params = mutableMapOf<String, Any>("session_id" to sessionId)
+        if (omitMessages) params["omit_messages"] = true
+        val result: SessionResumeResult = request("session.resume", params)
         DebugLog.log("STATE", "SessionID",
             "sessionResume result: session_id=${result.session_id} " +
             "resumed=${result.resumed} session_key=${result.session_key} " +
