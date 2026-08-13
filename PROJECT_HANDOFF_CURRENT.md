@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-12 (v0.1.46 — Display settings: UI zoom + text size)
-**Current version:** v0.1.46 (versionCode 46)
-**HEAD commit:** (Display settings — see git log)
+**Last updated:** 2026-08-12 (v0.1.47 — Theme accent colors)
+**Current version:** v0.1.47 (versionCode 47)
+**HEAD commit:** (Theme accent colors — see git log)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -19,8 +19,8 @@
 | Latest commit | `bd41033` (docs update on top of `afa63ec` v0.1.43) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.46 (versionCode 46) |
-| Completed phase | **v0.1.46 — Display settings: UI zoom + text size** (on top of v0.1.45 StreamLoop auto-scroll fix) |
+| Version | v0.1.47 (versionCode 47) |
+| Completed phase | **v0.1.47 — Theme accent colors** (on top of v0.1.46 display settings) |
 | Next phase | **Optional cleanup** (below) |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.47 (2026-08-12)
+- **Theme accent colors** — `HermexTheme(accentColor: Color?)` param; when set, `accentColorScheme()` builds a dark M3 scheme from the accent (containers = accent alpha-over the dark surfaces, on-colors via `isDarkForeground`). Picked accent overrides dynamic/wallpaper colors. `SettingsScreen` Theme section: 7-swatch row (System gradient + 6 solids) with tap-to-apply, persisted as hex in DataStore via `SettingsRepository.accentColorHex`.
 
 ### DONE in v0.1.46 (2026-08-12)
 - **Display settings** — `SettingsRepository` (int percentages in "hermex_settings" DataStore) + `LocalDensity` override at the app root in `MainActivity`: UI zoom 80–130% (dp), text size 80–150% (sp, stacks on zoom). Sliders in `SettingsScreen` save on every change → live preview while dragging. No per-screen changes needed; the density override covers everything.

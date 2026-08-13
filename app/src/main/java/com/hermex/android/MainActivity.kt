@@ -27,6 +27,7 @@ import com.hermex.android.feature.settings.SettingsScreen
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import com.hermex.android.ui.theme.HermexTheme
+import com.hermex.android.ui.theme.hexToColor
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -35,14 +36,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            HermexTheme {
-                // Display preferences: UI zoom (dp) + text scale (sp), applied
-                // as a density override so every screen picks them up with no
-                // per-screen changes. Text scales by zoom × textScale.
-                val appContext = LocalContext.current.applicationContext
-                val settingsRepo = remember { SettingsRepository(appContext) }
-                val zoomPercent by settingsRepo.uiZoomPercent.collectAsState(initial = 100)
-                val textPercent by settingsRepo.textScalePercent.collectAsState(initial = 100)
+            // Display preferences: UI zoom (dp) + text scale (sp), applied as a
+            // density override so every screen picks them up with no per-screen
+            // changes. Text scales by zoom × textScale. Accent color (null =
+            // follow system/wallpaper) overrides the theme primary.
+            val appContext = LocalContext.current.applicationContext
+            val settingsRepo = remember { SettingsRepository(appContext) }
+            val zoomPercent by settingsRepo.uiZoomPercent.collectAsState(initial = 100)
+            val textPercent by settingsRepo.textScalePercent.collectAsState(initial = 100)
+            val accentHex by settingsRepo.accentColorHex.collectAsState(initial = null)
+            val accentColor = remember(accentHex) {
+                accentHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() }
+            }
+            HermexTheme(accentColor = accentColor) {
                 val baseDensity = LocalDensity.current
                 val scaledDensity = Density(
                     density = baseDensity.density * (zoomPercent / 100f),

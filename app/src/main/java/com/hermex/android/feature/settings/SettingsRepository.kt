@@ -22,12 +22,19 @@ class SettingsRepository(context: Context) {
 
     val textScalePercent: Flow<Int> = store.getInt(KEY_TEXT_SCALE).map { it ?: 100 }
 
+    /** Accent color as #RRGGBB, or null/blank = system (follow wallpaper / dynamic). */
+    val accentColorHex: Flow<String?> = store.getString(KEY_ACCENT_COLOR)
+        .map { it?.takeIf { s -> s.isNotBlank() } }
+
     suspend fun setUiZoomPercent(value: Int) = store.setInt(KEY_UI_ZOOM, value)
 
     suspend fun setTextScalePercent(value: Int) = store.setInt(KEY_TEXT_SCALE, value)
 
+    suspend fun setAccentColorHex(value: String?) = store.setString(KEY_ACCENT_COLOR, value.orEmpty())
+
     private companion object {
         const val KEY_UI_ZOOM = "ui_zoom_percent"
         const val KEY_TEXT_SCALE = "text_scale_percent"
+        const val KEY_ACCENT_COLOR = "accent_color_hex"
     }
 }

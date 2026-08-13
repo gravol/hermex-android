@@ -6,7 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
@@ -20,12 +24,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.hermex.android.ui.theme.hexToColor
+import com.hermex.android.ui.theme.isDarkForeground
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import kotlin.math.roundToInt
@@ -110,6 +120,73 @@ fun SettingsScreen(
                 },
                 valueRange = 80f..150f,
             )
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Text("Theme", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Accent color for bubbles, buttons and highlights. System follows your wallpaper.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            val savedAccent by settingsRepo.accentColorHex.collectAsState(initial = null)
+            val accentOptions = listOf(
+                "System" to null,
+                "Cyan" to "#00D1FF",
+                "Blue" to "#5B7CFF",
+                "Purple" to "#AF52DE",
+                "Green" to "#34C759",
+                "Red" to "#FF3B30",
+                "Orange" to "#FF9500",
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                accentOptions.forEach { (_, hex) ->
+                    val selected = if (hex == null) {
+                        savedAccent.isNullOrBlank()
+                    } else {
+                        savedAccent.equals(hex, ignoreCase = true)
+                    }
+                    val swatchColor = hex?.let { hexToColor(it) }
+                    val swatchBackground = swatchColor?.let { Modifier.background(it) }
+                        ?: Modifier.background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFF00D1FF), Color(0xFFAF52DE), Color(0xFFFF3B30)),
+                            ),
+                        )
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .then(swatchBackground)
+                            .border(
+                                width = 2.dp,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                                shape = CircleShape,
+                            )
+                            .clickable {
+                                scope.launch { settingsRepo.setAccentColorHex(hex) }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (selected) {
+                            Text(
+                                text = "✓",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (swatchColor != null && isDarkForeground(swatchColor)) {
+                                    Color.Black
+                                } else {
+                                    Color.White
+                                },
+                            )
+                        }
+                    }
+                }
+            }
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
