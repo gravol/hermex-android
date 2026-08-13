@@ -589,7 +589,15 @@ fun ChatScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                composerText = item.text
+                                                // Server completions omit the
+                                                // leading "/" (already typed) —
+                                                // restore it or the command
+                                                // becomes plain text.
+                                                composerText = if (item.text.startsWith("/")) {
+                                                    item.text
+                                                } else {
+                                                    "/" + item.text
+                                                }
                                                 slashItems = null
                                                 focusRequester.requestFocus()
                                             }

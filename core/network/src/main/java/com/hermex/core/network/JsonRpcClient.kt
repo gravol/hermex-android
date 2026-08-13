@@ -467,10 +467,15 @@ class JsonRpcClient(
         return result.items
     }
 
-    /** Execute a slash command (v0.1.67) — same path the desktop/TUI use. */
+    /** Execute a slash command (v0.1.67) — same path the desktop/TUI use.
+     *  Long timeout: /compress on a big session can take minutes. */
     suspend fun slashExec(sessionId: String, command: String): JsonObject {
         DebugLog.log("RPC", "JsonRpc", "slash.exec: $command")
-        return request("slash.exec", mapOf("session_id" to sessionId, "command" to command))
+        return request(
+            "slash.exec",
+            mapOf("session_id" to sessionId, "command" to command),
+            timeoutMs = 180_000,
+        )
     }
 
     /**
