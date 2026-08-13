@@ -370,6 +370,15 @@ class JsonRpcClient(
     data class SessionListResult(val sessions: List<SessionInfo>)
 
     @Serializable
+    data class CreateSessionResult(
+        val session_id: String? = null,
+        val stored_session_id: String? = null,
+        val message_count: Int? = null,
+        val messages: List<MessageData>? = null,
+        val info: JsonObject? = null,
+    )
+
+    @Serializable
     data class SessionInfo(
         val id: String,
         val title: String? = null,
@@ -418,6 +427,17 @@ class JsonRpcClient(
     suspend fun sessionList(): List<SessionInfo> {
         val result: SessionListResult = request("session.list")
         return result.sessions
+    }
+
+    /** Create a new session. Returns the live session id (usable with session.resume). */
+    suspend fun createSession(): String {
+        DebugLog.log("RPC", "JsonRpc", "session.create")
+        val result: CreateSessionResult = request(
+            "session.create",
+            mapOf("source" to "api"),
+        )
+        return result.session_id
+            ?: throw JsonRpcException(-1, "session.create returned no session_id")
     }
 
     suspend fun sessionResume(sessionId: String): SessionResumeResult {

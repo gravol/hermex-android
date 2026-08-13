@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -18,6 +19,16 @@ class DataStoreManager(private val dataStore: DataStore<Preferences>) {
     suspend fun setString(key: String, value: String) {
         dataStore.edit { preferences ->
             preferences[stringPreferencesKey(key)] = value
+        }
+    }
+
+    fun getStringSet(key: String): Flow<Set<String>> = dataStore.data.map { preferences ->
+        preferences[stringSetPreferencesKey(key)] ?: emptySet()
+    }
+
+    suspend fun setStringSet(key: String, value: Set<String>) {
+        dataStore.edit { preferences ->
+            preferences[stringSetPreferencesKey(key)] = value
         }
     }
 

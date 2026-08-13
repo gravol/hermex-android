@@ -46,6 +46,10 @@ data class ChatUiState(
     val scrollGeneration: Long = 0L,  // bumped on every SSE-driven list mutation; triggers auto-scroll
     val pendingApproval: PendingApproval? = null,  // non-null when tool needs approval
     val pendingClarify: PendingClarify? = null,    // non-null when clarification is needed
+    // Live context-window occupancy (from session.info usage.context_used/context_max).
+    // Null until the server reports a real reading.
+    val contextUsed: Long? = null,
+    val contextMax: Long? = null,
 )
 
 /**

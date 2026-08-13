@@ -27,6 +27,7 @@ import com.hermex.android.feature.settings.SettingsScreen
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import com.hermex.android.ui.theme.HermexTheme
+import com.hermex.android.ui.theme.UiColorOverrides
 import com.hermex.android.ui.theme.hexToColor
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -48,7 +49,18 @@ class MainActivity : ComponentActivity() {
             val accentColor = remember(accentHex) {
                 accentHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() }
             }
-            HermexTheme(accentColor = accentColor) {
+            // Per-part appearance overrides (v0.1.49) — null = derive from accent
+            val uiBgHex by settingsRepo.uiBackgroundHex.collectAsState(initial = null)
+            val uiUserBubbleHex by settingsRepo.uiUserBubbleHex.collectAsState(initial = null)
+            val uiAssistantBubbleHex by settingsRepo.uiAssistantBubbleHex.collectAsState(initial = null)
+            val uiOverrides = remember(uiBgHex, uiUserBubbleHex, uiAssistantBubbleHex) {
+                UiColorOverrides(
+                    background = uiBgHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
+                    userBubble = uiUserBubbleHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
+                    assistantBubble = uiAssistantBubbleHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
+                )
+            }
+            HermexTheme(accentColor = accentColor, uiOverrides = uiOverrides) {
                 val baseDensity = LocalDensity.current
                 val scaledDensity = Density(
                     density = baseDensity.density * (zoomPercent / 100f),

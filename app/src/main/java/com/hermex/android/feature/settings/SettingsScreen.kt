@@ -10,7 +10,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
@@ -71,7 +73,8 @@ fun SettingsScreen(
             modifier = Modifier
                 .padding(padding)
                 .padding(16.dp)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("App Info", style = MaterialTheme.typography.titleSmall)
@@ -131,62 +134,83 @@ fun SettingsScreen(
             )
 
             val savedAccent by settingsRepo.accentColorHex.collectAsState(initial = null)
-            val accentOptions = listOf(
-                "System" to null,
-                "Cyan" to "#00D1FF",
-                "Blue" to "#5B7CFF",
-                "Purple" to "#AF52DE",
-                "Green" to "#34C759",
-                "Red" to "#FF3B30",
-                "Orange" to "#FF9500",
+            ColorSwatchRow(
+                options = accentOptions,
+                selectedHex = savedAccent,
+                onSelect = { hex -> scope.launch { settingsRepo.setAccentColorHex(hex) } },
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                accentOptions.forEach { (_, hex) ->
-                    val selected = if (hex == null) {
-                        savedAccent.isNullOrBlank()
-                    } else {
-                        savedAccent.equals(hex, ignoreCase = true)
-                    }
-                    val swatchColor = hex?.let { hexToColor(it) }
-                    val swatchBackground = swatchColor?.let { Modifier.background(it) }
-                        ?: Modifier.background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFF00D1FF), Color(0xFFAF52DE), Color(0xFFFF3B30)),
-                            ),
-                        )
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .then(swatchBackground)
-                            .border(
-                                width = 2.dp,
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                },
-                                shape = CircleShape,
-                            )
-                            .clickable {
-                                scope.launch { settingsRepo.setAccentColorHex(hex) }
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (selected) {
-                            Text(
-                                text = "✓",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (swatchColor != null && isDarkForeground(swatchColor)) {
-                                    Color.Black
-                                } else {
-                                    Color.White
-                                },
-                            )
-                        }
-                    }
-                }
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Text("Appearance", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Tweak individual UI parts, or apply a full preset. Assistant bubbles and top bars share one color.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            val savedBg by settingsRepo.uiBackgroundHex.collectAsState(initial = null)
+            val savedUserBubble by settingsRepo.uiUserBubbleHex.collectAsState(initial = null)
+            val savedAssistantBubble by settingsRepo.uiAssistantBubbleHex.collectAsState(initial = null)
+
+            // Presets — apply accent + per-part overrides at once
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = savedAccent.equals("#00D1FF", ignoreCase = true) &&
+                        savedBg.isNullOrBlank() &&
+                        savedUserBubble.isNullOrBlank() &&
+                        savedAssistantBubble.isNullOrBlank(),
+                    onClick = {
+                        scope.launch { settingsRepo.applyAppearance("#00D1FF", null, null, null) }
+                    },
+                    label = { Text("Classic") },
+                )
+                FilterChip(
+                    selected = savedAccent.equals("#00FF41", ignoreCase = true) &&
+                        savedBg.equals("#0A1A15", ignoreCase = true),
+                    onClick = {
+                        scope.launch { settingsRepo.applyAppearance("#00FF41", "#0A1A15", null, null) }
+                    },
+                    label = { Text("Terminal") },
+                )
+                FilterChip(
+                    selected = savedAccent.isNullOrBlank() &&
+                        savedBg.isNullOrBlank() &&
+                        savedUserBubble.isNullOrBlank() &&
+                        savedAssistantBubble.isNullOrBlank(),
+                    onClick = {
+                        scope.launch { settingsRepo.applyAppearance(null, null, null, null) }
+                    },
+                    label = { Text("Reset") },
+                )
             }
+
+            Spacer(Modifier.height(8.dp))
+
+            Text("Background", style = MaterialTheme.typography.bodyMedium)
+            ColorSwatchRow(
+                options = accentOptions,
+                selectedHex = savedBg,
+                onSelect = { hex -> scope.launch { settingsRepo.setUiBackgroundHex(hex) } },
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text("User bubbles", style = MaterialTheme.typography.bodyMedium)
+            ColorSwatchRow(
+                options = accentOptions,
+                selectedHex = savedUserBubble,
+                onSelect = { hex -> scope.launch { settingsRepo.setUiUserBubbleHex(hex) } },
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text("Assistant bubbles & top bars", style = MaterialTheme.typography.bodyMedium)
+            ColorSwatchRow(
+                options = accentOptions,
+                selectedHex = savedAssistantBubble,
+                onSelect = { hex -> scope.launch { settingsRepo.setUiAssistantBubbleHex(hex) } },
+            )
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -219,6 +243,73 @@ fun SettingsScreen(
                 Icon(Icons.Default.ContentCopy, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Copy Debug Log")
+            }
+        }
+    }
+}
+
+private val accentOptions = listOf(
+    "System" to null,
+    "Cyan" to "#00D1FF",
+    "Blue" to "#5B7CFF",
+    "Purple" to "#AF52DE",
+    "Green" to "#34C759",
+    "Red" to "#FF3B30",
+    "Orange" to "#FF9500",
+)
+
+/**
+ * Horizontal row of circular color swatches (System gradient + solid palette).
+ * Selection shown with a colored border + ✓ check.
+ */
+@Composable
+private fun ColorSwatchRow(
+    options: List<Pair<String, String?>>,
+    selectedHex: String?,
+    onSelect: (String?) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        options.forEach { (_, hex) ->
+            val selected = if (hex == null) {
+                selectedHex.isNullOrBlank()
+            } else {
+                selectedHex.equals(hex, ignoreCase = true)
+            }
+            val swatchColor = hex?.let { hexToColor(it) }
+            val swatchBackground = swatchColor?.let { Modifier.background(it) }
+                ?: Modifier.background(
+                    Brush.linearGradient(
+                        listOf(Color(0xFF00D1FF), Color(0xFFAF52DE), Color(0xFFFF3B30)),
+                    ),
+                )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .then(swatchBackground)
+                    .border(
+                        width = 2.dp,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        shape = CircleShape,
+                    )
+                    .clickable { onSelect(hex) },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (selected) {
+                    Text(
+                        text = "✓",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (swatchColor != null && isDarkForeground(swatchColor)) {
+                            Color.Black
+                        } else {
+                            Color.White
+                        },
+                    )
+                }
             }
         }
     }

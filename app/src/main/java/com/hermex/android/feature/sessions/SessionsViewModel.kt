@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.hermex.android.feature.settings.SettingsRepository
 import com.hermex.core.network.DebugLog
 import com.hermex.core.network.JsonRpcClient
 import com.hermex.core.network.SessionSummary
@@ -11,6 +12,8 @@ import com.hermex.core.network.WsConnectionManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -19,6 +22,7 @@ import java.util.TimeZone
 data class SessionsUiState(
     val sessions: List<SessionSummary> = emptyList(),
     val isLoading: Boolean = false,
+    val isCreating: Boolean = false,
     val error: String? = null,
 )
 
@@ -26,6 +30,12 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
 
     private val _uiState = MutableStateFlow(SessionsUiState())
     val uiState: StateFlow<SessionsUiState> = _uiState.asStateFlow()
+
+    private val settingsRepo = SettingsRepository(application)
+
+    /** Locally pinned session ids (desktop-style client-side pinning). */
+    val pinnedIds: StateFlow<Set<String>> = settingsRepo.pinnedSessionIds
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     init {
         loadSessions()
@@ -35,6 +45,39 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             loadDashboardSessions()
+        }
+    }
+
+    fun togglePin(sessionId: String) {
+        viewModelScope.launch {
+            settingsRepo.togglePinned(sessionId)
+        }
+    }
+
+    /** Create a new session server-side, then hand the live session id to [onDone]. */
+    fun createSession(onDone: (String?) -> Unit) {
+        if (_uiState.value.isCreating) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isCreating = true, error = null)
+            val wsConnection = WsConnectionManager(viewModelScope)
+            try {
+                wsConnection.connect()
+                val rpcClient = JsonRpcClient(wsConnection, viewModelScope)
+                rpcClient.start()
+                val sid = rpcClient.createSession()
+                DebugLog.log("INFO", "SessionsVM", "session.create → $sid")
+                onDone(sid)
+            } catch (e: Exception) {
+                Log.e("Hermex", "SessionsViewModel: createSession failed", e)
+                DebugLog.log("ERROR", "SessionsVM", "session.create failed: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    error = e.message ?: "Failed to create session",
+                )
+                onDone(null)
+            } finally {
+                wsConnection.disconnect()
+                _uiState.value = _uiState.value.copy(isCreating = false)
+            }
         }
     }
 

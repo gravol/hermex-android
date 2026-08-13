@@ -56,11 +56,15 @@ private val LightColorScheme = lightColorScheme(
  * the text cursor (full-strength primary) jumped — "didn't fully work".
  * primaryContainer is now 40% and surfaceVariant takes a 16% accent tint so the
  * whole chat chrome picks up the hue.
+ *
+ * v0.1.49: per-part overrides (UiColorOverrides) replace the accent-derived
+ * tones for background / user bubbles / assistant bubbles + chrome when set.
  */
-private fun accentColorScheme(accent: Color): ColorScheme = darkColorScheme(
+private fun accentColorScheme(accent: Color, overrides: UiColorOverrides): ColorScheme = darkColorScheme(
     primary = accent,
     onPrimary = if (isDarkForeground(accent)) Color.Black else Color.White,
-    primaryContainer = accent.copy(alpha = 0.40f).compositeOver(DarkSurface),
+    primaryContainer = overrides.userBubble
+        ?: accent.copy(alpha = 0.40f).compositeOver(DarkSurface),
     onPrimaryContainer = OnSurface,
     secondary = accent,
     onSecondary = if (isDarkForeground(accent)) Color.Black else Color.White,
@@ -68,24 +72,59 @@ private fun accentColorScheme(accent: Color): ColorScheme = darkColorScheme(
     onSecondaryContainer = OnSurface,
     tertiary = accent.copy(alpha = 0.8f),
     onTertiary = if (isDarkForeground(accent)) Color.Black else Color.White,
-    background = DarkBackground,
-    surface = DarkSurface,
-    surfaceVariant = accent.copy(alpha = 0.16f).compositeOver(DarkSurfaceVariant),
+    background = overrides.background ?: DarkBackground,
+    surface = overrides.background ?: DarkSurface,
+    surfaceVariant = overrides.assistantBubble
+        ?: accent.copy(alpha = 0.16f).compositeOver(DarkSurfaceVariant),
     onBackground = OnBackground,
     onSurface = OnSurface,
     error = Error,
 )
+
+/**
+ * Dark scheme with per-part overrides but no accent pick (accent colors fall
+ * back to the app defaults). Used when the user tweaks UI parts without
+ * choosing an accent — e.g. the Terminal Green background alone.
+ */
+private fun overriddenDarkScheme(overrides: UiColorOverrides): ColorScheme = darkColorScheme(
+    primary = Primary,
+    secondary = Secondary,
+    tertiary = SecondaryVariant,
+    primaryContainer = overrides.userBubble ?: DarkSurfaceVariant,
+    onPrimaryContainer = OnSurface,
+    secondaryContainer = SecondaryVariant.copy(alpha = 0.25f).compositeOver(DarkSurfaceVariant),
+    onSecondaryContainer = OnSurface,
+    background = overrides.background ?: DarkBackground,
+    surface = overrides.background ?: DarkSurface,
+    surfaceVariant = overrides.assistantBubble ?: DarkSurfaceVariant,
+    onBackground = OnBackground,
+    onSurface = OnSurface,
+    error = Error,
+)
+
+/** Per-UI-part color overrides (v0.1.49). Null = derive from accent / default. */
+data class UiColorOverrides(
+    val background: Color? = null,
+    val userBubble: Color? = null,
+    val assistantBubble: Color? = null,
+) {
+    val isEmpty: Boolean
+        get() = background == null && userBubble == null && assistantBubble == null
+}
 
 @Composable
 fun HermexTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     accentColor: Color? = null,
+    uiOverrides: UiColorOverrides = UiColorOverrides(),
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
         // User-picked accent wins over everything (including dynamic/wallpaper)
-        accentColor != null -> accentColorScheme(accentColor)
+        accentColor != null -> accentColorScheme(accentColor, uiOverrides)
+        // No accent, but explicit per-part overrides → dark base + overrides
+        !uiOverrides.isEmpty -> overriddenDarkScheme(uiOverrides)
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

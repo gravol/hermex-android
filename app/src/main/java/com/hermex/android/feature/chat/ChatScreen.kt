@@ -266,11 +266,44 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = state.sessionTitle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Column {
+                        Text(
+                            text = state.sessionTitle,
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        // Live context-window occupancy (session.info usage).
+                        // Hidden until the server reports a real reading.
+                        val ctxUsed = state.contextUsed
+                        val ctxMax = state.contextMax
+                        if (ctxUsed != null && ctxMax != null && ctxMax > 0) {
+                            val fraction = (ctxUsed.toFloat() / ctxMax.toFloat()).coerceIn(0f, 1f)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                LinearProgressIndicator(
+                                    progress = { fraction },
+                                    modifier = Modifier
+                                        .width(64.dp)
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    color = if (fraction > 0.8f) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    },
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                )
+                                Text(
+                                    text = "${formatTokens(ctxUsed)}/${formatTokens(ctxMax)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -1135,4 +1168,13 @@ private suspend fun autoScrollToBottom(
         "done: firstVisible=$afterFirst2 " +
         "lastVisible=$afterLast2 " +
         "canScrollForward=$afterCanScroll2")
+}
+
+/** Compact token count formatting: 85123 → "85.1k", 1048576 → "1.0M". */
+private fun formatTokens(tokens: Long): String {
+    return when {
+        tokens >= 1_000_000 -> String.format("%.1fM", tokens / 1_000_000f)
+        tokens >= 1_000 -> String.format("%.1fk", tokens / 1_000f)
+        else -> tokens.toString()
+    }
 }

@@ -14,6 +14,10 @@ import com.hermex.core.network.RpcNotification
 import com.hermex.core.network.WsConnectionManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -130,11 +134,14 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                         timestamp = System.currentTimeMillis(),
                     )
                 } ?: emptyList()
+                val context = parseContextUsage(result.info)
                 uiState = uiState.copy(
                     isLoading = false,
                     isStreaming = false,
                     messages = messages,
                     error = null,
+                    contextUsed = context.first,
+                    contextMax = context.second,
                 )
                 val loadDuration = if (sessionLoadStartTime > 0) System.currentTimeMillis() - sessionLoadStartTime else -1L
                 DebugLog.log("RPC", "DashboardChat",
@@ -660,6 +667,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
             is RpcNotification.SessionInfo -> {
                 DebugLog.log("RPC", "DashboardChat", "session.info received")
+                val context = parseContextUsage(n.info)
+                if (context.first != null || context.second != null) {
+                    uiState = uiState.copy(
+                        contextUsed = context.first ?: uiState.contextUsed,
+                        contextMax = context.second ?: uiState.contextMax,
+                    )
+                }
             }
 
             is RpcNotification.Unknown -> {
@@ -673,5 +687,25 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             messages = msgs,
             scrollGeneration = uiState.scrollGeneration + 1,
         )
+    }
+
+    companion object {
+        /**
+         * Extract live context-window occupancy from a session.info JSON payload.
+         * The server's session.info carries `usage: {context_used, context_max, ...}`
+         * (current window occupancy, NOT cumulative lifetime tokens). Returns
+         * (used, max); either side may be null when the server hasn't reported it.
+         */
+        private fun parseContextUsage(info: JsonObject?): Pair<Long?, Long?> {
+            if (info == null) return null to null
+            return try {
+                val usage = info["usage"]?.jsonObject ?: return null to null
+                val used = usage["context_used"]?.jsonPrimitive?.longOrNull
+                val max = usage["context_max"]?.jsonPrimitive?.longOrNull
+                used to max
+            } catch (_: Exception) {
+                null to null
+            }
+        }
     }
 }
