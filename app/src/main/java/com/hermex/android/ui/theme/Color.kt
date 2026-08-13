@@ -23,6 +23,7 @@ val OnPrimary = Color(0xFF000000)
 val OnSecondary = Color(0xFF000000)
 val OnBackground = Color(0xFFE6E6E6)
 val OnSurface = Color(0xFFE6E6E6)
+val OnSurfaceVariant = Color(0xFF9BA3A0)
 val Error = Color(0xFFB00020)
 
 // Header logo colors

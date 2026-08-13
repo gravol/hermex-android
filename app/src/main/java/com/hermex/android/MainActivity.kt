@@ -49,18 +49,21 @@ class MainActivity : ComponentActivity() {
             val accentColor = remember(accentHex) {
                 accentHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() }
             }
-            // Per-part appearance overrides (v0.1.49) — null = derive from accent
+            // Per-part appearance overrides (v0.1.49+) — null = derive from accent
             val uiBgHex by settingsRepo.uiBackgroundHex.collectAsState(initial = null)
             val uiUserBubbleHex by settingsRepo.uiUserBubbleHex.collectAsState(initial = null)
             val uiAssistantBubbleHex by settingsRepo.uiAssistantBubbleHex.collectAsState(initial = null)
-            val uiOverrides = remember(uiBgHex, uiUserBubbleHex, uiAssistantBubbleHex) {
+            val uiTextHex by settingsRepo.uiTextHex.collectAsState(initial = null)
+            val uiMonospace by settingsRepo.uiMonospace.collectAsState(initial = false)
+            val uiOverrides = remember(uiBgHex, uiUserBubbleHex, uiAssistantBubbleHex, uiTextHex) {
                 UiColorOverrides(
                     background = uiBgHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
                     userBubble = uiUserBubbleHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
                     assistantBubble = uiAssistantBubbleHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
+                    text = uiTextHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
                 )
             }
-            HermexTheme(accentColor = accentColor, uiOverrides = uiOverrides) {
+            HermexTheme(accentColor = accentColor, uiOverrides = uiOverrides, monospace = uiMonospace) {
                 val baseDensity = LocalDensity.current
                 val scaledDensity = Density(
                     density = baseDensity.density * (zoomPercent / 100f),

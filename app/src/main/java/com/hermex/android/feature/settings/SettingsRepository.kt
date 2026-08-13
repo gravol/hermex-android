@@ -46,6 +46,13 @@ class SettingsRepository(context: Context) {
     val uiAssistantBubbleHex: Flow<String?> = store.getString(KEY_UI_ASSISTANT_BUBBLE)
         .map { it?.takeIf { s -> s.isNotBlank() } }
 
+    /** Primary text color override (onSurface/onBackground; secondary = 72% alpha). */
+    val uiTextHex: Flow<String?> = store.getString(KEY_UI_TEXT)
+        .map { it?.takeIf { s -> s.isNotBlank() } }
+
+    /** Monospace font everywhere (desktop terminal look). */
+    val uiMonospace: Flow<Boolean> = store.getBoolean(KEY_UI_MONOSPACE).map { it ?: false }
+
     /** Locally pinned session ids (desktop-style client-side pinning). */
     val pinnedSessionIds: Flow<Set<String>> = store.getStringSet(KEY_PINNED_SESSIONS)
 
@@ -61,6 +68,10 @@ class SettingsRepository(context: Context) {
 
     suspend fun setUiAssistantBubbleHex(value: String?) = store.setString(KEY_UI_ASSISTANT_BUBBLE, value.orEmpty())
 
+    suspend fun setUiTextHex(value: String?) = store.setString(KEY_UI_TEXT, value.orEmpty())
+
+    suspend fun setUiMonospace(value: Boolean) = store.setBoolean(KEY_UI_MONOSPACE, value)
+
     suspend fun setPinnedSessionIds(ids: Set<String>) = store.setStringSet(KEY_PINNED_SESSIONS, ids)
 
     suspend fun togglePinned(sessionId: String) {
@@ -75,11 +86,13 @@ class SettingsRepository(context: Context) {
         backgroundHex: String?,
         userBubbleHex: String?,
         assistantBubbleHex: String?,
+        textHex: String?,
     ) {
         store.setString(KEY_ACCENT_COLOR, accentHex.orEmpty())
         store.setString(KEY_UI_BACKGROUND, backgroundHex.orEmpty())
         store.setString(KEY_UI_USER_BUBBLE, userBubbleHex.orEmpty())
         store.setString(KEY_UI_ASSISTANT_BUBBLE, assistantBubbleHex.orEmpty())
+        store.setString(KEY_UI_TEXT, textHex.orEmpty())
     }
 
     private companion object {
@@ -89,6 +102,8 @@ class SettingsRepository(context: Context) {
         const val KEY_UI_BACKGROUND = "ui_background_hex"
         const val KEY_UI_USER_BUBBLE = "ui_user_bubble_hex"
         const val KEY_UI_ASSISTANT_BUBBLE = "ui_assistant_bubble_hex"
+        const val KEY_UI_TEXT = "ui_text_hex"
+        const val KEY_UI_MONOSPACE = "ui_monospace"
         const val KEY_PINNED_SESSIONS = "pinned_session_ids"
     }
 }

@@ -76,8 +76,9 @@ private fun accentColorScheme(accent: Color, overrides: UiColorOverrides): Color
     surface = overrides.background ?: DarkSurface,
     surfaceVariant = overrides.assistantBubble
         ?: accent.copy(alpha = 0.16f).compositeOver(DarkSurfaceVariant),
-    onBackground = OnBackground,
-    onSurface = OnSurface,
+    onBackground = overrides.text ?: OnBackground,
+    onSurface = overrides.text ?: OnSurface,
+    onSurfaceVariant = overrides.text?.copy(alpha = 0.72f) ?: OnSurfaceVariant,
     error = Error,
 )
 
@@ -97,19 +98,21 @@ private fun overriddenDarkScheme(overrides: UiColorOverrides): ColorScheme = dar
     background = overrides.background ?: DarkBackground,
     surface = overrides.background ?: DarkSurface,
     surfaceVariant = overrides.assistantBubble ?: DarkSurfaceVariant,
-    onBackground = OnBackground,
-    onSurface = OnSurface,
+    onBackground = overrides.text ?: OnBackground,
+    onSurface = overrides.text ?: OnSurface,
+    onSurfaceVariant = overrides.text?.copy(alpha = 0.72f) ?: OnSurfaceVariant,
     error = Error,
 )
 
-/** Per-UI-part color overrides (v0.1.49). Null = derive from accent / default. */
+/** Per-UI-part color overrides (v0.1.49+). Null = derive from accent / default. */
 data class UiColorOverrides(
     val background: Color? = null,
     val userBubble: Color? = null,
     val assistantBubble: Color? = null,
+    val text: Color? = null,
 ) {
     val isEmpty: Boolean
-        get() = background == null && userBubble == null && assistantBubble == null
+        get() = background == null && userBubble == null && assistantBubble == null && text == null
 }
 
 @Composable
@@ -118,6 +121,7 @@ fun HermexTheme(
     dynamicColor: Boolean = true,
     accentColor: Color? = null,
     uiOverrides: UiColorOverrides = UiColorOverrides(),
+    monospace: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -145,7 +149,7 @@ fun HermexTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = if (monospace) MonoTypography else Typography,
         content = content
     )
 }

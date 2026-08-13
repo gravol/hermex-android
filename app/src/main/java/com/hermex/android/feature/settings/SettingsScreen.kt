@@ -152,6 +152,8 @@ fun SettingsScreen(
             val savedBg by settingsRepo.uiBackgroundHex.collectAsState(initial = null)
             val savedUserBubble by settingsRepo.uiUserBubbleHex.collectAsState(initial = null)
             val savedAssistantBubble by settingsRepo.uiAssistantBubbleHex.collectAsState(initial = null)
+            val savedTextColor by settingsRepo.uiTextHex.collectAsState(initial = null)
+            val savedMonospace by settingsRepo.uiMonospace.collectAsState(initial = false)
 
             // Presets — apply accent + per-part overrides at once
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -159,9 +161,14 @@ fun SettingsScreen(
                     selected = savedAccent.equals("#00D1FF", ignoreCase = true) &&
                         savedBg.isNullOrBlank() &&
                         savedUserBubble.isNullOrBlank() &&
-                        savedAssistantBubble.isNullOrBlank(),
+                        savedAssistantBubble.isNullOrBlank() &&
+                        savedTextColor.isNullOrBlank() &&
+                        !savedMonospace,
                     onClick = {
-                        scope.launch { settingsRepo.applyAppearance("#00D1FF", null, null, null) }
+                        scope.launch {
+                            settingsRepo.applyAppearance("#00D1FF", null, null, null, null)
+                            settingsRepo.setUiMonospace(false)
+                        }
                     },
                     label = { Text("Classic") },
                 )
@@ -169,11 +176,16 @@ fun SettingsScreen(
                     selected = savedAccent.equals("#00FF41", ignoreCase = true) &&
                         savedBg.equals("#0A0C0A", ignoreCase = true) &&
                         savedUserBubble.equals("#1E3D24", ignoreCase = true) &&
-                        savedAssistantBubble.equals("#0A0C0A", ignoreCase = true),
+                        savedAssistantBubble.equals("#0A0C0A", ignoreCase = true) &&
+                        savedTextColor.equals("#A5D6A7", ignoreCase = true) &&
+                        savedMonospace,
                     onClick = {
                         // Desktop look: flat charcoal, no assistant bubble (same
-                        // color as bg), muted green box for user messages.
-                        scope.launch { settingsRepo.applyAppearance("#00FF41", "#0A0C0A", "#1E3D24", "#0A0C0A") }
+                        // color as bg), muted green user box, mint text, mono font.
+                        scope.launch {
+                            settingsRepo.applyAppearance("#00FF41", "#0A0C0A", "#1E3D24", "#0A0C0A", "#A5D6A7")
+                            settingsRepo.setUiMonospace(true)
+                        }
                     },
                     label = { Text("Terminal") },
                 )
@@ -181,9 +193,14 @@ fun SettingsScreen(
                     selected = savedAccent.isNullOrBlank() &&
                         savedBg.isNullOrBlank() &&
                         savedUserBubble.isNullOrBlank() &&
-                        savedAssistantBubble.isNullOrBlank(),
+                        savedAssistantBubble.isNullOrBlank() &&
+                        savedTextColor.isNullOrBlank() &&
+                        !savedMonospace,
                     onClick = {
-                        scope.launch { settingsRepo.applyAppearance(null, null, null, null) }
+                        scope.launch {
+                            settingsRepo.applyAppearance(null, null, null, null, null)
+                            settingsRepo.setUiMonospace(false)
+                        }
                     },
                     label = { Text("Reset") },
                 )
@@ -215,6 +232,35 @@ fun SettingsScreen(
                 selectedHex = savedAssistantBubble,
                 onSelect = { hex -> scope.launch { settingsRepo.setUiAssistantBubbleHex(hex) } },
             )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text("Text color", style = MaterialTheme.typography.bodyMedium)
+            ColorSwatchRow(
+                options = accentOptions,
+                selectedHex = savedTextColor,
+                onSelect = { hex -> scope.launch { settingsRepo.setUiTextHex(hex) } },
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Monospace font", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Terminal look, like the desktop app.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = savedMonospace,
+                    onCheckedChange = { checked -> scope.launch { settingsRepo.setUiMonospace(checked) } },
+                )
+            }
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 

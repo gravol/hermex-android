@@ -114,3 +114,24 @@ val Typography = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+/** Same scale, monospace everywhere — the desktop app's terminal look (v0.1.58). */
+val MonoTypography = Typography.run {
+    copy(
+        displayLarge = displayLarge.copy(fontFamily = FontFamily.Monospace),
+        displayMedium = displayMedium.copy(fontFamily = FontFamily.Monospace),
+        displaySmall = displaySmall.copy(fontFamily = FontFamily.Monospace),
+        headlineLarge = headlineLarge.copy(fontFamily = FontFamily.Monospace),
+        headlineMedium = headlineMedium.copy(fontFamily = FontFamily.Monospace),
+        headlineSmall = headlineSmall.copy(fontFamily = FontFamily.Monospace),
+        titleLarge = titleLarge.copy(fontFamily = FontFamily.Monospace),
+        titleMedium = titleMedium.copy(fontFamily = FontFamily.Monospace),
+        titleSmall = titleSmall.copy(fontFamily = FontFamily.Monospace),
+        bodyLarge = bodyLarge.copy(fontFamily = FontFamily.Monospace),
+        bodyMedium = bodyMedium.copy(fontFamily = FontFamily.Monospace),
+        bodySmall = bodySmall.copy(fontFamily = FontFamily.Monospace),
+        labelLarge = labelLarge.copy(fontFamily = FontFamily.Monospace),
+        labelMedium = labelMedium.copy(fontFamily = FontFamily.Monospace),
+        labelSmall = labelSmall.copy(fontFamily = FontFamily.Monospace),
+    )
+}
