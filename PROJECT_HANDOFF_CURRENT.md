@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.53 — background turns)
-**Current version:** v0.1.53 (versionCode 53)
-**HEAD commit:** `254dc1e` (v0.1.53 — background turns)
+**Last updated:** 2026-08-13 (v0.1.54 — inline diffs)
+**Current version:** v0.1.54 (versionCode 54)
+**HEAD commit:** `7bed83b` (v0.1.54 — inline diffs)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.54 (2026-08-13)
+- **Inline diffs in tool cards** — `tool.complete` events carry `inline_diff` (ANSI-colored unified diff from `render_edit_diff_with_delta`, for `write_file`/`patch`/`skill_manage`) which the app previously dropped. Now: `RpcNotification.ToolComplete.inlineDiff`, `UiToolCall.inlineDiff`, captured in the VM, rendered in the expanded tool card via `DiffView` (monospace, red/green tinted `+`/`-`, blue hunks, teal file lines, scrollable ≤280dp). ANSI stripped + re-classified by line prefix (`parseDiffLines`/`DiffLine`/`DiffKind` in ChatScreen.kt). No server changes.
 
 ### DONE in v0.1.53 (2026-08-13)
 - **Background turns** — leaving a chat no longer kills the running task. Chat ViewModels were scoped to the nav back-stack entry: backing out destroyed the VM → WS disconnect → server orphan-reaper (20s grace) tore the session down. New `ChatVmsHolder` (Activity-scoped AndroidViewModel) keeps one `DashboardChatViewModel` per session alive across navigation — WS + keepalive stay up, turns finish in the background, reopening shows live state. `DashboardChatViewModel.dispose()` extracted; keepalive `stop` moved to the holder (only when all chat VMs go, i.e. Activity finish). (`ChatVmsHolder.kt`, `MainActivity` — `viewModel<ChatVmsHolder>()` + `getOrCreate(sessionId)`.)
