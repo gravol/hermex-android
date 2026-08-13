@@ -744,9 +744,16 @@ private fun MessageBubble(
             )
         }
 
+        // Assistant bubbles span the full width (edge to edge); user bubbles
+        // stay capped at a chat-style max width, aligned right.
+        val bubbleWidthModifier = if (isUser) {
+            Modifier.widthIn(min = 60.dp, max = 320.dp)
+        } else {
+            Modifier.fillMaxWidth()
+        }
+
         Column(
-            modifier = Modifier
-                .widthIn(min = 60.dp, max = 320.dp)
+            modifier = bubbleWidthModifier
                 .clip(bubbleShape)
                 .background(bubbleColor)
                 .combinedClickable(
