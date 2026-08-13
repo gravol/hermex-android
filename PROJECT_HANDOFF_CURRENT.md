@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.54 — inline diffs)
-**Current version:** v0.1.54 (versionCode 54)
-**HEAD commit:** `7bed83b` (v0.1.54 — inline diffs)
+**Last updated:** 2026-08-13 (v0.1.55 — Terminal preset matched)
+**Current version:** v0.1.55 (versionCode 55)
+**HEAD commit:** `4a56233` (v0.1.55 — Terminal preset matched)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.55 (2026-08-13)
+- **Terminal preset matched to desktop screenshot** — extracted exact colors from the desktop app screenshot via the vision pipeline (gemma4:cloud): main bg `#0A0C0A` (near-black charcoal w/ green tint), sidebar `#070807`, mint labels `#76C76B`, neon accent `#00FF41`. Terminal preset background corrected `#0A1A15` → `#0A0C0A`. (`SettingsScreen.kt` preset values.)
 
 ### DONE in v0.1.54 (2026-08-13)
 - **Inline diffs in tool cards** — `tool.complete` events carry `inline_diff` (ANSI-colored unified diff from `render_edit_diff_with_delta`, for `write_file`/`patch`/`skill_manage`) which the app previously dropped. Now: `RpcNotification.ToolComplete.inlineDiff`, `UiToolCall.inlineDiff`, captured in the VM, rendered in the expanded tool card via `DiffView` (monospace, red/green tinted `+`/`-`, blue hunks, teal file lines, scrollable ≤280dp). ANSI stripped + re-classified by line prefix (`parseDiffLines`/`DiffLine`/`DiffKind` in ChatScreen.kt). No server changes.
