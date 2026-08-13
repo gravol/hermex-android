@@ -167,9 +167,13 @@ fun SettingsScreen(
                 )
                 FilterChip(
                     selected = savedAccent.equals("#00FF41", ignoreCase = true) &&
-                        savedBg.equals("#0A0C0A", ignoreCase = true),
+                        savedBg.equals("#0A0C0A", ignoreCase = true) &&
+                        savedUserBubble.equals("#1E3D24", ignoreCase = true) &&
+                        savedAssistantBubble.equals("#0A0C0A", ignoreCase = true),
                     onClick = {
-                        scope.launch { settingsRepo.applyAppearance("#00FF41", "#0A0C0A", null, null) }
+                        // Desktop look: flat charcoal, no assistant bubble (same
+                        // color as bg), muted green box for user messages.
+                        scope.launch { settingsRepo.applyAppearance("#00FF41", "#0A0C0A", "#1E3D24", "#0A0C0A") }
                     },
                     label = { Text("Terminal") },
                 )
