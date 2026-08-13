@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.scrollBy
@@ -776,14 +777,18 @@ fun ChatScreen(
                                     && msg.isStreaming
                                     && !msg.thinkingHasContent
 
-                            if (showLiveThinking) {
+                            // During streaming, live thinking + tool activity live
+                            // in the docked LiveActivityPanel (bottom); the
+                            // in-stream versions only render once the turn is
+                            // done (tools + thinking above the final answer).
+                            if (showLiveThinking && !state.isStreaming) {
                                 LiveThinkingTicker(text = msg.thinkingText)
                             }
 
                             // Tool calls render ABOVE the response (desktop-style:
                             // tool activity first, the reply lands last at the
                             // bottom — no scrolling up past cards to read it).
-                            if (msg.role == "assistant" && msg.toolCalls.isNotEmpty()) {
+                            if (msg.role == "assistant" && msg.toolCalls.isNotEmpty() && !msg.isStreaming) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -811,6 +816,21 @@ fun ChatScreen(
                         }
                     }
                 }
+            }
+
+            // Docked live-activity panel (v0.1.64): while a turn is running,
+            // thinking + tool calls stream in a small scrollable box above the
+            // composer. On completion the panel vanishes and the finished
+            // message shows tools + thinking above the final answer instead.
+            val liveMsg = state.messages.lastOrNull { it.isStreaming }
+            val livePanelVisible = state.isStreaming && liveMsg != null &&
+                (liveMsg.thinkingText?.isNotBlank() == true || liveMsg.toolCalls.isNotEmpty())
+            if (livePanelVisible) {
+                LiveActivityPanel(
+                    thinking = liveMsg!!.thinkingText.orEmpty(),
+                    toolCalls = liveMsg.toolCalls,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                )
             }
         }
     }
@@ -1595,6 +1615,133 @@ private fun formatTokens(tokens: Long): String {
         tokens >= 1_000_000 -> String.format("%.1fM", tokens / 1_000_000f)
         tokens >= 1_000 -> String.format("%.1fk", tokens / 1_000f)
         else -> tokens.toString()
+    }
+}
+
+/**
+ * Docked live-activity panel (v0.1.64): small scrollable box above the composer
+ * showing thinking + tool calls as they stream, while the answer grows above it.
+ * Disappears when the turn completes (the finished message then shows tools +
+ * thinking above the final answer instead).
+ */
+@Composable
+private fun LiveActivityPanel(
+    thinking: String,
+    toolCalls: List<UiToolCall>,
+    modifier: Modifier = Modifier,
+) {
+    val now by remember { mutableStateOf(System.currentTimeMillis()) }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Live activity",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.weight(1f))
+                if (toolCalls.isNotEmpty()) {
+                    Text(
+                        text = "${toolCalls.count { !it.completed }} working · ${toolCalls.size} tools",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            val listState = rememberLazyListState()
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp),
+            ) {
+                if (thinking.isNotBlank()) {
+                    item(key = "thinking") {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                            Text(
+                                text = "THINKING",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = thinking,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                            )
+                        }
+                    }
+                }
+                items(toolCalls, key = { it.id }) { tc ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = toolIcon(tc.toolName),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = tc.toolName,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = formatElapsed(tc.startedAt, now, tc.completed),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        if (tc.completed) {
+                            Text(
+                                text = "✓",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFF4CAF50),
+                            )
+                        } else {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
+            // Auto-scroll the panel to the newest activity
+            LaunchedEffect(thinking.length, toolCalls.size) {
+                val count = toolCalls.size + if (thinking.isNotBlank()) 1 else 0
+                if (count > 0) listState.scrollToItem(count - 1)
+            }
+        }
     }
 }
 
