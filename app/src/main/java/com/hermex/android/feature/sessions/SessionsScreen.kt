@@ -16,7 +16,10 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -48,6 +51,9 @@ fun SessionsScreen(
     onSessionTap: (SessionSummary) -> Unit = {},
     onSettings: () -> Unit = {},
     activeSessions: StateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
+    onOpenCron: () -> Unit = {},
+    onOpenSkills: () -> Unit = {},
+    onOpenConfig: () -> Unit = {},
     viewModel: SessionsViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -252,6 +258,40 @@ fun SessionsScreen(
                             )
                         }
                     }
+
+                    // System panels (v0.1.61)
+                    HorizontalDivider()
+                    SectionHeader("SYSTEM")
+                    ListItem(
+                        headlineContent = { Text("Cron Jobs") },
+                        leadingContent = {
+                            Icon(Icons.Outlined.Schedule, contentDescription = null)
+                        },
+                        modifier = Modifier.clickable {
+                            scope.launch { drawerState.close() }
+                            onOpenCron()
+                        },
+                    )
+                    ListItem(
+                        headlineContent = { Text("Skills & Tools") },
+                        leadingContent = {
+                            Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
+                        },
+                        modifier = Modifier.clickable {
+                            scope.launch { drawerState.close() }
+                            onOpenSkills()
+                        },
+                    )
+                    ListItem(
+                        headlineContent = { Text("Config (core / soul)") },
+                        leadingContent = {
+                            Icon(Icons.Outlined.Settings, contentDescription = null)
+                        },
+                        modifier = Modifier.clickable {
+                            scope.launch { drawerState.close() }
+                            onOpenConfig()
+                        },
+                    )
                 }
             }
         },

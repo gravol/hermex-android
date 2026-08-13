@@ -3,8 +3,13 @@ package com.hermex.core.network
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.Authenticator
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -132,6 +137,49 @@ object DashboardApiClient {
         val provider: String? = null,
     )
 
+    // ── System panels (v0.1.61): cron / skills / config ──
+
+    @Serializable
+    data class CronJob(
+        val id: String = "",
+        val name: String = "",
+        @SerialName("schedule_display") val scheduleDisplay: String? = null,
+        val enabled: Boolean = true,
+        val state: String? = null,
+        @SerialName("paused_at") val pausedAt: String? = null,
+        @SerialName("next_run_at") val nextRunAt: String? = null,
+        val repeat: CronRepeat? = null,
+    )
+
+    @Serializable
+    data class CronRepeat(
+        @SerialName("times") val times: Int? = null,
+        @SerialName("completed") val completed: Int? = null,
+    )
+
+    @Serializable
+    data class SkillInfo(
+        val name: String = "",
+        val description: String? = null,
+        val category: String? = null,
+        val enabled: Boolean = true,
+        val usage: Int? = null,
+        val provenance: String? = null,
+    )
+
+    @Serializable
+    data class SkillContent(
+        val name: String? = null,
+        val content: String? = null,
+        val path: String? = null,
+    )
+
+    @Serializable
+    data class ConfigRaw(
+        val yaml: String? = null,
+        val path: String? = null,
+    )
+
     /**
      * Log in with password. Session cookies are stored by the CookieJar.
      */
@@ -222,6 +270,120 @@ object DashboardApiClient {
                 result
             } catch (e: Exception) {
                 Log.e("Hermex", "Dashboard transcribe failed", e)
+                NetworkResult.Error(e)
+            }
+        }
+
+    // ── System panels (v0.1.61) — cookie-authenticated dashboard REST ──
+
+    /** List cron jobs. Response: JSON array of jobs. */
+    suspend fun cronJobs(): NetworkResult<List<CronJob>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = httpClient.newCall(
+                    Request.Builder().url("$restUrl/api/cron/jobs").get().build()
+                ).execute()
+                response.handleResult(json, ListSerializer(CronJob.serializer()))
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    /** pause | resume | trigger a cron job. */
+    suspend fun cronAction(jobId: String, action: String): NetworkResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = httpClient.newCall(
+                    Request.Builder()
+                        .url("$restUrl/api/cron/jobs/$jobId/$action")
+                        .post("{}".toRequestBody(mediaTypeJson))
+                        .build()
+                ).execute()
+                response.handleResult(json, JsonObject.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    /** List skills. Response: JSON array of skill infos. */
+    suspend fun skillsList(): NetworkResult<List<SkillInfo>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = httpClient.newCall(
+                    Request.Builder().url("$restUrl/api/skills").get().build()
+                ).execute()
+                response.handleResult(json, ListSerializer(SkillInfo.serializer()))
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    /** Read a skill's raw SKILL.md text. */
+    suspend fun skillContent(name: String): NetworkResult<SkillContent> =
+        withContext(Dispatchers.IO) {
+            try {
+                val url = "$restUrl/api/skills/content?name=${java.net.URLEncoder.encode(name, "UTF-8")}"
+                val response = httpClient.newCall(
+                    Request.Builder().url(url).get().build()
+                ).execute()
+                response.handleResult(json, SkillContent.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    /** Enable/disable a skill. */
+    suspend fun toggleSkill(name: String, enabled: Boolean): NetworkResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            try {
+                val body = json.encodeToString(
+                    JsonObject.serializer(),
+                    buildJsonObject {
+                        put("name", name)
+                        put("enabled", enabled)
+                    },
+                )
+                val response = httpClient.newCall(
+                    Request.Builder()
+                        .url("$restUrl/api/skills/toggle")
+                        .put(body.toRequestBody(mediaTypeJson))
+                        .build()
+                ).execute()
+                response.handleResult(json, JsonObject.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    /** Read the raw config.yaml text. */
+    suspend fun configRaw(): NetworkResult<ConfigRaw> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = httpClient.newCall(
+                    Request.Builder().url("$restUrl/api/config/raw").get().build()
+                ).execute()
+                response.handleResult(json, ConfigRaw.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    /** Save config.yaml raw text. Server expects {yaml_text} (RawConfigUpdate). */
+    suspend fun saveConfigRaw(yaml: String): NetworkResult<ConfigRaw> =
+        withContext(Dispatchers.IO) {
+            try {
+                val body = json.encodeToString(
+                    JsonObject.serializer(),
+                    buildJsonObject { put("yaml_text", yaml) },
+                )
+                val response = httpClient.newCall(
+                    Request.Builder()
+                        .url("$restUrl/api/config/raw")
+                        .put(body.toRequestBody(mediaTypeJson))
+                        .build()
+                ).execute()
+                response.handleResult(json, ConfigRaw.serializer())
+            } catch (e: Exception) {
                 NetworkResult.Error(e)
             }
         }

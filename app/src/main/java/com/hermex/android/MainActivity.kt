@@ -24,6 +24,10 @@ import com.hermex.android.feature.onboarding.DashboardSetupScreen
 import com.hermex.android.feature.sessions.SessionsScreen
 import com.hermex.android.feature.settings.SettingsRepository
 import com.hermex.android.feature.settings.SettingsScreen
+import com.hermex.android.feature.system.ConfigScreen
+import com.hermex.android.feature.system.CronScreen
+import com.hermex.android.feature.system.SkillDetailScreen
+import com.hermex.android.feature.system.SkillsScreen
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import com.hermex.android.ui.theme.HermexTheme
@@ -116,10 +120,42 @@ fun HermexNavGraph(chatVmsHolder: ChatVmsHolder) {
                     navController.navigate("settings")
                 },
                 activeSessions = chatVmsHolder.activeSessions,
+                onOpenCron = { navController.navigate("cron") },
+                onOpenSkills = { navController.navigate("skills") },
+                onOpenConfig = { navController.navigate("config") },
             )
         }
         composable("settings") {
             SettingsScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable("cron") {
+            CronScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable("skills") {
+            SkillsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSkill = { name ->
+                    val encoded = URLEncoder.encode(name, "UTF-8")
+                    navController.navigate("skills/$encoded")
+                },
+            )
+        }
+        composable(
+            route = "skills/{name}",
+            arguments = listOf(navArgument("name") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val name = URLDecoder.decode(backStackEntry.arguments?.getString("name") ?: "", "UTF-8")
+            SkillDetailScreen(
+                skillName = name,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable("config") {
+            ConfigScreen(
                 onBack = { navController.popBackStack() },
             )
         }
