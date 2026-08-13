@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.64 — Live Activity panel)
-**Current version:** v0.1.64 (versionCode 64)
-**HEAD commit:** `f5ac004` (v0.1.64 — Live Activity panel)
+**Last updated:** 2026-08-13 (v0.1.65 — crash fix + slash commands)
+**Current version:** v0.1.65 (versionCode 65)
+**HEAD commit:** `2d3fc15` (v0.1.65 — crash fix + slash commands)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,11 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.65 (2026-08-13)
+- **CRASH FIX (v0.1.64 regression)** — running the same tool twice in one turn (e.g. `patch` ×2) made `ToolStart` overwrite the FIRST card's id by name-match → two cards shared one id → the live panel's keyed `LazyColumn` threw `Key "...call_00_... was already used"`. Fixed at source (`ToolStart`: match id or first unstarted card; `ToolComplete`: id or first incomplete) AND the panel uses positional keys (history-replay ids can also collide). (`DashboardChatViewModel` tool handlers, `LiveActivityPanel` itemsIndexed.)
+- **No double-thinking** — in-bubble thinking toggle removed entirely; thinking now lives only in the live panel (finished messages show tools above the answer, no thinking block). (`MessageBubble`.)
+- **Slash commands** — typing `/` pops a server-filtered command list above the composer (`complete.slash` RPC, 150ms debounce, `SlashItem` DTOs, `ChatViewModelContract.completeSlash`), narrows as you type, tap fills the command; commands vs skills color-coded. (`JsonRpcClient.completeSlash`, ChatScreen popup panel.)
 
 ### DONE in v0.1.64 (2026-08-13)
 - **Docked Live Activity panel** — while a turn runs, the last streaming message's thinking + tool calls render in a small scrollable panel docked above the composer (`LiveActivityPanel`: "● Live activity" header with working/tool counts, THINKING monospace block, compact tool rows with icon/name/elapsed/spinner-or-✓, auto-scrolls to newest). The streaming answer grows above the panel. On completion the panel vanishes; the finished message shows tools + thinking above the final answer (in-stream thinking ticker + tool cards hidden while streaming to avoid duplication). (`ChatScreen.kt` — `LiveActivityPanel`, item-composable gating on `!msg.isStreaming`.)
