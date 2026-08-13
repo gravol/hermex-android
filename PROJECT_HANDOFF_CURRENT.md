@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.56 — photo + voice)
-**Current version:** v0.1.56 (versionCode 56)
-**HEAD commit:** `32397dc` (v0.1.56 — photo + voice)
+**Last updated:** 2026-08-13 (v0.1.57 — Terminal flat look)
+**Current version:** v0.1.57 (versionCode 57)
+**HEAD commit:** `3d49ef7` (v0.1.57 — Terminal flat look)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.57 (2026-08-13)
+- **Terminal preset: flat desktop look** — preset now sets ALL four keys: accent `#00FF41`, bg `#0A0C0A`, **user bubble `#1E3D24`** (muted green box), **assistant bubble `#0A0C0A`** (same as bg → invisible → flat text-on-charcoal like the desktop). Previously only bg+accent were set so the assistant bubble stayed green-tinted — looked nothing like the desktop. (`SettingsScreen.kt` preset + selected check.)
 
 ### DONE in v0.1.56 (2026-08-13)
 - **Photo attach** — composer 📷 → `ActivityResultContracts.PickVisualMedia` (Android Photo Picker, no permission needed) → downscale ≤1600px JPEG q82 base64 (`downscaleAndEncode`) → `image.attach_bytes` RPC (staged into session) → next `prompt.submit` carries it; thumbnail preview (Coil `AsyncImage`) with remove X; blank text falls back to server placeholder. (`JsonRpcClient.attachImage`, `DashboardChatViewModel.sendMessageWithImage`, `ChatViewModelContract.sendMessageWithImage`, ChatScreen.)
