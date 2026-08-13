@@ -566,8 +566,14 @@ fun ChatScreen(
                             )
                         }
                     }
-                    // Slash-command completions — pop up above the composer
-                    if (slashItems != null) {
+                    // Slash-command completions — pop up above the composer.
+                    // Capture to a local: LazyColumn DEFERS its content lambda
+                    // (runs later inside intervalContentState derivedStateOf),
+                    // so a `!!` re-reading the mutable state there would NPE if
+                    // the LaunchedEffect nulls slashItems (focus loss, text
+                    // edit, suggestion tap) between guard and deferred exec.
+                    val slashItemsNow = slashItems
+                    if (slashItemsNow != null) {
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -577,7 +583,7 @@ fun ChatScreen(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
                         ) {
                             LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
-                                itemsIndexed(slashItems!!) { _, item ->
+                                itemsIndexed(slashItemsNow) { _, item ->
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
