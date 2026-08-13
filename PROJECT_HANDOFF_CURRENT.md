@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.66 — slash-command crash fix)
+**Last updated:** 2026-08-13 (v0.1.66 — persistent thinking box)
 **Current version:** v0.1.66 (versionCode 66)
-**HEAD commit:** `(pending — v0.1.66 — slash-command crash fix)`
+**HEAD commit:** `8cc2a76` (v0.1.66 — thinking persists as scrollable box)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.66 (2026-08-13)
+- **Thinking persists after the turn** — finished messages now keep a capped scrollable THINKING box (max 180dp, monospace, "scroll for more") above the tool cards + answer; during streaming the live docked panel owns thinking instead. (`ThinkingScrollBox` in ChatScreen.)
+- **Slash-command NPE fix (committed by parallel desktop session, `9443c0c`)** — `itemsIndexed(slashItems!!)` inside LazyColumn's deferred DSL lambda re-read mutable state → NPE when the list was nulled (focus loss/stream start/tap). Fixed by capturing to a local before the guard. Both commits ship in v0.1.66.
 
 ### DONE in v0.1.65 (2026-08-13)
 - **CRASH FIX (v0.1.64 regression)** — running the same tool twice in one turn (e.g. `patch` ×2) made `ToolStart` overwrite the FIRST card's id by name-match → two cards shared one id → the live panel's keyed `LazyColumn` threw `Key "...call_00_... was already used"`. Fixed at source (`ToolStart`: match id or first unstarted card; `ToolComplete`: id or first incomplete) AND the panel uses positional keys (history-replay ids can also collide). (`DashboardChatViewModel` tool handlers, `LiveActivityPanel` itemsIndexed.)
