@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.55 — Terminal preset matched)
-**Current version:** v0.1.55 (versionCode 55)
-**HEAD commit:** `4a56233` (v0.1.55 — Terminal preset matched)
+**Last updated:** 2026-08-13 (v0.1.56 — photo + voice)
+**Current version:** v0.1.56 (versionCode 56)
+**HEAD commit:** `32397dc` (v0.1.56 — photo + voice)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.56 (2026-08-13)
+- **Photo attach** — composer 📷 → `ActivityResultContracts.PickVisualMedia` (Android Photo Picker, no permission needed) → downscale ≤1600px JPEG q82 base64 (`downscaleAndEncode`) → `image.attach_bytes` RPC (staged into session) → next `prompt.submit` carries it; thumbnail preview (Coil `AsyncImage`) with remove X; blank text falls back to server placeholder. (`JsonRpcClient.attachImage`, `DashboardChatViewModel.sendMessageWithImage`, `ChatViewModelContract.sendMessageWithImage`, ChatScreen.)
+- **Voice messages** — composer 🎤 → `MediaRecorder` WebM/Opus (RECORD_AUDIO runtime permission, manifest added) → `POST /api/audio/transcribe` (dashboard :9119, cookie auth, Whisper-backed; `DashboardApiClient.transcribeAudio` + DTOs) → transcript appended to composer. Red recording indicator + elapsed timer; transcribing state. **No server changes** — `image.attach_bytes` + `/api/audio/transcribe` both pre-existing (verified live: 401 unauthenticated).
 
 ### DONE in v0.1.55 (2026-08-13)
 - **Terminal preset matched to desktop screenshot** — extracted exact colors from the desktop app screenshot via the vision pipeline (gemma4:cloud): main bg `#0A0C0A` (near-black charcoal w/ green tint), sidebar `#070807`, mint labels `#76C76B`, neon accent `#00FF41`. Terminal preset background corrected `#0A1A15` → `#0A0C0A`. (`SettingsScreen.kt` preset values.)
