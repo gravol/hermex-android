@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.49 — Nav drawer, context gauge, appearance)
-**Current version:** v0.1.49 (versionCode 49)
-**HEAD commit:** `b9dc6c3` (v0.1.49 — nav drawer, context gauge, appearance settings)
+**Last updated:** 2026-08-13 (v0.1.50 — compact session browser)
+**Current version:** v0.1.50 (versionCode 50)
+**HEAD commit:** `24ccd4b` (v0.1.50 — compact session browser)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.50 (2026-08-13)
+- **Compact session browser** — menu (drawer): pinned + **RECENT (top 5)** + expandable "All sessions (N)" (grouped by source, scrollable in-menu). Search still matches everything. Main page trimmed to pinned + recent 5 + "Browse all sessions" row (opens menu); no full list on main. Empty state gets a New session button. (`SessionsScreen.kt` — `RECENT_LIMIT = 5`, `showAllSessions` expander.)
 
 ### DONE in v0.1.49 (2026-08-13)
 - **Navigation drawer** — hamburger on the session list opens a ModalNavigationDrawer: New session (session.create RPC), client-side search, PINNED section (local DataStore string-set, desktop-style — long-press-free, 📌 icon per row), sessions grouped by source (TELEGRAM/API/TUI…, sorted by count) with counts. Main list mirrors the same pinned+grouped structure. (`SessionsScreen.kt` full rework, `SessionsViewModel` + `createSession`, `JsonRpcClient.createSession`, `DataStoreManager` stringSet API.)
