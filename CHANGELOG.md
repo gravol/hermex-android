@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.66] — 2026-08-13 — Slash-command crash fix (NPE in deferred LazyColumn DSL)
+
+### Fixed
+- **Crash on using slash commands (v0.1.65)** — `NullPointerException` at `ChatScreenKt$LiveActivityPanel$1$$ExternalSyntheticLambda0.invoke` under `LazyListIntervalContent.<init>`. The slash-completions list did `itemsIndexed(slashItems!!)` inside the `LazyColumn` content block. `LazyColumn` **defers** its content DSL lambda (runs later in `LazyListItemProviderLambda.intervalContentState`, a `derivedStateOf`), so the `if (slashItems != null)` guard at composition time did NOT protect the `!!` — when `slashItems` was re-nulled (text edit, focus loss, streaming start, or tapping a suggestion, which sets `slashItems = null`), the deferred `Intrinsics.d(null)` threw inside `LazyListIntervalContent.<init>`. Fix: capture the nullable to a local `val slashItemsNow = slashItems` before the guard and use the local inside the LazyColumn, so the deferred lambda closes over a stable non-null value.
+
+
 ## [0.1.48] — 2026-08-12 — Accent visibility fix (chat chrome)
 
 ### Fixed

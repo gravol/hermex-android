@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.65 — crash fix + slash commands)
-**Current version:** v0.1.65 (versionCode 65)
-**HEAD commit:** `2d3fc15` (v0.1.65 — crash fix + slash commands)
+**Last updated:** 2026-08-13 (v0.1.66 — slash-command crash fix)
+**Current version:** v0.1.66 (versionCode 66)
+**HEAD commit:** `(pending — v0.1.66 — slash-command crash fix)`
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
