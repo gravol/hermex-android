@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.52 — full-width assistant messages)
-**Current version:** v0.1.52 (versionCode 52)
-**HEAD commit:** `bdf5085` (v0.1.52 — full-width assistant messages)
+**Last updated:** 2026-08-13 (v0.1.53 — background turns)
+**Current version:** v0.1.53 (versionCode 53)
+**HEAD commit:** `254dc1e` (v0.1.53 — background turns)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.53 (2026-08-13)
+- **Background turns** — leaving a chat no longer kills the running task. Chat ViewModels were scoped to the nav back-stack entry: backing out destroyed the VM → WS disconnect → server orphan-reaper (20s grace) tore the session down. New `ChatVmsHolder` (Activity-scoped AndroidViewModel) keeps one `DashboardChatViewModel` per session alive across navigation — WS + keepalive stay up, turns finish in the background, reopening shows live state. `DashboardChatViewModel.dispose()` extracted; keepalive `stop` moved to the holder (only when all chat VMs go, i.e. Activity finish). (`ChatVmsHolder.kt`, `MainActivity` — `viewModel<ChatVmsHolder>()` + `getOrCreate(sessionId)`.)
 
 ### DONE in v0.1.52 (2026-08-13)
 - **Full-width assistant messages** — `MessageBubble` assistant bubbles now `fillMaxWidth()` (edge to edge, 8dp margins); user bubbles keep the 320dp right-aligned cap. Kills the "centered column" look. (`ChatScreen.kt` — `bubbleWidthModifier`.)
