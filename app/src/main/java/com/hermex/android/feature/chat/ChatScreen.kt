@@ -1,9 +1,19 @@
 package com.hermex.android.feature.chat
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaRecorder
+import android.net.Uri
+import android.util.Base64
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -30,12 +40,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.highlightedCodeBlock
@@ -55,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
@@ -65,12 +80,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
+import com.hermex.core.network.NetworkResult
+import java.io.ByteArrayOutputStream
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -89,6 +112,135 @@ fun ChatScreen(
     var composerText by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // ── Photo attach state ──
+    var pendingImageB64 by remember { mutableStateOf<String?>(null) }
+    var pendingImageUri by remember { mutableStateOf<Uri?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            val encoded = downscaleAndEncode(context, uri)
+            if (encoded != null) {
+                pendingImageB64 = encoded.first
+                pendingImageUri = uri
+            } else {
+                Toast.makeText(context, "Couldn't read image", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // ── Voice message state ──
+    var isRecording by remember { mutableStateOf(false) }
+    var isTranscribing by remember { mutableStateOf(false) }
+    var recordingSeconds by remember { mutableStateOf(0) }
+    var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
+    var recordingFile by remember { mutableStateOf<File?>(null) }
+
+    fun startRecording() {
+        try {
+            val file = File(context.cacheDir, "voice_${System.currentTimeMillis()}.webm")
+            val rec = MediaRecorder(context).apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.WEBM)
+                setAudioEncoder(MediaRecorder.AudioEncoder.OPUS)
+                setOutputFile(file.absolutePath)
+                prepare()
+                start()
+            }
+            recorder = rec
+            recordingFile = file
+            recordingSeconds = 0
+            isRecording = true
+        } catch (e: Exception) {
+            Toast.makeText(context, "Recording failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            isRecording = false
+        }
+    }
+
+    fun stopAndTranscribe() {
+        val rec = recorder ?: return
+        val file = recordingFile ?: return
+        try {
+            runCatching { rec.stop() }
+        } catch (_: Exception) { /* short recording */ }
+        rec.release()
+        recorder = null
+        recordingFile = null
+        isRecording = false
+        scope.launch {
+            isTranscribing = true
+            try {
+                val bytes = file.readBytes()
+                if (bytes.isEmpty()) {
+                    Toast.makeText(context, "No audio recorded", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                val dataUrl = "data:audio/webm;base64,$b64"
+                when (val r = DashboardApiClient.transcribeAudio(dataUrl, "audio/webm")) {
+                    is NetworkResult.Success -> {
+                        val transcript = r.data.transcript.orEmpty().trim()
+                        if (transcript.isBlank()) {
+                            Toast.makeText(context, "No speech detected", Toast.LENGTH_SHORT).show()
+                        } else {
+                            composerText = if (composerText.isBlank()) transcript
+                            else "$composerText $transcript"
+                        }
+                    }
+                    is NetworkResult.HttpError -> {
+                        Toast.makeText(
+                            context,
+                            "Transcription failed (${r.code})",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                    is NetworkResult.Error -> {
+                        Toast.makeText(
+                            context,
+                            "Transcription failed: ${r.exception.message}",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Transcription failed: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                isTranscribing = false
+                file.delete()
+            }
+        }
+    }
+
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) startRecording()
+        else Toast.makeText(context, "Microphone permission needed for voice messages", Toast.LENGTH_LONG).show()
+    }
+
+    // Recording elapsed timer
+    LaunchedEffect(isRecording) {
+        while (isRecording) {
+            delay(1000)
+            recordingSeconds++
+        }
+    }
+
+    fun sendComposer() {
+        val text = composerText
+        val img = pendingImageB64
+        if (text.isBlank() && img == null) return
+        if (img != null) {
+            viewModel.sendMessageWithImage(text, img, pendingImageUri?.lastPathSegment)
+        } else {
+            viewModel.sendMessage(text)
+        }
+        composerText = ""
+        pendingImageB64 = null
+        pendingImageUri = null
+    }
 
     // Track whether user has manually scrolled away from the bottom
     var userScrolledUp by remember { mutableStateOf(false) }
@@ -326,60 +478,158 @@ fun ChatScreen(
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.navigationBarsPadding(),
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = composerText,
-                        onValueChange = { composerText = it },
-                        placeholder = { Text("Message Hermes...") },
-                        modifier = Modifier
-                            .weight(1f)
-                            .focusRequester(focusRequester)
-                            .onFocusChanged { composerFocused = it.isFocused },
-                        maxLines = 4,
-                        enabled = true,
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        ),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    if (state.isStreaming) {
-                        FilledIconButton(
-                            onClick = { viewModel.stopStreaming() },
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) {
-                            Icon(Icons.Default.Stop, contentDescription = "Stop")
-                        }
-                    } else {
+                Column {
+                    // Pending image thumbnail (removable)
+                    if (pendingImageUri != null) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, top = 8.dp, end = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            IconButton(
-                                onClick = {
-                                    if (composerText.isNotBlank()) {
-                                        viewModel.sendMessage(composerText)
-                                        composerText = ""
-                                    }
-                                },
-                                enabled = composerText.isNotBlank(),
-                            ) {
-                                Icon(Icons.Default.Send, contentDescription = "Send")
+                            AsyncImage(
+                                model = pendingImageUri,
+                                contentDescription = "Attached image",
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
+                                contentScale = ContentScale.Crop,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Image attached",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = {
+                                pendingImageB64 = null
+                                pendingImageUri = null
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Remove image")
                             }
-                            // Retry button — visible when not streaming and last msg is assistant
-                            if (!state.isStreaming && state.messages.any { it.role == "assistant" }) {
-                                IconButton(onClick = { viewModel.retry() }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Retry")
+                        }
+                    }
+                    // Recording indicator
+                    if (isRecording || isTranscribing) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isTranscribing) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color(0xFFFF3B30)
+                                    }),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = when {
+                                    isTranscribing -> "Transcribing…"
+                                    else -> "Recording %d:%02d".format(recordingSeconds / 60, recordingSeconds % 60)
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (isTranscribing) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    Color(0xFFFF3B30)
+                                },
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Photo attach
+                        IconButton(
+                            onClick = {
+                                imagePicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                )
+                            },
+                            enabled = !isRecording && !isTranscribing,
+                        ) {
+                            Icon(
+                                Icons.Outlined.PhotoCamera,
+                                contentDescription = "Attach photo",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // Voice message
+                        IconButton(
+                            onClick = {
+                                if (isRecording) {
+                                    stopAndTranscribe()
+                                } else {
+                                    val granted = ContextCompat.checkSelfPermission(
+                                        context, Manifest.permission.RECORD_AUDIO,
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    if (granted) startRecording()
+                                    else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            },
+                            enabled = !isTranscribing,
+                        ) {
+                            Icon(
+                                imageVector = if (isRecording) Icons.Filled.Mic else Icons.Outlined.Mic,
+                                contentDescription = if (isRecording) "Stop recording" else "Voice message",
+                                tint = if (isRecording) Color(0xFFFF3B30) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        OutlinedTextField(
+                            value = composerText,
+                            onValueChange = { composerText = it },
+                            placeholder = { Text("Message Hermes...") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester)
+                                .onFocusChanged { composerFocused = it.isFocused },
+                            maxLines = 4,
+                            enabled = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            ),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        if (state.isStreaming) {
+                            FilledIconButton(
+                                onClick = { viewModel.stopStreaming() },
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) {
+                                Icon(Icons.Default.Stop, contentDescription = "Stop")
+                            }
+                        } else {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                IconButton(
+                                    onClick = { sendComposer() },
+                                    enabled = (composerText.isNotBlank() || pendingImageB64 != null) &&
+                                        !isTranscribing,
+                                ) {
+                                    Icon(Icons.Default.Send, contentDescription = "Send")
+                                }
+                                // Retry button — visible when not streaming and last msg is assistant
+                                if (!state.isStreaming && state.messages.any { it.role == "assistant" }) {
+                                    IconButton(onClick = { viewModel.retry() }) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "Retry")
+                                    }
                                 }
                             }
                         }
@@ -1298,6 +1548,36 @@ private fun formatTokens(tokens: Long): String {
         tokens >= 1_000_000 -> String.format("%.1fM", tokens / 1_000_000f)
         tokens >= 1_000 -> String.format("%.1fk", tokens / 1_000f)
         else -> tokens.toString()
+    }
+}
+
+/**
+ * Downscale an image URI to ≤1600px and encode as base64 JPEG (data URL).
+ * Returns (dataUrl, filename) or null on failure. Runs on the caller's thread
+ * (pick-launcher callback — small images decode fast; 1600px cap keeps it sane).
+ */
+private fun downscaleAndEncode(context: Context, uri: Uri): Pair<String, String>? {
+    return try {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        }
+        var sample = 1
+        val maxDim = 1600
+        while ((bounds.outWidth / sample) > maxDim || (bounds.outHeight / sample) > maxDim) {
+            sample *= 2
+        }
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        val bmp = context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, opts)
+        } ?: return null
+        val out = ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.JPEG, 82, out)
+        val b64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        val name = "photo_${System.currentTimeMillis()}.jpg"
+        "data:image/jpeg;base64,$b64" to name
+    } catch (_: Exception) {
+        null
     }
 }
 

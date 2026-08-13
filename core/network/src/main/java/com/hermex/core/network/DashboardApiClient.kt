@@ -119,6 +119,19 @@ object DashboardApiClient {
         val active_sessions: Int = 0,
     )
 
+    @Serializable
+    data class TranscribeRequest(
+        val data_url: String,
+        val mime_type: String? = null,
+    )
+
+    @Serializable
+    data class TranscribeResponse(
+        val ok: Boolean = false,
+        val transcript: String? = null,
+        val provider: String? = null,
+    )
+
     /**
      * Log in with password. Session cookies are stored by the CookieJar.
      */
@@ -182,6 +195,33 @@ object DashboardApiClient {
                 ).execute()
                 response.handleResult(json, StatusResponse.serializer())
             } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    /**
+     * Transcribe a voice recording (dashboard Whisper-backed endpoint).
+     * Body: {data_url: "data:audio/webm;base64,...", mime_type?} → {ok, transcript}.
+     * Cookie-authenticated — uses the same session cookies as the WS ticket.
+     */
+    suspend fun transcribeAudio(dataUrl: String, mimeType: String? = null): NetworkResult<TranscribeResponse> =
+        withContext(Dispatchers.IO) {
+            Log.d("Hermex", "DashboardApiClient.transcribeAudio() → $restUrl/api/audio/transcribe")
+            DebugLog.log("REQ", "Dashboard", "POST /api/audio/transcribe (${dataUrl.length} chars)")
+            try {
+                val body = TranscribeRequest(data_url = dataUrl, mime_type = mimeType)
+                val bodyStr = json.encodeToString(TranscribeRequest.serializer(), body)
+                val response = httpClient.newCall(
+                    Request.Builder()
+                        .url("$restUrl/api/audio/transcribe")
+                        .post(bodyStr.toRequestBody(mediaTypeJson))
+                        .build()
+                ).execute()
+                val result = response.handleResult(json, TranscribeResponse.serializer())
+                DebugLog.log("RESP", "Dashboard", "transcribe → ${response.code} ok=${result is NetworkResult.Success}")
+                result
+            } catch (e: Exception) {
+                Log.e("Hermex", "Dashboard transcribe failed", e)
                 NetworkResult.Error(e)
             }
         }

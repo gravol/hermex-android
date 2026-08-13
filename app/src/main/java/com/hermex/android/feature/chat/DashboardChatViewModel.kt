@@ -256,6 +256,33 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         }
     }
 
+    override fun sendMessageWithImage(text: String, imageBase64: String, filename: String?) {
+        if (sessionId.isEmpty()) return
+        if (imageBase64.isBlank()) {
+            if (text.isNotBlank()) sendMessage(text)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                DebugLog.log("RPC", "DashboardChat", "image.attach_bytes → staging (${imageBase64.length} chars)")
+                val attach = rpcClient.attachImage(sessionId, imageBase64, filename)
+                val attachText = attach["text"]?.jsonPrimitive?.contentOrNull
+                // Image rides along with the next prompt; blank text uses the
+                // server's placeholder ("[User attached image: ...]").
+                val finalText = text.ifBlank { attachText ?: "[User attached image]" }
+                DebugLog.log("RPC", "DashboardChat", "image staged — submitting prompt")
+                sendMessage(finalText)
+            } catch (e: Exception) {
+                Log.e("Hermex", "DashboardChatViewModel: attachImage failed", e)
+                DebugLog.log("ERROR", "DashboardChat", "image.attach failed: ${e.message}")
+                uiState = uiState.copy(
+                    error = e.message ?: "Image attach failed",
+                    isStreaming = false,
+                )
+            }
+        }
+    }
+
     override fun stopStreaming() {
         viewModelScope.launch {
             try {

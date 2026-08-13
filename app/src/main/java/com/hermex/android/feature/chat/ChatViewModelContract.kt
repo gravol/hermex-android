@@ -25,4 +25,6 @@ abstract class ChatViewModelContract(application: Application) : AndroidViewMode
     open fun respondToClarify(answer: String) {}
     /** Toggle the Tasks card (agent todo list) expanded state. */
     open fun toggleTodosExpanded() {}
+    /** Send a message with an attached image (base64, pre-downscaled). */
+    open fun sendMessageWithImage(text: String, imageBase64: String, filename: String?) {}
 }

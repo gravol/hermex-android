@@ -441,6 +441,21 @@ class JsonRpcClient(
             ?: throw JsonRpcException(-1, "session.create returned no session_id")
     }
 
+    /**
+     * Stage an image into the session (base64 bytes → gateway images dir).
+     * The NEXT prompt.submit carries the staged image automatically.
+     * Returns the server response (contains the image path + placeholder text).
+     */
+    suspend fun attachImage(sessionId: String, contentBase64: String, filename: String? = null): JsonObject {
+        DebugLog.log("RPC", "JsonRpc", "image.attach_bytes (${contentBase64.length} b64 chars)")
+        val params = mutableMapOf<String, Any>(
+            "session_id" to sessionId,
+            "content_base64" to contentBase64,
+        )
+        if (!filename.isNullOrBlank()) params["filename"] = filename
+        return request("image.attach_bytes", params)
+    }
+
     suspend fun sessionResume(sessionId: String): SessionResumeResult {
         DebugLog.log("STATE", "SessionID",
             "sessionResume called with sessionId=$sessionId")
