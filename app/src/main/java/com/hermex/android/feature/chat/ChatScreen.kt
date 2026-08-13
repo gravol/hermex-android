@@ -107,6 +107,13 @@ fun ChatScreen(
         viewModel.init(sessionId, sessionTitle)
     }
 
+    // Report screen visibility so the VM can flag turns that finish while the
+    // user is away (background turns — v0.1.60).
+    DisposableEffect(Unit) {
+        viewModel.setScreenVisible(true)
+        onDispose { viewModel.setScreenVisible(false) }
+    }
+
     val state = viewModel.uiState
     val listState = rememberLazyListState()
     var composerText by remember { mutableStateOf("") }
@@ -675,6 +682,39 @@ fun ChatScreen(
                     onToggle = { viewModel.toggleTodosExpanded() },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 )
+            }
+
+            // Completed-while-away banner (background turns, v0.1.60)
+            if (state.completedWhileAway) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "✓ Turn finished while you were away",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = {
+                            viewModel.clearCompletedWhileAway()
+                            scope.launch {
+                                if (state.messages.isNotEmpty()) {
+                                    listState.scrollToItem(state.messages.lastIndex)
+                                }
+                            }
+                        }) {
+                            Text("View latest")
+                        }
+                    }
+                }
             }
             when {
                 state.isLoading && state.messages.isEmpty() -> {

@@ -115,6 +115,7 @@ fun HermexNavGraph(chatVmsHolder: ChatVmsHolder) {
                 onSettings = {
                     navController.navigate("settings")
                 },
+                activeSessions = chatVmsHolder.activeSessions,
             )
         }
         composable("settings") {

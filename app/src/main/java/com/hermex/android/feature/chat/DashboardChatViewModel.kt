@@ -702,10 +702,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     isStreaming = false,
                     scrollGeneration = uiState.scrollGeneration + 1,
                 )
+                onTurnFinished()
                 return  // already set uiState
             }
 
             is RpcNotification.RunCompleted -> {
+                onTurnFinished()
                 uiState = uiState.copy(isStreaming = false)
                 return
             }
@@ -757,6 +759,34 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
     override fun toggleTodosExpanded() {
         uiState = uiState.copy(todosExpanded = !uiState.todosExpanded)
+    }
+
+    /** Whether the chat screen is currently visible (background-turn tracking). */
+    private var screenVisible = true
+
+    override fun setScreenVisible(visible: Boolean) {
+        screenVisible = visible
+        // If the turn finished while away, the banner shows on re-entry
+        if (visible && uiState.completedWhileAway) {
+            DebugLog.log("RPC", "DashboardChat", "re-entered chat — completedWhileAway banner shown")
+        }
+    }
+
+    override fun clearCompletedWhileAway() {
+        if (uiState.completedWhileAway) {
+            uiState = uiState.copy(completedWhileAway = false)
+        }
+    }
+
+    /**
+     * Called when a turn finishes (message.completed / run.completed). If the
+     * chat screen wasn't visible at that moment, flag it for the re-entry banner.
+     */
+    private fun onTurnFinished() {
+        if (!screenVisible && uiState.isStreaming) {
+            DebugLog.log("RPC", "DashboardChat", "turn finished while screen away — flagging banner")
+            uiState = uiState.copy(completedWhileAway = true)
+        }
     }
 
     companion object {

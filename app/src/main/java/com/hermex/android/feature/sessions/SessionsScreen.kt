@@ -31,6 +31,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 private val dateFormat = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).apply {
@@ -45,10 +47,12 @@ private const val RECENT_LIMIT = 5
 fun SessionsScreen(
     onSessionTap: (SessionSummary) -> Unit = {},
     onSettings: () -> Unit = {},
+    activeSessions: StateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
     viewModel: SessionsViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
     val pinnedIds by viewModel.pinnedIds.collectAsState()
+    val activeMap by activeSessions.collectAsState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
@@ -168,6 +172,7 @@ fun SessionsScreen(
                                         pinned = true,
                                         onClick = { openSession(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                    isActive = activeMap[session.id] == true,
                                     )
                                 }
                             }
@@ -179,6 +184,7 @@ fun SessionsScreen(
                                         pinned = false,
                                         onClick = { openSession(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                    isActive = activeMap[session.id] == true,
                                     )
                                 }
                             }
@@ -193,6 +199,7 @@ fun SessionsScreen(
                                     pinned = true,
                                     onClick = { openSession(session) },
                                     onTogglePin = { viewModel.togglePin(session.id) },
+                                    isActive = activeMap[session.id] == true,
                                 )
                             }
                             HorizontalDivider()
@@ -206,6 +213,7 @@ fun SessionsScreen(
                                     pinned = false,
                                     onClick = { openSession(session) },
                                     onTogglePin = { viewModel.togglePin(session.id) },
+                                    isActive = activeMap[session.id] == true,
                                 )
                             }
                             HorizontalDivider()
@@ -230,6 +238,7 @@ fun SessionsScreen(
                                         pinned = false,
                                         onClick = { openSession(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                    isActive = activeMap[session.id] == true,
                                     )
                                 }
                                 HorizontalDivider()
@@ -332,6 +341,7 @@ fun SessionsScreen(
                                         pinned = true,
                                         onClick = { onSessionTap(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                    isActive = activeMap[session.id] == true,
                                     )
                                 }
                             }
@@ -343,6 +353,7 @@ fun SessionsScreen(
                                         pinned = false,
                                         onClick = { onSessionTap(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                    isActive = activeMap[session.id] == true,
                                     )
                                 }
                             }
@@ -383,6 +394,7 @@ private fun SessionRow(
     pinned: Boolean,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
+    isActive: Boolean = false,
 ) {
     Card(
         modifier = Modifier
@@ -431,7 +443,19 @@ private fun SessionRow(
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (isActive) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = "working",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     session.model?.let { m ->
                         Text(
                             text = m,
@@ -474,6 +498,7 @@ private fun DrawerSessionRow(
     pinned: Boolean,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
+    isActive: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -489,6 +514,13 @@ private fun DrawerSessionRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (isActive) {
+                Text(
+                    text = "● working…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             session.preview?.let { p ->
                 if (p.isNotBlank()) {
                     Text(
@@ -500,6 +532,14 @@ private fun DrawerSessionRow(
                     )
                 }
             }
+        }
+        if (isActive) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(4.dp))
         }
         IconButton(onClick = onTogglePin) {
             Icon(

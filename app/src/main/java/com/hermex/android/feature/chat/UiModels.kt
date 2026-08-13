@@ -65,6 +65,9 @@ data class ChatUiState(
     // Non-empty = the Tasks card shows above the message list.
     val todos: List<UiTodo> = emptyList(),
     val todosExpanded: Boolean = false,
+    // True when a turn completed while the chat screen wasn't visible (v0.1.60).
+    // Shown as a banner on re-entry until dismissed.
+    val completedWhileAway: Boolean = false,
 )
 
 /**
