@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-08-12 (v0.1.48 — Accent visibility fix)
 **Current version:** v0.1.48 (versionCode 48)
-**HEAD commit:** (Accent visibility fix — see git log)
+**HEAD commit:** `550a6d6` (fix: accent visibility — tint chat chrome, not just primary elements)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -16,7 +16,7 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `bd41033` (docs update on top of `afa63ec` v0.1.43) |
+| Latest commit | `550a6d6` (fix: accent visibility — tint chat chrome, not just primary elements) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
 | Version | v0.1.48 (versionCode 48) |
