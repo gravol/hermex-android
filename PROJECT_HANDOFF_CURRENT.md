@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.57 — Terminal flat look)
-**Current version:** v0.1.57 (versionCode 57)
-**HEAD commit:** `3d49ef7` (v0.1.57 — Terminal flat look)
+**Last updated:** 2026-08-13 (v0.1.58 — Terminal mono + mint text)
+**Current version:** v0.1.58 (versionCode 58)
+**HEAD commit:** `55ba6ee` (v0.1.58 — Terminal mono + mint text)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.58 (2026-08-13)
+- **Terminal preset: monospace + mint text** — the "all black" complaint was missing green entirely. Now the preset also sets: **text override `#A5D6A7`** (soft green-white onSurface/onBackground; onSurfaceVariant = 72% alpha → muted mint labels/timestamps/icons like the desktop) and **monospace font everywhere** (`MonoTypography` in Type.kt, `HermexTheme(monospace=)` param). New Appearance controls work with any theme: Text color swatch row + Monospace switch. `UiColorOverrides.text`, `SettingsRepository.uiTextHex`/`uiMonospace` + `applyAppearance` 5-arg, MainActivity wiring. Terminal preset now: accent `#00FF41`, bg `#0A0C0A`, user `#1E3D24`, assistant `#0A0C0A`, text `#A5D6A7`, mono on.
 
 ### DONE in v0.1.57 (2026-08-13)
 - **Terminal preset: flat desktop look** — preset now sets ALL four keys: accent `#00FF41`, bg `#0A0C0A`, **user bubble `#1E3D24`** (muted green box), **assistant bubble `#0A0C0A`** (same as bg → invisible → flat text-on-charcoal like the desktop). Previously only bg+accent were set so the assistant bubble stayed green-tinted — looked nothing like the desktop. (`SettingsScreen.kt` preset + selected check.)
