@@ -19,7 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.hermex.android.feature.chat.ChatScreen
-import com.hermex.android.feature.chat.DashboardChatViewModel
+import com.hermex.android.feature.chat.ChatVmsHolder
 import com.hermex.android.feature.onboarding.DashboardSetupScreen
 import com.hermex.android.feature.sessions.SessionsScreen
 import com.hermex.android.feature.settings.SettingsRepository
@@ -67,7 +67,10 @@ class MainActivity : ComponentActivity() {
                     fontScale = baseDensity.fontScale * (textPercent / 100f),
                 )
                 CompositionLocalProvider(LocalDensity provides scaledDensity) {
-                    HermexNavGraph()
+                    // Activity-scoped: chat ViewModels outlive navigation so turns
+                    // keep running when you leave a chat (see ChatVmsHolder).
+                    val chatVmsHolder: ChatVmsHolder = viewModel()
+                    HermexNavGraph(chatVmsHolder = chatVmsHolder)
                 }
             }
         }
@@ -75,7 +78,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun HermexNavGraph() {
+fun HermexNavGraph(chatVmsHolder: ChatVmsHolder) {
     val navController = rememberNavController()
     // Dashboard is the primary path. If not configured, user goes through
     // dashboard-setup flow. Legacy stack cleanup in progress.
@@ -126,8 +129,13 @@ fun HermexNavGraph() {
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
             val encodedTitle = backStackEntry.arguments?.getString("title") ?: ""
             val title = URLDecoder.decode(encodedTitle, "UTF-8")
-            val chatViewModel = viewModel<DashboardChatViewModel>()
-            DebugLog.log("ROUTE", "MainActivity", "chat → DashboardChatViewModel")
+            // Chat ViewModels are held at Activity scope (ChatVmsHolder) so the
+            // WebSocket survives backing out of the chat — turns keep running
+            // in the background instead of being torn down by the server's
+            // orphan reaper. Reopening the same session returns the SAME VM
+            // with its live state intact.
+            val chatViewModel = chatVmsHolder.getOrCreate(sessionId)
+            DebugLog.log("ROUTE", "MainActivity", "chat → DashboardChatViewModel (held)")
             ChatScreen(
                 sessionId = sessionId,
                 sessionTitle = title,

@@ -375,8 +375,17 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         DebugLog.log("STATE", "SessionID",
             "onCleared: sessionId=$sessionId liveSid=$liveSid resumeCount=$resumeCount")
         super.onCleared()
+        dispose()
+    }
+
+    /**
+     * Tear down this chat ViewModel's live connection. Called by [ChatVmsHolder]
+     * when the Activity finishes (chat VMs now outlive navigation so turns keep
+     * running in the background). Keepalive service is NOT stopped here — the
+     * holder stops it once every session's VM is disposed.
+     */
+    fun dispose() {
         notificationCollectorJob?.cancel()
-        WsKeepaliveService.stop(getApplication())
         wsConnection.disconnect()
     }
 
