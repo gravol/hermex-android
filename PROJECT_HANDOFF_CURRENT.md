@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.68 — tools box)
-**Current version:** v0.1.68 (versionCode 68)
-**HEAD commit:** `2d6a7db` (v0.1.68 — tools box)
+**Last updated:** 2026-08-13 (v0.1.69 — slash fixes)
+**Current version:** v0.1.69 (versionCode 69)
+**HEAD commit:** `3b5051e` (v0.1.69 — slash fixes)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.69 (2026-08-13)
+- **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
+- **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
 
 ### DONE in v0.1.68 (2026-08-13)
 - **Tool calls fold into a scrollable box** — finished messages no longer stack individual tool cards above the answer; they consolidate into one compact scrollable TOOLS box (icon · name · elapsed · ✓, same row style as the live panel via shared `ToolActivityRow`). Tap a row to expand the full card (call context, args, inline diff, result) in a dialog. Stack: thinking box → tools box → answer. (`ChatScreen.kt` — `ToolScrollBox`, `ToolActivityRow`.)
