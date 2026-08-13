@@ -268,10 +268,18 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     /** Execute a slash command via slash.exec and surface its output. */
     private fun sendSlashCommand(command: String) {
         val userMsgId = "user_${tempIdCounter.incrementAndGet()}"
+        val asstMsgId = "asst_${tempIdCounter.incrementAndGet()}"
         val now = System.currentTimeMillis()
         val userMsg = UiMessage(id = userMsgId, role = "user", content = command, timestamp = now)
+        // Placeholder with spinner: slash commands (e.g. /compress) can take
+        // minutes with no stream events — the user needs to see it working.
+        val asstMsg = UiMessage(
+            id = asstMsgId, role = "assistant",
+            isStreaming = true, isWaitingForFirstEvent = true, timestamp = now,
+        )
         val current = uiState.messages.toMutableList()
         current.add(userMsg)
+        current.add(asstMsg)
         uiState = uiState.copy(messages = current, error = null)
         viewModelScope.launch {
             try {
@@ -279,14 +287,19 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 val output = result["output"]?.jsonPrimitive?.contentOrNull
                     ?: result.toString()
                 val msgs = uiState.messages.toMutableList()
-                msgs.add(
-                    UiMessage(
-                        id = "slash_${tempIdCounter.incrementAndGet()}",
-                        role = "assistant",
-                        content = output,
-                        timestamp = System.currentTimeMillis(),
+                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+                if (idx >= 0) {
+                    msgs[idx] = msgs[idx].copy(content = output, isStreaming = false)
+                } else {
+                    msgs.add(
+                        UiMessage(
+                            id = "slash_${tempIdCounter.incrementAndGet()}",
+                            role = "assistant",
+                            content = output,
+                            timestamp = System.currentTimeMillis(),
+                        )
                     )
-                )
+                }
                 uiState = uiState.copy(messages = msgs)
                 // Slash commands can change context (e.g. /compress) — refresh gauge
                 try {
@@ -302,14 +315,20 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             } catch (e: Exception) {
                 Log.e("Hermex", "slash.exec failed", e)
                 val msgs = uiState.messages.toMutableList()
-                msgs.add(
-                    UiMessage(
-                        id = "slash_err_${tempIdCounter.incrementAndGet()}",
-                        role = "assistant",
-                        content = "⚠️ Command failed: ${e.message}",
-                        timestamp = System.currentTimeMillis(),
+                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+                val errText = "⚠️ Command failed: ${e.message}"
+                if (idx >= 0) {
+                    msgs[idx] = msgs[idx].copy(content = errText, isStreaming = false)
+                } else {
+                    msgs.add(
+                        UiMessage(
+                            id = "slash_err_${tempIdCounter.incrementAndGet()}",
+                            role = "assistant",
+                            content = errText,
+                            timestamp = System.currentTimeMillis(),
+                        )
                     )
-                )
+                }
                 uiState = uiState.copy(messages = msgs)
             }
         }
