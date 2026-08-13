@@ -780,6 +780,22 @@ fun ChatScreen(
                                 LiveThinkingTicker(text = msg.thinkingText)
                             }
 
+                            // Tool calls render ABOVE the response (desktop-style:
+                            // tool activity first, the reply lands last at the
+                            // bottom — no scrolling up past cards to read it).
+                            if (msg.role == "assistant" && msg.toolCalls.isNotEmpty()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                                ) {
+                                    msg.toolCalls.forEach { tc ->
+                                        ToolCallCard(toolCall = tc)
+                                        Spacer(Modifier.height(4.dp))
+                                    }
+                                }
+                            }
+
                             MessageBubble(
                                 message = msg,
                                 sameSender = sameSender,
@@ -1141,15 +1157,6 @@ private fun MessageBubble(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
-            }
-
-            // Tool calls (assistant only)
-            if (message.toolCalls.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                message.toolCalls.forEach { tc ->
-                    ToolCallCard(toolCall = tc)
-                    Spacer(Modifier.height(4.dp))
-                }
             }
 
             // Usage footer + inline timestamp
