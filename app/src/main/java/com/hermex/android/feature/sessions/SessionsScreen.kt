@@ -9,6 +9,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
@@ -35,6 +37,9 @@ private val dateFormat = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).
     timeZone = TimeZone.getDefault()
 }
 
+/** How many recent sessions show before the "All sessions" expander. */
+private const val RECENT_LIMIT = 5
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionsScreen(
@@ -47,13 +52,15 @@ fun SessionsScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
+    var showAllSessions by rememberSaveable { mutableStateOf(false) }
 
     fun openSession(session: SessionSummary) {
         scope.launch { drawerState.close() }
         onSessionTap(session)
     }
 
-    // Client-side search over the loaded list (mirrors desktop local filtering)
+    // Client-side search over the loaded list (mirrors desktop local filtering).
+    // While searching, show ALL matches — the RECENT_LIMIT only applies to browsing.
     val q = query.trim()
     val visible = remember(state.sessions, q) {
         if (q.isEmpty()) {
@@ -66,8 +73,10 @@ fun SessionsScreen(
             }
         }
     }
+    // Server orders session.list by last_active desc, so take(5) = 5 most recent.
     val pinned = visible.filter { it.id in pinnedIds }
     val unpinned = visible.filter { it.id !in pinnedIds }
+    val recent = if (q.isEmpty()) unpinned.take(RECENT_LIMIT) else emptyList()
     val groups = remember(unpinned) {
         unpinned
             .groupBy { (it.source ?: "other").uppercase().ifEmpty { "OTHER" } }
@@ -118,7 +127,11 @@ fun SessionsScreen(
                     // Search
                     OutlinedTextField(
                         value = query,
-                        onValueChange = { query = it },
+                        onValueChange = {
+                            query = it
+                            // A new search resets the expander so matches are visible
+                            if (it.isNotEmpty()) showAllSessions = false
+                        },
                         placeholder = { Text("Search sessions…") },
                         singleLine = true,
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
@@ -137,41 +150,98 @@ fun SessionsScreen(
 
                     HorizontalDivider()
 
-                    // Pinned
-                    if (pinned.isNotEmpty()) {
-                        SectionHeader("PINNED (${pinned.size})")
-                        pinned.forEach { session ->
-                            DrawerSessionRow(
-                                session = session,
-                                pinned = true,
-                                onClick = { openSession(session) },
-                                onTogglePin = { viewModel.togglePin(session.id) },
+                    if (q.isNotEmpty()) {
+                        // ── Search results: all matches, grouped ──
+                        if (visible.isEmpty()) {
+                            Text(
+                                text = "No matches for \"$q\"",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(20.dp),
+                            )
+                        } else {
+                            if (pinned.isNotEmpty()) {
+                                SectionHeader("PINNED (${pinned.size})")
+                                pinned.forEach { session ->
+                                    DrawerSessionRow(
+                                        session = session,
+                                        pinned = true,
+                                        onClick = { openSession(session) },
+                                        onTogglePin = { viewModel.togglePin(session.id) },
+                                    )
+                                }
+                            }
+                            groups.forEach { (source, sessions) ->
+                                SectionHeader("$source (${sessions.size})")
+                                sessions.forEach { session ->
+                                    DrawerSessionRow(
+                                        session = session,
+                                        pinned = false,
+                                        onClick = { openSession(session) },
+                                        onTogglePin = { viewModel.togglePin(session.id) },
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // ── Browse mode: pinned + recent 5 + expandable All ──
+                        if (pinned.isNotEmpty()) {
+                            SectionHeader("PINNED (${pinned.size})")
+                            pinned.forEach { session ->
+                                DrawerSessionRow(
+                                    session = session,
+                                    pinned = true,
+                                    onClick = { openSession(session) },
+                                    onTogglePin = { viewModel.togglePin(session.id) },
+                                )
+                            }
+                            HorizontalDivider()
+                        }
+
+                        if (recent.isNotEmpty()) {
+                            SectionHeader("RECENT")
+                            recent.forEach { session ->
+                                DrawerSessionRow(
+                                    session = session,
+                                    pinned = false,
+                                    onClick = { openSession(session) },
+                                    onTogglePin = { viewModel.togglePin(session.id) },
+                                )
+                            }
+                            HorizontalDivider()
+                        }
+
+                        // Expandable full list
+                        if (!showAllSessions) {
+                            ListItem(
+                                headlineContent = { Text("All sessions") },
+                                supportingContent = { Text("${visible.size} total") },
+                                trailingContent = {
+                                    Icon(Icons.Default.ExpandMore, contentDescription = "Show all")
+                                },
+                                modifier = Modifier.clickable { showAllSessions = true },
+                            )
+                        } else {
+                            groups.forEach { (source, sessions) ->
+                                SectionHeader("$source (${sessions.size})")
+                                sessions.forEach { session ->
+                                    DrawerSessionRow(
+                                        session = session,
+                                        pinned = false,
+                                        onClick = { openSession(session) },
+                                        onTogglePin = { viewModel.togglePin(session.id) },
+                                    )
+                                }
+                                HorizontalDivider()
+                            }
+                            ListItem(
+                                headlineContent = { Text("Show less") },
+                                trailingContent = {
+                                    Icon(Icons.Default.ExpandLess, contentDescription = "Show less")
+                                },
+                                modifier = Modifier.clickable { showAllSessions = false },
                             )
                         }
-                        HorizontalDivider()
-                    }
-
-                    // Source groups
-                    groups.forEach { (source, sessions) ->
-                        SectionHeader("$source (${sessions.size})")
-                        sessions.forEach { session ->
-                            DrawerSessionRow(
-                                session = session,
-                                pinned = false,
-                                onClick = { openSession(session) },
-                                onTogglePin = { viewModel.togglePin(session.id) },
-                            )
-                        }
-                        HorizontalDivider()
-                    }
-
-                    if (visible.isEmpty() && q.isNotEmpty()) {
-                        Text(
-                            text = "No matches for \"$q\"",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(20.dp),
-                        )
                     }
                 }
             }
@@ -222,12 +292,34 @@ fun SessionsScreen(
                             }
                         }
                     }
-                    visible.isEmpty() && !state.isLoading && q.isEmpty() -> {
-                        Box(
+                    // Main page = quick access only (pinned + recent 5) — the full
+                    // browser lives in the menu. Empty state when nothing at all.
+                    pinned.isEmpty() && recent.isEmpty() && !state.isLoading -> {
+                        Column(
                             modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                         ) {
-                            Text("No sessions yet", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "No sessions yet",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    if (!state.isCreating) {
+                                        viewModel.createSession { sid ->
+                                            if (sid != null) {
+                                                onSessionTap(SessionSummary(id = sid, title = "New session"))
+                                            }
+                                        }
+                                    }
+                                },
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("New session")
+                            }
                         }
                     }
                     else -> {
@@ -243,9 +335,9 @@ fun SessionsScreen(
                                     )
                                 }
                             }
-                            groups.forEach { (source, sessions) ->
-                                item { SectionHeader("$source (${sessions.size})") }
-                                items(sessions, key = { it.id }) { session ->
+                            if (recent.isNotEmpty()) {
+                                item { SectionHeader("RECENT") }
+                                items(recent, key = { it.id }) { session ->
                                     SessionRow(
                                         session = session,
                                         pinned = false,
@@ -253,6 +345,18 @@ fun SessionsScreen(
                                         onTogglePin = { viewModel.togglePin(session.id) },
                                     )
                                 }
+                            }
+                            item {
+                                ListItem(
+                                    headlineContent = { Text("Browse all sessions") },
+                                    supportingContent = { Text("${state.sessions.size} in the menu") },
+                                    leadingContent = {
+                                        Icon(Icons.Default.Menu, contentDescription = null)
+                                    },
+                                    modifier = Modifier.clickable {
+                                        scope.launch { drawerState.open() }
+                                    },
+                                )
                             }
                         }
                     }
