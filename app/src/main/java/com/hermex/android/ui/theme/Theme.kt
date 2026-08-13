@@ -49,21 +49,28 @@ private val LightColorScheme = lightColorScheme(
  * Dark scheme derived from a user-picked accent color. Container tones are the
  * accent blended over the dark surfaces (alpha-over), so bubbles/buttons get a
  * coherent tint that matches the accent without extra palette work.
+ *
+ * Visibility notes (v0.1.48): the first version used a 22% primaryContainer and
+ * left surfaceVariant untouched, so the chat (user bubbles + assistant
+ * bubbles/top bars, which read surfaceVariant) barely moved while sliders and
+ * the text cursor (full-strength primary) jumped — "didn't fully work".
+ * primaryContainer is now 40% and surfaceVariant takes a 16% accent tint so the
+ * whole chat chrome picks up the hue.
  */
 private fun accentColorScheme(accent: Color): ColorScheme = darkColorScheme(
     primary = accent,
     onPrimary = if (isDarkForeground(accent)) Color.Black else Color.White,
-    primaryContainer = accent.copy(alpha = 0.22f).compositeOver(DarkSurface),
+    primaryContainer = accent.copy(alpha = 0.40f).compositeOver(DarkSurface),
     onPrimaryContainer = OnSurface,
     secondary = accent,
     onSecondary = if (isDarkForeground(accent)) Color.Black else Color.White,
-    secondaryContainer = accent.copy(alpha = 0.14f).compositeOver(DarkSurfaceVariant),
+    secondaryContainer = accent.copy(alpha = 0.25f).compositeOver(DarkSurfaceVariant),
     onSecondaryContainer = OnSurface,
     tertiary = accent.copy(alpha = 0.8f),
     onTertiary = if (isDarkForeground(accent)) Color.Black else Color.White,
     background = DarkBackground,
     surface = DarkSurface,
-    surfaceVariant = DarkSurfaceVariant,
+    surfaceVariant = accent.copy(alpha = 0.16f).compositeOver(DarkSurfaceVariant),
     onBackground = OnBackground,
     onSurface = OnSurface,
     error = Error,

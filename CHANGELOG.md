@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.48] — 2026-08-12 — Accent visibility fix (chat chrome)
+
+### Fixed
+- **Accent barely visible in the chat (v0.1.47)** — the accent scheme's `primaryContainer` was a faint 22% tint and `surfaceVariant` (used by assistant bubbles, top bars, composer) was left untouched, so sliders/cursor (full-strength `primary`) recolored but the chat itself barely moved. `primaryContainer` → 40% accent (user bubbles clearly tinted), `surfaceVariant` → 16% accent tint (assistant bubbles + top bars + composer pick up the hue), `secondaryContainer` → 25%.
+
 ## [0.1.47] — 2026-08-12 — Theme accent colors
 
 ### Added
