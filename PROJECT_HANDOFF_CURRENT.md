@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-12 (v0.1.48 — Accent visibility fix)
-**Current version:** v0.1.48 (versionCode 48)
-**HEAD commit:** `550a6d6` (fix: accent visibility — tint chat chrome, not just primary elements)
+**Last updated:** 2026-08-13 (v0.1.49 — Nav drawer, context gauge, appearance)
+**Current version:** v0.1.49 (versionCode 49)
+**HEAD commit:** `b9dc6c3` (v0.1.49 — nav drawer, context gauge, appearance settings)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -543,6 +543,11 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
+
+### DONE in v0.1.49 (2026-08-13)
+- **Navigation drawer** — hamburger on the session list opens a ModalNavigationDrawer: New session (session.create RPC), client-side search, PINNED section (local DataStore string-set, desktop-style — long-press-free, 📌 icon per row), sessions grouped by source (TELEGRAM/API/TUI…, sorted by count) with counts. Main list mirrors the same pinned+grouped structure. (`SessionsScreen.kt` full rework, `SessionsViewModel` + `createSession`, `JsonRpcClient.createSession`, `DataStoreManager` stringSet API.)
+- **Context gauge in chat top bar** — session title now `labelLarge` (compact); below it a thin progress bar + `85.1k/1.0M`-style readout from `session.info` payload `usage.context_used/context_max` (server already sends it — no server change). Turns red >80%. Populated on `session.resume` (`result.info`) and refreshed by `SessionInfo` notifications each turn. (`ChatScreen.kt`, `DashboardChatViewModel.parseContextUsage`, `ChatUiState.contextUsed/contextMax`.)
+- **Appearance settings** — new section: presets (Classic cyan / **Terminal** — the desktop's phosphor-green look: accent `#00FF41` + background `#0A1A15` / Reset) + per-part swatch rows for Background, User bubbles, Assistant bubbles & top bars. `UiColorOverrides` plumbed through `HermexTheme` (background→surface, userBubble→primaryContainer, assistantBubble→surfaceVariant); null = derive from accent. (`SettingsRepository` keys, `Theme.kt`, `MainActivity` wiring, `SettingsScreen` + extracted `ColorSwatchRow`; Settings column now scrolls.)
 
 ### DONE in v0.1.48 (2026-08-12)
 - **Accent visibility fix** — v0.1.47's scheme used 22% primaryContainer + untouched surfaceVariant → sliders/cursor recolored but chat chrome (assistant bubbles/top bars, which read surfaceVariant) didn't. Now: primaryContainer 40% (user bubbles), surfaceVariant 16% accent tint (assistant bubbles/top bars/composer), secondaryContainer 25%. All in `accentColorScheme()` (Theme.kt).
