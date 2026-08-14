@@ -65,22 +65,30 @@ object CronWatcher {
     }
 
     /**
-     * v0.1.77: notify for runs that FINISHED but were never reported — e.g. the
+     * v0.1.77/81: notify for runs that FINISHED but were never reported — e.g. the
      * app was asleep past an alarm, or a job was triggered manually. Bounded:
-     * only jobs with next_run within 48h, only runs that started within the
-     * last 12h, max 3 notifications per sync.
+     * max 8 candidates, only runs that started within the last 12h, max 3
+     * notifications per sync.
+     *
+     * v0.1.81: completed one-shots (state=completed, enabled=false,
+     * next_run_at=null — the server disables them after firing) are included
+     * as candidates so a missed one-shot reminder still surfaces on the next
+     * app open. The started-within-12h check keeps it honest.
      */
     private suspend fun catchUpMissedRuns(context: Context, jobs: List<DashboardApiClient.CronJob>) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        val soon = jobs
+        val scheduled = jobs
             .filter { it.state != "paused" && it.enabled }
             .mapNotNull { job -> job.nextRunAt?.let { parseIso(it) }?.let { job to it } }
             .filter { it.second > now && it.second - now < 48 * 3600_000L }
             .sortedBy { it.second }
-            .take(8)
+            .take(5)
+        val oneShots = jobs
+            .filter { it.nextRunAt.isNullOrBlank() && it.state != "paused" }
+            .take(3)
         var notified = 0
-        for ((job, _) in soon) {
+        for (job in scheduled.map { it.first } + oneShots) {
             if (notified >= 3) break
             val runsResult = DashboardApiClient.cronRuns(job.id, limit = 1)
             if (runsResult !is NetworkResult.Success) continue
