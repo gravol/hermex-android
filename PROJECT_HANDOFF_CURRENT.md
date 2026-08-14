@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-14 (v0.1.78 — cron output in notifications)
-**Current version:** v0.1.78 (versionCode 78)
-**HEAD commit:** `b6b88d4` (v0.1.78 — cron output in notifications)
+**Last updated:** 2026-08-14 (v0.1.79 — Release A)
+**Current version:** v0.1.79 (versionCode 79)
+**HEAD commit:** `2d3d4ca` (v0.1.79 — Release A)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.79 (2026-08-14) — Release A
+- **Message boxes refined (③)** — thinking + tools boxes now have matching slim headers (THINKING / TOOLS · N), dropped the "scroll for more" / "tap a tool for details" hints — pure content boxes, both sitting above the answer. (`ThinkingScrollBox`, `ToolScrollBox`.)
+- **Live theme preview + richer palette (②)** — Settings → Appearance now shows a live mini-chat preview rendering with the current overrides (accent gauge, user bubble, thinking box, flat assistant reply, mono font) so color changes are visible instantly. Per-part color rows use a richer palette (Terminal green/charcoal/deep green/mint/slate/input dark/cyan/purple/red/white) and swatch rows are horizontally scrollable. (`AppearancePreview`, `uiOptions`, `ColorSwatchRow`.)
 
 ### DONE in v0.1.78 (2026-08-14)
 - **Cron reports land in the app** — ALL 30 cron jobs (default + link-curator profiles) flipped `deliver=telegram:*`/origin→telegram → `local` via the update API (verified on disk: zero telegram-delivering jobs remain). The app is now the cron report channel: `CronWatcher` fetches the finished run's output via `GET /api/sessions/{id}/messages` (last assistant text) and shows it in the notification (BigText, 400 chars) — tap opens the run session. Verified live against the 7am weather run ("Good morning, Jeff! It's a sunny, mild 16°C…"). (`DashboardApiClient.sessionMessages`, `CronWatcher.fetchRunOutput`, `NotificationHelper.postCronRun`.)
