@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-14 (v0.1.83 — local cron times)
-**Current version:** v0.1.83 (versionCode 83)
-**HEAD commit:** `88d47a7` (v0.1.83 — local cron times)
+**Last updated:** 2026-08-14 (v0.1.84 — approval notifications)
+**Current version:** v0.1.84 (versionCode 84)
+**HEAD commit:** `1afde13` (v0.1.84 — approval notifications)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.84 (2026-08-14)
+- **Approval-request notifications** — the app already received `approval.request` over WS and rendered an in-chat banner, but only when watching the chat; backgrounded requests sat unseen until the 60s timeout. Now an `ApprovalRequest` while not watching posts a high-priority "Alerts" notification (tool name + truncated args), tap deep-links to the chat with the approve/deny banner. Also bumped `approvals.timeout` 60→300 in config.yaml so requests don't expire while Jeff is away. (`NotificationHelper.postApproval`, `DashboardChatViewModel`, `~/.hermes/config.yaml`.)
 
 ### DONE in v0.1.83 (2026-08-14)
 - **Cron schedule times in phone-local timezone** — one-shot jobs showed the server's UTC-naive "once at 2026-08-14 16:12"; now rendered in the phone's tz ("Once: Aug 14, 9:12 AM"), intervals as friendly text ("Every 90 minute(s)"), cron exprs as-is. (`CronJob.schedule` DTO, `scheduleDisplayLocal()`.)
