@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.73 — history reload fix)
-**Current version:** v0.1.73 (versionCode 73)
-**HEAD commit:** `e805486` (v0.1.73 — history reload fix)
+**Last updated:** 2026-08-14 (v0.1.74 — notifications)
+**Current version:** v0.1.74 (versionCode 74)
+**HEAD commit:** `ee4073a` (v0.1.74 — notifications)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,11 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.74 (2026-08-14)
+- **Turn-finished notifications (A1)** — `message.complete` while the chat isn't visible posts a local notification ("turns" channel); tap deep-links into the session (`open_session` extra → MainActivity → chat route). (`DashboardChatViewModel.MessageCompleted`, `NotificationHelper`, MainActivity deep link.)
+- **Scheduled-alarm cron watcher (A2, calendar-sync model)** — learns each job's `next_run_at` from the cron API, arms an AlarmManager alarm (run time + 2min buffer, `setAndAllowWhileIdle`), wakes ONLY then, checks the job's latest run via `/api/cron/jobs/{id}/runs` (cron runs ARE sessions), notifies when finished ("cron" channel, tap opens the run session), re-arms from fresh data. Still-running runs re-check every 2min (capped 10×); moved schedules discovered at the old alarm and re-armed. Re-sync triggers: app start, BOOT_COMPLETED/MY_PACKAGE_REPLACED, every alarm fire, and the gateway's `cron.changed` WS broadcast (forwarded from the VM's unknown-event path). (`CronWatcher`, `CronAlarmReceiver`, `DashboardApiClient.cronRuns`.)
+- **Battery** — WS ping 30s → 5min (server has no WS read timeout; streaming traffic verifies liveness), plus a few alarm wakeups/day instead of minute-polling. POST_NOTIFICATIONS runtime request added (was missing entirely). (`WsConnectionManager`, `MainActivity`.)
 
 ### DONE in v0.1.73 (2026-08-13)
 - **History reload: tools merged into the tool box, thinking restored** — root cause from a raw resume-payload probe: the server stores tool activity as SEPARATE `role='tool'` rows (`{name, context}`) and assistant thinking in `reasoning`/`reasoning_content`; the reload mapped each row 1:1 so tool contexts rendered as jumbled standalone bubbles and thinking was lost. The loader now merges `role='tool'` rows into the preceding assistant message's `toolCalls` (completed calls with `preview = context`) and carries reasoning into `thinkingText`, so reopened sessions show the same clean stack as live: thinking box → tools box → answer. Tool-only assistant rows (blank text) skip the empty bubble; tool box tightened to 140dp. (`JsonRpcClient.MessageData.resolvedThinking`, `DashboardChatViewModel.loadMessages` merge, `ChatScreen` bubble guard.)
