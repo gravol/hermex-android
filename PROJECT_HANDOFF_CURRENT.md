@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.72 — Connection menu)
-**Current version:** v0.1.72 (versionCode 72)
-**HEAD commit:** `8d762a2` (v0.1.72 — Connection menu)
+**Last updated:** 2026-08-13 (v0.1.73 — history reload fix)
+**Current version:** v0.1.73 (versionCode 73)
+**HEAD commit:** `e805486` (v0.1.73 — history reload fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.73 (2026-08-13)
+- **History reload: tools merged into the tool box, thinking restored** — root cause from a raw resume-payload probe: the server stores tool activity as SEPARATE `role='tool'` rows (`{name, context}`) and assistant thinking in `reasoning`/`reasoning_content`; the reload mapped each row 1:1 so tool contexts rendered as jumbled standalone bubbles and thinking was lost. The loader now merges `role='tool'` rows into the preceding assistant message's `toolCalls` (completed calls with `preview = context`) and carries reasoning into `thinkingText`, so reopened sessions show the same clean stack as live: thinking box → tools box → answer. Tool-only assistant rows (blank text) skip the empty bubble; tool box tightened to 140dp. (`JsonRpcClient.MessageData.resolvedThinking`, `DashboardChatViewModel.loadMessages` merge, `ChatScreen` bubble guard.)
 
 ### DONE in v0.1.72 (2026-08-13)
 - **Connection menu in Settings** — server address (IP:port), username, password now editable in Settings → Connection with a Save & Reconnect button: validates via `status()` + `login()`, persists to the encrypted KeychainStore (username added as a stored field, `KEY_DASHBOARD_USERNAME`), then recreates the activity so held VMs reconnect to the new gateway. The hardcoded `"jeff"` username in `DashboardApiClient`'s 401 re-login path now reads the stored value. Makes the app pointable at any Hermes gateway (shareable with brother). (`SettingsScreen.kt` Connection section, `KeychainStore`, `DashboardApiClient.setUsername`, `HermexApplication` restore.)
