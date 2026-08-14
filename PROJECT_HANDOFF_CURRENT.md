@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-14 (v0.1.77 — cron clobber fix)
-**Current version:** v0.1.77 (versionCode 77)
-**HEAD commit:** `4a99f63` (v0.1.77 — cron clobber fix)
+**Last updated:** 2026-08-14 (v0.1.78 — cron output in notifications)
+**Current version:** v0.1.78 (versionCode 78)
+**HEAD commit:** `b6b88d4` (v0.1.78 — cron output in notifications)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.78 (2026-08-14)
+- **Cron reports land in the app** — ALL 30 cron jobs (default + link-curator profiles) flipped `deliver=telegram:*`/origin→telegram → `local` via the update API (verified on disk: zero telegram-delivering jobs remain). The app is now the cron report channel: `CronWatcher` fetches the finished run's output via `GET /api/sessions/{id}/messages` (last assistant text) and shows it in the notification (BigText, 400 chars) — tap opens the run session. Verified live against the 7am weather run ("Good morning, Jeff! It's a sunny, mild 16°C…"). (`DashboardApiClient.sessionMessages`, `CronWatcher.fetchRunOutput`, `NotificationHelper.postCronRun`.)
 
 ### DONE in v0.1.77 (2026-08-14)
 - **Cron notification clobber fix** — root cause of the silent morning weather cron: `onAlarm`'s still-running branch armed a 2-min re-check alarm, then called `sync()`, which re-armed the SAME job with the SAME request code for the next occurrence — clobbering the re-check (one check, then silence until the next day). Server verified the 7am job ran + finished (`cron_complete`); the phone never checked again. Fix: re-check path arms alone; notify/give-up path syncs. Patience 2min×10 → 5min×24 (2h). (`CronWatcher.onAlarm`.)
