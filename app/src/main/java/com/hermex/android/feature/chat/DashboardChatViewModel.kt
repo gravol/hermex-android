@@ -3,6 +3,8 @@ package com.hermex.android.feature.chat
 import android.app.Application
 import android.util.Log
 import com.hermex.android.service.WsKeepaliveService
+import com.hermex.android.notify.CronWatcher
+import com.hermex.android.notify.NotificationHelper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -815,6 +817,14 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                         thinkingHasContent = true,
                         usage = usage,
                     )
+                    // v0.1.74: turn-finished notification — only when the user
+                    // is NOT watching this chat (they'd see it live).
+                    if (!screenVisible) {
+                        val title = uiState.sessionTitle.ifBlank { sessionId }
+                        NotificationHelper.postTurnFinished(
+                            getApplication(), sessionId, title, finalContent,
+                        )
+                    }
                 }
                 uiState = uiState.copy(
                     messages = msgs,
@@ -866,6 +876,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             is RpcNotification.Unknown -> {
                 Log.w("Hermex", "DashboardChat: unknown event: ${n.eventType}")
                 DebugLog.log("RPC", "DashboardChat", "unknown event: ${n.eventType} — rawParams=${n.rawParams?.toString()?.take(200)}")
+                // v0.1.74: the gateway broadcasts cron.changed whenever the cron
+                // list changes (any surface: phone, desktop, Telegram). Forward
+                // it to the alarm watcher so schedules re-arm without polling.
+                if (n.eventType == "cron.changed") {
+                    CronWatcher.sync(getApplication())
+                }
             }
         }
 

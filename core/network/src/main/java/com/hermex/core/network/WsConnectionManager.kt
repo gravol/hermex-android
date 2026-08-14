@@ -50,7 +50,7 @@ class WsConnectionManager(
 
     private val wsClient: OkHttpClient by lazy {
         DashboardApiClient.httpClient().newBuilder()
-            .pingInterval(30, TimeUnit.SECONDS)  // keepalive — server handles pong
+            .pingInterval(300, TimeUnit.SECONDS)  // v0.1.74: 5-min liveness ping — the server never drops a silent WS (no read timeout) and streaming traffic verifies liveness anyway; 30s was ~10x more radio wakeups than needed
             .readTimeout(0, TimeUnit.MILLISECONDS) // no read timeout for WS
             .build()
     }

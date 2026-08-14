@@ -310,6 +310,35 @@ object DashboardApiClient {
             }
         }
 
+    @Serializable
+    data class CronRun(
+        val id: String = "",               // session key — usable for deep links
+        val title: String? = null,
+        val preview: String? = null,
+        @SerialName("started_at") val startedAt: Double? = null,
+        @SerialName("ended_at") val endedAt: Double? = null,
+        @SerialName("end_reason") val endReason: String? = null,
+    )
+
+    @Serializable
+    data class CronRunsResult(
+        val runs: List<CronRun> = emptyList(),
+        val limit: Int? = null,
+    )
+
+    /** Latest runs of a cron job (cron runs are stored as sessions). */
+    suspend fun cronRuns(jobId: String, limit: Int = 1): NetworkResult<CronRunsResult> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = httpClient.newCall(
+                    Request.Builder().url("$restUrl/api/cron/jobs/$jobId/runs?limit=$limit").get().build()
+                ).execute()
+                response.handleResult(json, CronRunsResult.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
     /** List skills. Response: JSON array of skill infos. */
     suspend fun skillsList(): NetworkResult<List<SkillInfo>> =
         withContext(Dispatchers.IO) {

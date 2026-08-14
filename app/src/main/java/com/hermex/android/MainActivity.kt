@@ -1,17 +1,26 @@
 package com.hermex.android
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -28,6 +37,8 @@ import com.hermex.android.feature.system.ConfigScreen
 import com.hermex.android.feature.system.CronScreen
 import com.hermex.android.feature.system.SkillDetailScreen
 import com.hermex.android.feature.system.SkillsScreen
+import com.hermex.android.notify.CronWatcher
+import com.hermex.android.notify.NotificationHelper
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import com.hermex.android.ui.theme.HermexTheme
@@ -40,6 +51,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // v0.1.74: arm the scheduled-alarm cron watcher + ensure channels exist
+        CronWatcher.sync(this)
+        NotificationHelper.ensureChannels(this)
+        // Android 13+ needs a runtime grant for notifications
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4101)
+        }
+
         setContent {
             // Display preferences: UI zoom (dp) + text scale (sp), applied as a
             // density override so every screen picks them up with no per-screen
@@ -82,11 +104,30 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    /** Notification taps re-deliver the intent while the activity is alive. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
 }
 
 @Composable
 fun HermexNavGraph(chatVmsHolder: ChatVmsHolder) {
     val navController = rememberNavController()
+
+    // v0.1.74: notification deep links — open_session extra → chat route
+    val activity = LocalContext.current as? ComponentActivity
+    var handledDeepLink by remember { mutableStateOf(false) }
+    LaunchedEffect(activity?.intent) {
+        val intent = activity?.intent
+        val sessionKey = intent?.getStringExtra(NotificationHelper.EXTRA_OPEN_SESSION)
+        if (!handledDeepLink && !sessionKey.isNullOrBlank() && DashboardApiClient.isConfigured) {
+            handledDeepLink = true
+            val title = intent.getStringExtra(NotificationHelper.EXTRA_OPEN_TITLE) ?: sessionKey
+            navController.navigate(NotificationHelper.chatRoute(sessionKey, title))
+        }
+    }
     // Dashboard is the primary path. If not configured, user goes through
     // dashboard-setup flow. Legacy stack cleanup in progress.
     val startDest = when {
