@@ -10,6 +10,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -23,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hermex.android.notify.CronWatcher
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.NetworkResult
 import kotlinx.coroutines.launch
@@ -38,6 +42,9 @@ fun CronScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var jobs by remember { mutableStateOf<List<DashboardApiClient.CronJob>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // v0.1.80: editor state — null = list, else editing (or creating when id empty)
+    var editorJob by remember { mutableStateOf<DashboardApiClient.CronJob?>(null) }
+    var showCreate by remember { mutableStateOf(false) }
 
     fun load() {
         scope.launch {
@@ -50,18 +57,29 @@ fun CronScreen(onBack: () -> Unit) {
     }
     LaunchedEffect(Unit) { load() }
 
+    val editorOpen = editorJob != null || showCreate
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Cron Jobs") },
+                title = { Text(if (editorOpen) (if (showCreate) "New Cron Job" else "Edit Cron Job") else "Cron Jobs") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (editorOpen) { editorJob = null; showCreate = false }
+                        else onBack()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { load() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    if (!editorOpen) {
+                        IconButton(onClick = { load() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        }
+                        // v0.1.80: create new job
+                        IconButton(onClick = { showCreate = true }) {
+                            Icon(Icons.Default.Add, contentDescription = "New job")
+                        }
                     }
                 },
             )
@@ -69,6 +87,18 @@ fun CronScreen(onBack: () -> Unit) {
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
             when {
+                editorOpen -> {
+                    CronEditScreen(
+                        job = editorJob,
+                        onDone = {
+                            editorJob = null
+                            showCreate = false
+                            load()
+                            // Re-arm alarm watcher with the new schedule
+                            CronWatcher.sync(context)
+                        },
+                    )
+                }
                 error != null -> {
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -87,7 +117,7 @@ fun CronScreen(onBack: () -> Unit) {
                 }
                 jobs!!.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No cron jobs", style = MaterialTheme.typography.bodyLarge)
+                        Text("No cron jobs — tap + to create one", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
                 else -> {
@@ -112,6 +142,22 @@ fun CronScreen(onBack: () -> Unit) {
                                         }
                                     }
                                 },
+                                onEdit = { editorJob = job },
+                                onDelete = {
+                                    scope.launch {
+                                        when (val r = DashboardApiClient.cronDelete(job.id)) {
+                                            is NetworkResult.Success -> {
+                                                Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
+                                                load()
+                                                CronWatcher.sync(context)
+                                            }
+                                            is NetworkResult.HttpError ->
+                                                Toast.makeText(context, "Server error (${r.code})", Toast.LENGTH_SHORT).show()
+                                            is NetworkResult.Error ->
+                                                Toast.makeText(context, "Failed: ${r.exception.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
                             )
                         }
                     }
@@ -125,8 +171,11 @@ fun CronScreen(onBack: () -> Unit) {
 private fun CronJobRow(
     job: DashboardApiClient.CronJob,
     onAction: (String) -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val paused = job.state == "paused" || job.pausedAt != null
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -197,7 +246,191 @@ private fun CronJobRow(
                 ) {
                     Text("Run now", style = MaterialTheme.typography.labelMedium)
                 }
+                Spacer(Modifier.weight(1f))
+                // v0.1.80: edit + delete
+                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp))
+                }
+                IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
+        }
+    }
+
+    // Destructive action — always confirm (v0.1.80)
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete cron job?") },
+            text = { Text("Delete \"${job.name}\"? Its run history stays, but the schedule is removed permanently.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDelete()
+                    },
+                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Cron editor (v0.1.80): create + edit
+// ─────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CronEditScreen(
+    job: DashboardApiClient.CronJob?,
+    onDone: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val isCreate = job == null
+
+    var name by remember { mutableStateOf(job?.name ?: "") }
+    var prompt by remember { mutableStateOf("") }
+    var schedule by remember { mutableStateOf(job?.scheduleDisplay ?: "") }
+    var deliver by remember { mutableStateOf("local") }
+    var saving by remember { mutableStateOf(false) }
+    var formError by remember { mutableStateOf<String?>(null) }
+    var targets by remember { mutableStateOf<List<DashboardApiClient.CronDeliveryTarget>>(emptyList()) }
+    var showDeliverMenu by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        when (val r = DashboardApiClient.cronDeliveryTargets()) {
+            is NetworkResult.Success -> targets = r.data.targets
+            else -> {}
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it; formError = null },
+            label = { Text("Name") },
+            placeholder = { Text("e.g. Morning weather check") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = schedule,
+            onValueChange = { schedule = it; formError = null },
+            label = { Text("Schedule") },
+            placeholder = { Text("0 16 * * 1-5  or  every 90m") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            supportingText = {
+                Text(
+                    "Cron expression (min hour dom month dow) or interval shorthand.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+        )
+        OutlinedTextField(
+            value = prompt,
+            onValueChange = { prompt = it },
+            label = { Text("Prompt") },
+            placeholder = { Text("What should the job do? (leave empty to reuse the name)") },
+            minLines = 3,
+            maxLines = 6,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        // Deliver target dropdown
+        Box {
+            OutlinedButton(
+                onClick = { showDeliverMenu = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Deliver to: ${targets.firstOrNull { it.id == deliver }?.name ?: deliver}")
+            }
+            DropdownMenu(expanded = showDeliverMenu, onDismissRequest = { showDeliverMenu = false }) {
+                targets.forEach { t ->
+                    DropdownMenuItem(
+                        text = { Text(t.name ?: t.id) },
+                        onClick = { deliver = t.id; showDeliverMenu = false },
+                    )
+                }
+            }
+        }
+
+        formError?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+
+        Button(
+            onClick = {
+                scope.launch {
+                    saving = true
+                    formError = null
+                    try {
+                        val sched = schedule.trim()
+                        if (sched.isBlank()) {
+                            formError = "Schedule is required"
+                            saving = false
+                            return@launch
+                        }
+                        val result = if (isCreate) {
+                            DashboardApiClient.cronCreate(prompt, sched, name, deliver)
+                        } else {
+                            val updates = buildMap {
+                                put("schedule", sched)
+                                if (name.isNotBlank()) put("name", name)
+                                put("deliver", deliver)
+                                if (prompt.isNotBlank()) put("prompt", prompt)
+                            }
+                            DashboardApiClient.cronUpdate(job!!.id, updates)
+                        }
+                        when (result) {
+                            is NetworkResult.Success -> {
+                                Toast.makeText(context, if (isCreate) "Created" else "Saved", Toast.LENGTH_SHORT).show()
+                                onDone()
+                            }
+                            is NetworkResult.HttpError ->
+                                formError = "Server error (${result.code}) — check the schedule format"
+                            is NetworkResult.Error ->
+                                formError = result.exception.message ?: "Save failed"
+                        }
+                    } catch (e: Exception) {
+                        formError = e.message ?: "Save failed"
+                    }
+                    saving = false
+                }
+            },
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (saving) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+            } else {
+                Text(if (isCreate) "Create job" else "Save changes")
+            }
+        }
+
+        if (!isCreate) {
+            Text(
+                "Run history: pause/resume/run from the list. Deleting is done from the list (with confirmation).",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

@@ -358,6 +358,90 @@ object DashboardApiClient {
             }
         }
 
+    // ── Cron CRUD (v0.1.80): create / update / delete / delivery targets ──
+
+    /** Create a cron job. schedule = cron expr ("0 16 * * 1-5") or interval ("every 90m"). */
+    suspend fun cronCreate(prompt: String, schedule: String, name: String, deliver: String): NetworkResult<CronJob> =
+        withContext(Dispatchers.IO) {
+            try {
+                val body = buildJsonObject {
+                    put("prompt", prompt)
+                    put("schedule", schedule)
+                    put("name", name)
+                    put("deliver", deliver)
+                }
+                val response = httpClient.newCall(
+                    Request.Builder()
+                        .url("$restUrl/api/cron/jobs")
+                        .post(body.toString().toRequestBody(mediaTypeJson))
+                        .build()
+                ).execute()
+                response.handleResult(json, CronJob.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    /** Update a cron job's fields (schedule/name/prompt/deliver/...). */
+    suspend fun cronUpdate(jobId: String, updates: Map<String, String>): NetworkResult<CronJob> =
+        withContext(Dispatchers.IO) {
+            try {
+                val updatesJson = buildJsonObject {
+                    updates.forEach { (k, v) -> put(k, v) }
+                }
+                val body = buildJsonObject { put("updates", updatesJson) }
+                val response = httpClient.newCall(
+                    Request.Builder()
+                        .url("$restUrl/api/cron/jobs/$jobId")
+                        .put(body.toString().toRequestBody(mediaTypeJson))
+                        .build()
+                ).execute()
+                response.handleResult(json, CronJob.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    /** Delete a cron job. */
+    suspend fun cronDelete(jobId: String): NetworkResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = httpClient.newCall(
+                    Request.Builder()
+                        .url("$restUrl/api/cron/jobs/$jobId")
+                        .delete()
+                        .build()
+                ).execute()
+                response.handleResult(json, JsonObject.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
+    @Serializable
+    data class CronDeliveryTarget(
+        val id: String = "",
+        val name: String? = null,
+    )
+
+    @Serializable
+    data class CronDeliveryTargetsResult(
+        val targets: List<CronDeliveryTarget> = emptyList(),
+    )
+
+    /** Delivery options for the cron editor dropdown (local + configured platforms). */
+    suspend fun cronDeliveryTargets(): NetworkResult<CronDeliveryTargetsResult> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = httpClient.newCall(
+                    Request.Builder().url("$restUrl/api/cron/delivery-targets").get().build()
+                ).execute()
+                response.handleResult(json, CronDeliveryTargetsResult.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
     /** List skills. Response: JSON array of skill infos. */
     suspend fun skillsList(): NetworkResult<List<SkillInfo>> =
         withContext(Dispatchers.IO) {
