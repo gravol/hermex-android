@@ -37,8 +37,8 @@ object CronWatcher {
     private const val KEY_LAST_SEEN = "last_seen_run_"
     private const val KEY_CHECK_COUNT = "check_count_"
     private const val RUN_BUFFER_MS = 120_000L   // alarm at next_run + 2 min (job runtime)
-    private const val RE_CHECK_MS = 120_000L     // still-running runs re-checked every 2 min
-    private const val MAX_CHECKS_PER_RUN = 10    // give up watching a run that never ends
+    private const val RE_CHECK_MS = 300_000L     // still-running runs re-checked every 5 min
+    private const val MAX_CHECKS_PER_RUN = 24    // 2h patience for a run that never ends
     private const val MIN_SYNC_GAP_MS = 10_000L  // debounce cron.changed storms
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -56,11 +56,45 @@ object CronWatcher {
                 val jobs = DashboardApiClient.cronJobs()
                 if (jobs is NetworkResult.Success) {
                     armAlarms(app, jobs.data)
+                    catchUpMissedRuns(app, jobs.data)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "sync failed: ${e.message}")
             }
         }
+    }
+
+    /**
+     * v0.1.77: notify for runs that FINISHED but were never reported — e.g. the
+     * app was asleep past an alarm, or a job was triggered manually. Bounded:
+     * only jobs with next_run within 48h, only runs that started within the
+     * last 12h, max 3 notifications per sync.
+     */
+    private suspend fun catchUpMissedRuns(context: Context, jobs: List<DashboardApiClient.CronJob>) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val soon = jobs
+            .filter { it.state != "paused" && it.enabled }
+            .mapNotNull { job -> job.nextRunAt?.let { parseIso(it) }?.let { job to it } }
+            .filter { it.second > now && it.second - now < 48 * 3600_000L }
+            .sortedBy { it.second }
+            .take(8)
+        var notified = 0
+        for ((job, _) in soon) {
+            if (notified >= 3) break
+            val runsResult = DashboardApiClient.cronRuns(job.id, limit = 1)
+            if (runsResult !is NetworkResult.Success) continue
+            val run = runsResult.data.runs.firstOrNull() ?: continue
+            val lastSeen = prefs.getString(KEY_LAST_SEEN + job.id, null)
+            if (run.id == lastSeen) continue
+            val startedAt = run.startedAt?.let { (it * 1000).toLong() } ?: 0L
+            if (startedAt < now - 12 * 3600_000L) continue  // too old to surface
+            if (run.endedAt == null) continue               // still running — alarms handle it
+            prefs.edit().putString(KEY_LAST_SEEN + job.id, run.id).apply()
+            NotificationHelper.postCronRun(context, job.name, run.title, run.id)
+            notified++
+        }
+        if (notified > 0) DebugLog.log("CRON", "Watcher", "catch-up: $notified missed run notification(s)")
     }
 
     /** A specific job's alarm fired — check its run, notify if finished, re-arm all. */
@@ -82,20 +116,32 @@ object CronWatcher {
                                 .putString(KEY_LAST_SEEN + jobId, run.id)
                                 .remove(KEY_CHECK_COUNT + jobId)
                                 .apply()
-                            // Job name for the notification
-                            val jobsResult = DashboardApiClient.cronJobs()
-                            val jobName = (jobsResult as? NetworkResult.Success)
-                                ?.data?.firstOrNull { it.id == jobId }?.name ?: jobId
-                            NotificationHelper.postCronRun(app, jobName, run.title, run.id)
+                            if (finished) {
+                                // Job name for the notification
+                                val jobsResult = DashboardApiClient.cronJobs()
+                                val jobName = (jobsResult as? NetworkResult.Success)
+                                    ?.data?.firstOrNull { it.id == jobId }?.name ?: jobId
+                                NotificationHelper.postCronRun(app, jobName, run.title, run.id)
+                            }
+                            // Re-arm everything from fresh data (schedule may have moved)
+                            sync(app)
                         } else {
-                            // Run started but hasn't finished yet — check again shortly
+                            // Run started but hasn't finished yet — check again shortly.
+                            // CRITICAL (v0.1.77): do NOT sync() here — sync() re-arms
+                            // this job's alarm with the SAME request code, clobbering
+                            // the re-check alarm (the v0.1.74 bug that killed morning
+                            // cron notifications). The re-check arms alone; the
+                            // notify/give-up path syncs.
                             prefs.edit().putInt(KEY_CHECK_COUNT + jobId, checks + 1).apply()
                             armOne(app, jobId, System.currentTimeMillis() + RE_CHECK_MS)
                         }
+                    } else {
+                        // No new run (rescheduled / paused) — re-arm from fresh data
+                        sync(app)
                     }
+                } else {
+                    sync(app)
                 }
-                // Re-arm everything from fresh data (schedule may have moved)
-                sync(app)
             } catch (e: Exception) {
                 Log.w(TAG, "onAlarm failed: ${e.message}")
                 sync(app)

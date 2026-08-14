@@ -597,6 +597,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 // Load session history after connection
                 sessionLoadStartTime = System.currentTimeMillis()
                 loadMessages()
+                // v0.1.77: re-arm the cron alarm watcher whenever the app
+                // connects (catches schedule changes + missed runs)
+                CronWatcher.sync(getApplication())
             } catch (e: Exception) {
                 Log.e("Hermex", "DashboardChatViewModel: WebSocket connect failed", e)
                 DebugLog.log("ERROR", "DashboardChat", "WS connect failed: ${e.message}")
