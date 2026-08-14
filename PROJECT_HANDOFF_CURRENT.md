@@ -16,12 +16,12 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `550a6d6` (fix: accent visibility — tint chat chrome, not just primary elements) |
+| Latest commit | `b21505c` (v0.1.76 — CI-race version bump) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.48 (versionCode 48) |
-| Completed phase | **v0.1.48 — Accent visibility fix** (on top of v0.1.47 theme colors) |
-| Next phase | **Optional cleanup** (below) |
+| Version | v0.1.76 (versionCode 76) |
+| Completed phase | **v0.1.74–76 — notifications** (turn-finished + scheduled-alarm cron watcher) |
+| Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) ② custom colors for everything (refine text color/text size controls) ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response ④ re-verify Obtainium update flow after CI races |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
 
