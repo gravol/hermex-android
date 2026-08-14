@@ -25,11 +25,13 @@ object NotificationHelper {
 
     const val CHANNEL_TURNS = "turns"
     const val CHANNEL_CRON = "cron"
+    const val CHANNEL_ALERTS = "alerts"
     const val EXTRA_OPEN_SESSION = "open_session"
     const val EXTRA_OPEN_TITLE = "open_title"
 
     private const val ID_TURNS = 1001
     private const val ID_CRON = 1002
+    private const val ID_APPROVAL = 1003
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -41,6 +43,12 @@ object NotificationHelper {
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_CRON, "Cron jobs", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Alerts when scheduled cron jobs finish"
+            }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ALERTS, "Alerts", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Approval requests and urgent notices"
+                enableVibration(true)
             }
         )
     }
@@ -91,6 +99,23 @@ object NotificationHelper {
             .setContentIntent(openSessionIntent(context, runId, text))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(ID_CRON, notification) }
+    }
+
+    /** Approval request while the user isn't watching the chat (v0.1.84). */
+    fun postApproval(context: Context, sessionKey: String, toolName: String, args: String) {
+        ensureChannels(context)
+        val text = if (args.isBlank()) "Command needs your approval"
+        else "Approval needed: $toolName — ${args.take(120)}"
+        val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle("⚠️ Approval needed")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(openSessionIntent(context, sessionKey, "Approval needed"))
+            .build()
+        runCatching { NotificationManagerCompat.from(context).notify(ID_APPROVAL, notification) }
     }
 
     /** Deep-link route helper: chat/{sessionKey}/{encodedTitle} */

@@ -2,6 +2,7 @@ package com.hermex.android.feature.chat
 
 import android.app.Application
 import android.util.Log
+import com.hermex.android.AppState
 import com.hermex.android.service.WsKeepaliveService
 import com.hermex.android.notify.CronWatcher
 import com.hermex.android.notify.NotificationHelper
@@ -854,6 +855,16 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                         toolArgs = argsStr,
                     )
                 )
+                // v0.1.84: ping when the user isn't watching this chat —
+                // otherwise approval requests sit unseen until timeout.
+                if (!screenVisible || AppState.isBackgrounded) {
+                    NotificationHelper.postApproval(
+                        getApplication(),
+                        sessionId,
+                        n.toolName ?: "unknown",
+                        argsStr.take(200),
+                    )
+                }
             }
 
             is RpcNotification.ClarifyRequest -> {
