@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-14 (v0.1.84 — approval notifications)
-**Current version:** v0.1.84 (versionCode 84)
-**HEAD commit:** `1afde13` (v0.1.84 — approval notifications)
+**Last updated:** 2026-08-14 (v0.1.85 — half-open reconnect fix)
+**Current version:** v0.1.85 (versionCode 85)
+**HEAD commit:** `023916b` (v0.1.85 — half-open reconnect fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.85 (2026-08-14)
+- **Half-open reconnect fix** — when a reconnect's lightweight session re-attach (`sessionResume(omitMessages=true)`) failed, the app logged and gave up: WS connected but session unattached → sends went into the void until the 30s "jpc error" timeout. The failure path now retries with the FULL `loadMessages()` re-attach (resume + history reload, handles 4001 internally). Root-caused from Jeff's report: approval-test denial worked (20:16), then background/swipe (20:24) → server orphan-reap → reopen = half-open. (`DashboardChatViewModel` reconnect-resume catch.)
 
 ### DONE in v0.1.84 (2026-08-14)
 - **Approval-request notifications** — the app already received `approval.request` over WS and rendered an in-chat banner, but only when watching the chat; backgrounded requests sat unseen until the 60s timeout. Now an `ApprovalRequest` while not watching posts a high-priority "Alerts" notification (tool name + truncated args), tap deep-links to the chat with the approve/deny banner. Also bumped `approvals.timeout` 60→300 in config.yaml so requests don't expire while Jeff is away. (`NotificationHelper.postApproval`, `DashboardChatViewModel`, `~/.hermes/config.yaml`.)
