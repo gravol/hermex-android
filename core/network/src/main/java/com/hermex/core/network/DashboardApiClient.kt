@@ -37,6 +37,7 @@ object DashboardApiClient {
     private var restUrl: String = ""            // e.g. "http://100.80.204.66:9119"
     private var wsUrl: String = ""              // e.g. "ws://100.80.204.66:9119"  (derived)
     private var dashboardPassword: String = ""
+    private var dashboardUsername: String = "jeff"
     private lateinit var httpClient: OkHttpClient
 
     val isConfigured: Boolean get() = restUrl.isNotEmpty() && dashboardPassword.isNotEmpty()
@@ -73,6 +74,10 @@ object DashboardApiClient {
 
     fun setPassword(password: String) {
         dashboardPassword = password
+    }
+
+    fun setUsername(username: String) {
+        dashboardUsername = username.ifBlank { "jeff" }
     }
 
     /** Expose the HTTP client for ticket-fetch + WS creation. */
@@ -404,7 +409,7 @@ object DashboardApiClient {
                 Log.d("Hermex", "DashboardAuthenticator: 401 on ${response.request.url}, re-logging in")
 
                 try {
-                    val loginBody = LoginRequest(provider = "basic", username = "jeff", password = currentPassword)
+                    val loginBody = LoginRequest(provider = "basic", username = dashboardUsername, password = currentPassword)
                     val bodyStr = json.encodeToString(LoginRequest.serializer(), loginBody)
 
                     val loginCall = httpClient.newCall(

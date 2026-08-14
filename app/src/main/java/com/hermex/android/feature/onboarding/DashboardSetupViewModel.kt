@@ -65,12 +65,13 @@ class DashboardSetupViewModel(application: Application) : AndroidViewModel(appli
                         // Step 2: authenticate
                         DashboardApiClient.setDashboardUrl(url)
                         DashboardApiClient.setPassword(password)
+                        DashboardApiClient.setUsername("jeff")
 
                         when (val loginResult = DashboardApiClient.login("jeff", password)) {
                             is NetworkResult.Success -> {
                                 DebugLog.log("INFO", "DashboardSetup", "login OK")
                                 KeychainStore.saveDashboardCredentials(
-                                    getApplication(), url, password
+                                    getApplication(), url, password, "jeff"
                                 )
                                 _uiState.value = _uiState.value.copy(
                                     isLoading = false,

@@ -14,6 +14,7 @@ object KeychainStore {
     private const val KEY_SERVER_URL = "server_url"
     private const val KEY_API_KEY = "api_key"
     private const val KEY_DASHBOARD_URL = "dashboard_url"
+    private const val KEY_DASHBOARD_USERNAME = "dashboard_username"
     private const val KEY_DASHBOARD_PASSWORD = "dashboard_password"
 
     private val prefsMap = mutableMapOf<Context, SharedPreferences>()
@@ -54,15 +55,20 @@ object KeychainStore {
 
     fun saveDashboardCredentials(
         context: Context, dashboardUrl: String, dashboardPassword: String,
+        dashboardUsername: String = "jeff",
     ) {
         getPrefs(context).edit()
             .putString(KEY_DASHBOARD_URL, dashboardUrl)
+            .putString(KEY_DASHBOARD_USERNAME, dashboardUsername)
             .putString(KEY_DASHBOARD_PASSWORD, dashboardPassword)
             .apply()
     }
 
     fun getDashboardUrl(context: Context): String? =
         getPrefs(context).getString(KEY_DASHBOARD_URL, null)
+
+    fun getDashboardUsername(context: Context): String? =
+        getPrefs(context).getString(KEY_DASHBOARD_USERNAME, null)
 
     fun getDashboardPassword(context: Context): String? =
         getPrefs(context).getString(KEY_DASHBOARD_PASSWORD, null)

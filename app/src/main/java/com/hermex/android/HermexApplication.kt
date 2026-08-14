@@ -21,9 +21,11 @@ class HermexApplication : Application() {
 
             val savedDashboardUrl = KeychainStore.getDashboardUrl(this)
             val savedDashboardPassword = KeychainStore.getDashboardPassword(this)
+            val savedDashboardUsername = KeychainStore.getDashboardUsername(this)
             if (savedDashboardUrl != null && savedDashboardPassword != null) {
                 DashboardApiClient.setDashboardUrl(savedDashboardUrl)
                 DashboardApiClient.setPassword(savedDashboardPassword)
+                DashboardApiClient.setUsername(savedDashboardUsername ?: "jeff")
                 Log.d("Hermex", "HermexApplication: restored dashboard URL + password")
                 DebugLog.log("INFO", "HermexApp", "restored dashboard credentials → isConfigured=true")
             } else {

@@ -1,5 +1,6 @@
 package com.hermex.android.feature.settings
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -12,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -33,13 +35,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.hermex.android.ui.theme.hexToColor
 import com.hermex.android.ui.theme.isDarkForeground
+import com.hermex.core.data.auth.KeychainStore
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
+import com.hermex.core.network.NetworkResult
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -85,6 +91,114 @@ fun SettingsScreen(
                 "Device: ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
                 style = MaterialTheme.typography.bodyMedium,
             )
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // ── Connection (v0.1.72): change server / credentials in-app ──
+            Text("Connection", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Server address, username and password for your Hermes gateway. Saved credentials are encrypted on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            val keychainUrl = remember { KeychainStore.getDashboardUrl(context) }
+            val keychainUser = remember { KeychainStore.getDashboardUsername(context) }
+            val keychainPass = remember { KeychainStore.getDashboardPassword(context) }
+            var serverUrl by remember { mutableStateOf(keychainUrl ?: DashboardApiClient.baseUrl()) }
+            var username by remember { mutableStateOf(keychainUser ?: "jeff") }
+            var password by remember { mutableStateOf(keychainPass ?: "") }
+            var saving by remember { mutableStateOf(false) }
+            var connError by remember { mutableStateOf<String?>(null) }
+
+            OutlinedTextField(
+                value = serverUrl,
+                onValueChange = { serverUrl = it; connError = null },
+                label = { Text("Server address") },
+                placeholder = { Text("http://100.80.204.66:9119") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            )
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it; connError = null },
+                label = { Text("Username") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it; connError = null },
+                label = { Text("Password") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        saving = true
+                        connError = null
+                        try {
+                            var url = serverUrl.trim().removeSuffix("/")
+                            if (url.isBlank()) {
+                                connError = "Server address is required"
+                                return@launch
+                            }
+                            if (!url.startsWith("http")) url = "http://$url"
+                            val user = username.ifBlank { "jeff" }
+                            when (val statusResult = DashboardApiClient.status(url)) {
+                                is NetworkResult.Success -> {
+                                    DashboardApiClient.setDashboardUrl(url)
+                                    DashboardApiClient.setPassword(password)
+                                    DashboardApiClient.setUsername(user)
+                                    when (val loginResult = DashboardApiClient.login(user, password)) {
+                                        is NetworkResult.Success -> {
+                                            KeychainStore.saveDashboardCredentials(context, url, password, user)
+                                            Toast.makeText(context, "✓ Saved — reconnecting", Toast.LENGTH_SHORT).show()
+                                            (context as? Activity)?.recreate()
+                                        }
+                                        is NetworkResult.HttpError ->
+                                            connError = "Login failed (${loginResult.code}) — check username/password"
+                                        is NetworkResult.Error ->
+                                            connError = loginResult.exception.message ?: "Login failed"
+                                    }
+                                }
+                                is NetworkResult.HttpError ->
+                                    connError = "Server unreachable (${statusResult.code}) — check address/port"
+                                is NetworkResult.Error ->
+                                    connError = statusResult.exception.message ?: "Connection failed"
+                            }
+                        } catch (e: Exception) {
+                            connError = e.message ?: "Save failed"
+                        }
+                        saving = false
+                    }
+                },
+                enabled = !saving,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text("Save & Reconnect")
+                }
+            }
+
+            connError?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
