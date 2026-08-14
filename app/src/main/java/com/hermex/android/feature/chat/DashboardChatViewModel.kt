@@ -576,6 +576,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                     Log.e("Hermex", "DashboardChat: reconnect resume failed", e)
                                     DebugLog.log("ERROR", "DashboardChat",
                                         "reconnect resume failed: ${e.message}")
+                                    // v0.1.85 (half-open fix): a failed lightweight
+                                    // re-attach leaves the WS connected but the session
+                                    // unattached — sends go into the void until the 30s
+                                    // timeout ("jpc error"). Retry with the FULL
+                                    // re-attach (resume + history reload), which is the
+                                    // proven path and handles 4001 internally.
+                                    loadMessages()
                                 }
                             }
                         }
