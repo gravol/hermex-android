@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-13 (v0.1.71 — gauge never hides)
-**Current version:** v0.1.71 (versionCode 71)
-**HEAD commit:** `b3fe104` (v0.1.71 — gauge never hides)
+**Last updated:** 2026-08-13 (v0.1.72 — Connection menu)
+**Current version:** v0.1.72 (versionCode 72)
+**HEAD commit:** `8d762a2` (v0.1.72 — Connection menu)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.72 (2026-08-13)
+- **Connection menu in Settings** — server address (IP:port), username, password now editable in Settings → Connection with a Save & Reconnect button: validates via `status()` + `login()`, persists to the encrypted KeychainStore (username added as a stored field, `KEY_DASHBOARD_USERNAME`), then recreates the activity so held VMs reconnect to the new gateway. The hardcoded `"jeff"` username in `DashboardApiClient`'s 401 re-login path now reads the stored value. Makes the app pointable at any Hermes gateway (shareable with brother). (`SettingsScreen.kt` Connection section, `KeychainStore`, `DashboardApiClient.setUsername`, `HermexApplication` restore.)
 
 ### DONE in v0.1.71 (2026-08-13)
 - **Context gauge never hides (desktop-mirror)** — root cause proven via server probe (reaped agent → NO usage data; live agent → full data) + desktop source (apps/desktop `gateway-event.ts` merges usage over last-known without clearing; `statusbar.tsx` renders `context_used ?? 0`). The phone now always renders the gauge slot once the chat is open: last-known reading when the server is quiet, `—/—` dimmed before any reading exists, never vanishing. The 5s poll still upgrades it to live data within seconds when the agent has it. (`ChatScreen.kt` top bar.) Server-side estimate-on-rebuild remains a future hermes-agent PR for instant freshness after reaps.
