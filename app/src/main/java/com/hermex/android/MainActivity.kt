@@ -110,6 +110,18 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
     }
+
+    // v0.1.75: track app foreground/background so turn-finished notifications
+    // fire when the app is backgrounded (screenVisible alone misses that case).
+    override fun onStart() {
+        super.onStart()
+        AppState.isBackgrounded = false
+    }
+
+    override fun onStop() {
+        super.onStop()
+        AppState.isBackgrounded = true
+    }
 }
 
 @Composable

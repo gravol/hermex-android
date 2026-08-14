@@ -817,9 +817,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                         thinkingHasContent = true,
                         usage = usage,
                     )
-                    // v0.1.74: turn-finished notification — only when the user
-                    // is NOT watching this chat (they'd see it live).
-                    if (!screenVisible) {
+                    // v0.1.74/75: turn-finished notification — fire when the
+                    // user is NOT watching this chat: navigated away (screen
+                    // not visible) OR the app is backgrounded.
+                    if (!screenVisible || com.hermex.android.AppState.isBackgrounded) {
                         val title = uiState.sessionTitle.ifBlank { sessionId }
                         NotificationHelper.postTurnFinished(
                             getApplication(), sessionId, title, finalContent,
