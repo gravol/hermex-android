@@ -906,18 +906,23 @@ fun ChatScreen(
                                 ToolScrollBox(toolCalls = msg.toolCalls)
                             }
 
-                            MessageBubble(
-                                message = msg,
-                                sameSender = sameSender,
-                                onLongPress = {
-                                    val textToCopy = if (msg.content.isNotBlank()) msg.content
-                                        else msg.thinkingText ?: return@MessageBubble
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("Hermes message", textToCopy))
-                                    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                                },
-                                onToggleThinking = { viewModel.toggleThinking(msg.id) },
-                            )
+                            // Skip the empty bubble for tool-only assistant rows
+                            // from history (content blank, not streaming) — the
+                            // thinking + tools boxes above already tell the story.
+                            if (msg.content.isNotBlank() || msg.isStreaming) {
+                                MessageBubble(
+                                    message = msg,
+                                    sameSender = sameSender,
+                                    onLongPress = {
+                                        val textToCopy = if (msg.content.isNotBlank()) msg.content
+                                            else msg.thinkingText ?: return@MessageBubble
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("Hermes message", textToCopy))
+                                        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onToggleThinking = { viewModel.toggleThinking(msg.id) },
+                                )
+                            }
                         }
                     }
                 }
@@ -1924,7 +1929,7 @@ private fun ToolScrollBox(toolCalls: List<UiToolCall>) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 160.dp)
+                    .heightIn(max = 140.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
                 toolCalls.forEach { tc ->

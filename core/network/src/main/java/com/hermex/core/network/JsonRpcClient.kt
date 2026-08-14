@@ -427,12 +427,18 @@ class JsonRpcClient(
         val text: String? = null,  // server sends "text" field, not "content"
         val name: String? = null,  // tool-result messages have "name"
         val context: String? = null,  // tool-result messages have "context"
+        val reasoning: String? = null,  // assistant messages carry thinking here
+        val reasoning_content: String? = null,  // (alias used by some models)
         val created_at: String? = null,
         val tool_calls: List<RpcNotification.ToolCallInfo>? = null,
     ) {
         /** Resolve message text from any known field. */
         val resolvedContent: String?
             get() = content ?: text ?: context
+
+        /** Thinking/reasoning text for assistant messages (v0.1.73). */
+        val resolvedThinking: String?
+            get() = reasoning_content ?: reasoning
     }
 
     @Serializable

@@ -120,24 +120,52 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                         "session_key=$newSessionKey differs from dbKey=$sessionId")
                 }
 
-                val messages = result.messages?.map {
-                    val messageContent = it.resolvedContent ?: ""
-                    UiMessage(
-                        id = it.id ?: "msg_${tempIdCounter.incrementAndGet()}",
-                        role = it.role ?: "user",
-                        content = messageContent,
-                        thinkingExpanded = false,
-                        thinkingHasContent = true,
-                        toolCalls = it.tool_calls?.map { tc ->
-                            UiToolCall(
-                                id = tc.id ?: "tc",
-                                toolName = tc.function?.name ?: "unknown",
-                                args = tc.function?.arguments,
-                                completed = true,
+                // v0.1.73: history stores tool activity as SEPARATE role="tool"
+                // rows ({name, context}) and assistant thinking in `reasoning`.
+                // Merge tool rows into the preceding assistant message's tool
+                // box instead of rendering them as jumbled standalone bubbles;
+                // carry reasoning into the thinking box.
+                val messages = result.messages?.let { raw ->
+                    val out = mutableListOf<UiMessage>()
+                    for (it in raw) {
+                        val role = it.role ?: "user"
+                        if (role == "tool") {
+                            val prev = out.lastOrNull()
+                            if (prev != null && prev.role == "assistant") {
+                                val idx = out.size - 1
+                                out[idx] = prev.copy(
+                                    toolCalls = prev.toolCalls + UiToolCall(
+                                        id = it.id ?: "tc_${tempIdCounter.incrementAndGet()}",
+                                        toolName = it.name ?: "tool",
+                                        preview = it.context,
+                                        completed = true,
+                                    )
+                                )
+                            }
+                            continue
+                        }
+                        val thinking = it.resolvedThinking
+                        out.add(
+                            UiMessage(
+                                id = it.id ?: "msg_${tempIdCounter.incrementAndGet()}",
+                                role = role,
+                                content = it.resolvedContent ?: "",
+                                thinkingExpanded = false,
+                                thinkingText = thinking,
+                                thinkingHasContent = !thinking.isNullOrBlank(),
+                                toolCalls = it.tool_calls?.map { tc ->
+                                    UiToolCall(
+                                        id = tc.id ?: "tc",
+                                        toolName = tc.function?.name ?: "unknown",
+                                        args = tc.function?.arguments,
+                                        completed = true,
+                                    )
+                                } ?: emptyList(),
+                                timestamp = System.currentTimeMillis(),
                             )
-                        } ?: emptyList(),
-                        timestamp = System.currentTimeMillis(),
-                    )
+                        )
+                    }
+                    out
                 } ?: emptyList()
                 val context = parseContextUsage(result.info)
                 // Replay the task list: the last todo tool result in history is
