@@ -21,7 +21,7 @@
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
 | Version | v0.1.76 (versionCode 76) |
 | Completed phase | **v0.1.74–76 — notifications** (turn-finished + scheduled-alarm cron watcher) |
-| Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) ② custom colors for everything (refine text color/text size controls) ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response ④ re-verify Obtainium update flow after CI races |
+| Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) ② custom colors for everything (refine text color/text size controls) ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response ④ re-verify Obtainium update flow after CI races ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking). Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
 
