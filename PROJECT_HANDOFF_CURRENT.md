@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-14 (v0.1.76 — CI-race version bump)
-**Current version:** v0.1.76 (versionCode 76)
-**HEAD commit:** `b21505c` (v0.1.76 — version bump)
+**Last updated:** 2026-08-14 (v0.1.77 — cron clobber fix)
+**Current version:** v0.1.77 (versionCode 77)
+**HEAD commit:** `4a99f63` (v0.1.77 — cron clobber fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.77 (2026-08-14)
+- **Cron notification clobber fix** — root cause of the silent morning weather cron: `onAlarm`'s still-running branch armed a 2-min re-check alarm, then called `sync()`, which re-armed the SAME job with the SAME request code for the next occurrence — clobbering the re-check (one check, then silence until the next day). Server verified the 7am job ran + finished (`cron_complete`); the phone never checked again. Fix: re-check path arms alone; notify/give-up path syncs. Patience 2min×10 → 5min×24 (2h). (`CronWatcher.onAlarm`.)
+- **Missed-run catch-up** — `sync()` now notifies for finished runs never reported (bounded: next_run within 48h, run started within 12h, max 3 per sync) — missed morning runs surface on next app open. Sync-on-connect added (VM connect → re-arm + catch-up). (`CronWatcher.catchUpMissedRuns`, `DashboardChatViewModel`.)
 
 ### DONE in v0.1.76 (2026-08-14)
 - **Version bump only** — the v0.1.75 fix was correct, but the CI auto-published the same v0.1.75 tag from the master push before the manual release, so Obtainium already had 0.1.75 and showed no update. 0.1.76 = identical code, new version, update visible.
