@@ -7,12 +7,16 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -35,6 +39,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -269,6 +274,16 @@ fun SettingsScreen(
             val savedTextColor by settingsRepo.uiTextHex.collectAsState(initial = null)
             val savedMonospace by settingsRepo.uiMonospace.collectAsState(initial = false)
 
+            // Live preview — see color changes instantly (v0.1.79)
+            AppearancePreview(
+                accentHex = savedAccent,
+                bgHex = savedBg,
+                userBubbleHex = savedUserBubble,
+                assistantBubbleHex = savedAssistantBubble,
+                textHex = savedTextColor,
+                monospace = savedMonospace,
+            )
+
             // Presets — apply accent + per-part overrides at once
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -324,7 +339,7 @@ fun SettingsScreen(
 
             Text("Background", style = MaterialTheme.typography.bodyMedium)
             ColorSwatchRow(
-                options = accentOptions,
+                options = uiOptions,
                 selectedHex = savedBg,
                 onSelect = { hex -> scope.launch { settingsRepo.setUiBackgroundHex(hex) } },
             )
@@ -333,7 +348,7 @@ fun SettingsScreen(
 
             Text("User bubbles", style = MaterialTheme.typography.bodyMedium)
             ColorSwatchRow(
-                options = accentOptions,
+                options = uiOptions,
                 selectedHex = savedUserBubble,
                 onSelect = { hex -> scope.launch { settingsRepo.setUiUserBubbleHex(hex) } },
             )
@@ -342,7 +357,7 @@ fun SettingsScreen(
 
             Text("Assistant bubbles & top bars", style = MaterialTheme.typography.bodyMedium)
             ColorSwatchRow(
-                options = accentOptions,
+                options = uiOptions,
                 selectedHex = savedAssistantBubble,
                 onSelect = { hex -> scope.launch { settingsRepo.setUiAssistantBubbleHex(hex) } },
             )
@@ -351,7 +366,7 @@ fun SettingsScreen(
 
             Text("Text color", style = MaterialTheme.typography.bodyMedium)
             ColorSwatchRow(
-                options = accentOptions,
+                options = uiOptions,
                 selectedHex = savedTextColor,
                 onSelect = { hex -> scope.launch { settingsRepo.setUiTextHex(hex) } },
             )
@@ -422,6 +437,139 @@ private val accentOptions = listOf(
     "Orange" to "#FF9500",
 )
 
+/** Richer palette for per-part UI colors — includes the Terminal palette + neutrals. */
+private val uiOptions = listOf(
+    "Default" to null,
+    "Terminal green" to "#00FF41",
+    "Charcoal" to "#0A0C0A",
+    "Deep green" to "#1E3D24",
+    "Mint" to "#A5D6A7",
+    "Slate gray" to "#9BA3A0",
+    "Input dark" to "#121512",
+    "Cyan" to "#00D1FF",
+    "Purple" to "#AF52DE",
+    "Red" to "#FF3B30",
+    "White" to "#FFFFFF",
+)
+
+/**
+ * Live mini-chat preview (v0.1.79) — renders with the current appearance
+ * overrides so color changes are visible instantly: a user bubble (right,
+ * green-tinted), a flat assistant message, and an accent context gauge.
+ */
+@Composable
+private fun AppearancePreview(
+    accentHex: String?,
+    bgHex: String?,
+    userBubbleHex: String?,
+    assistantBubbleHex: String?,
+    textHex: String?,
+    monospace: Boolean,
+) {
+    val accent = accentHex?.let { runCatching { hexToColor(it) }.getOrNull() }
+        ?: MaterialTheme.colorScheme.primary
+    val bg = bgHex?.let { runCatching { hexToColor(it) }.getOrNull() }
+        ?: MaterialTheme.colorScheme.background
+    val userBubble = userBubbleHex?.let { runCatching { hexToColor(it) }.getOrNull() }
+        ?: MaterialTheme.colorScheme.surfaceVariant
+    val assistantBubble = assistantBubbleHex?.let { runCatching { hexToColor(it) }.getOrNull() }
+        ?: MaterialTheme.colorScheme.background
+    val textColor = textHex?.let { runCatching { hexToColor(it) }.getOrNull() }
+        ?: MaterialTheme.colorScheme.onBackground
+    val fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default
+    val textStyle = MaterialTheme.typography.bodySmall.copy(
+        fontFamily = fontFamily,
+        color = textColor,
+    )
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = accent.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(14.dp),
+            ),
+        color = bg,
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Context gauge, accent-colored like the chat top bar
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .width(48.dp)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(accent),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "243k/1.0M",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = fontFamily,
+                        color = textColor.copy(alpha = 0.7f),
+                    ),
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+
+            // User bubble (right-aligned, like the chat)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End,
+            ) {
+                Surface(
+                    color = userBubble,
+                    shape = RoundedCornerShape(14.dp, 14.dp, 4.dp, 14.dp),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.4f)),
+                ) {
+                    Text(
+                        text = "Good morning! Any jobs today?",
+                        style = textStyle,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // Thinking box (matching the chat's box styling)
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Column {
+                    Text(
+                        text = "THINKING",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                    Text(
+                        text = "Checking the weather and calendar…",
+                        style = textStyle.copy(fontSize = 10.sp, color = textStyle.color.copy(alpha = 0.7f)),
+                        modifier = Modifier.padding(10.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Assistant reply (flat, full-width)
+            Surface(color = assistantBubble, shape = RoundedCornerShape(14.dp)) {
+                Text(
+                    text = "Morning! Sunny 16°C today — no jobs logged yet.",
+                    style = textStyle,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
+}
+
 /**
  * Horizontal row of circular color swatches (System gradient + solid palette).
  * Selection shown with a colored border + ✓ check.
@@ -432,7 +580,12 @@ private fun ColorSwatchRow(
     selectedHex: String?,
     onSelect: (String?) -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         options.forEach { (_, hex) ->
             val selected = if (hex == null) {
                 selectedHex.isNullOrBlank()

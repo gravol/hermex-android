@@ -1110,12 +1110,6 @@ private fun ThinkingScrollBox(text: String) {
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "scroll for more",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
             Column(
@@ -1917,12 +1911,6 @@ private fun ToolScrollBox(toolCalls: List<UiToolCall>) {
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "tap a tool for details",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
