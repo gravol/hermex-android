@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-14 (v0.1.79 — Release A)
-**Current version:** v0.1.79 (versionCode 79)
-**HEAD commit:** `2d3d4ca` (v0.1.79 — Release A)
+**Last updated:** 2026-08-14 (v0.1.80 — Release B)
+**Current version:** v0.1.80 (versionCode 80)
+**HEAD commit:** `a3b5848` (v0.1.80 — Release B)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.80 (2026-08-14) — Release B
+- **Full cron management in the app** — CronScreen: **+ button** to create a job (name, schedule, prompt, deliver dropdown from `/api/cron/delivery-targets`), **edit** (pencil) and **delete** (trash, always confirm dialog — destructive) per row. `CronEditScreen` handles create (`POST /api/cron/jobs`) and edit (`PUT` with `{updates}`); after any change the alarm watcher re-arms so notifications follow the new schedule. Schedule accepts cron expressions or interval shorthand (`every 90m`). (`DashboardApiClient.cronCreate/cronUpdate/cronDelete/cronDeliveryTargets`, `SystemScreens.kt`.)
 
 ### DONE in v0.1.79 (2026-08-14) — Release A
 - **Message boxes refined (③)** — thinking + tools boxes now have matching slim headers (THINKING / TOOLS · N), dropped the "scroll for more" / "tap a tool for details" hints — pure content boxes, both sitting above the answer. (`ThinkingScrollBox`, `ToolScrollBox`.)
