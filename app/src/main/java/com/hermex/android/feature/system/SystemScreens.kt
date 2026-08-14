@@ -213,13 +213,11 @@ private fun CronJobRow(
                 )
             }
             Spacer(Modifier.height(4.dp))
-            job.scheduleDisplay?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = job.scheduleDisplayLocal() ?: "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             job.repeat?.let { rep ->
                 if (rep.times != null || (rep.completed ?: 0) > 0) {
                     Text(
@@ -292,6 +290,37 @@ private fun CronJobRow(
 // ─────────────────────────────────────────────────────────────
 // Cron editor (v0.1.80): create + edit
 // ─────────────────────────────────────────────────────────────
+
+private val cronLocalDateFormat = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault()).apply {
+    timeZone = java.util.TimeZone.getDefault()
+}
+
+/**
+ * Schedule text in the PHONE's timezone (v0.1.83). The server's
+ * schedule_display renders one-shot "once at ..." timestamps UTC-naive;
+ * cron expressions and intervals carry no timezone, so they pass through.
+ */
+private fun DashboardApiClient.CronJob.scheduleDisplayLocal(): String? {
+    val s = schedule ?: return scheduleDisplay
+    return when (s.kind) {
+        "once" -> {
+            val runAt = s.runAt?.let { raw ->
+                runCatching {
+                    val ts = java.time.Instant.parse(raw).toEpochMilli()
+                    cronLocalDateFormat.format(java.util.Date(ts))
+                }.getOrNull()
+            }
+            if (runAt != null) "Once: $runAt" else scheduleDisplay
+        }
+        "interval" -> s.minutes?.let { m ->
+            if (m % (24 * 60) == 0) "Every ${m / (24 * 60)} day(s)"
+            else if (m % 60 == 0) "Every ${m / 60} hour(s)"
+            else "Every $m minute(s)"
+        } ?: scheduleDisplay
+        "cron" -> s.expr ?: scheduleDisplay
+        else -> scheduleDisplay
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

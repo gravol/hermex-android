@@ -149,11 +149,20 @@ object DashboardApiClient {
         val id: String = "",
         val name: String = "",
         @SerialName("schedule_display") val scheduleDisplay: String? = null,
+        val schedule: CronSchedule? = null,
         val enabled: Boolean = true,
         val state: String? = null,
         @SerialName("paused_at") val pausedAt: String? = null,
         @SerialName("next_run_at") val nextRunAt: String? = null,
         val repeat: CronRepeat? = null,
+    )
+
+    @Serializable
+    data class CronSchedule(
+        val kind: String? = null,
+        @SerialName("run_at") val runAt: String? = null,
+        val expr: String? = null,
+        val minutes: Int? = null,
     )
 
     @Serializable
