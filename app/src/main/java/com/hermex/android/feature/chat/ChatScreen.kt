@@ -458,34 +458,50 @@ fun ChatScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                         // Live context-window occupancy (session.info usage).
-                        // Hidden until the server reports a real reading.
+                        // v0.1.71: ALWAYS visible once the chat is open —
+                        // mirrors the desktop's never-blank behavior. Shows
+                        // the last-known reading when the server is quiet
+                        // (e.g. reaped agent after app update), and "—" before
+                        // any reading exists, instead of hiding the slot.
                         val ctxUsed = state.contextUsed
                         val ctxMax = state.contextMax
-                        if (ctxUsed != null && ctxMax != null && ctxMax > 0) {
-                            val fraction = (ctxUsed.toFloat() / ctxMax.toFloat()).coerceIn(0f, 1f)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                LinearProgressIndicator(
-                                    progress = { fraction },
-                                    modifier = Modifier
-                                        .width(64.dp)
-                                        .height(3.dp)
-                                        .clip(RoundedCornerShape(2.dp)),
-                                    color = if (fraction > 0.8f) {
-                                        MaterialTheme.colorScheme.error
-                                    } else {
-                                        MaterialTheme.colorScheme.primary
-                                    },
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                )
-                                Text(
-                                    text = "${formatTokens(ctxUsed)}/${formatTokens(ctxMax)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                        val knownMax = ctxMax != null && ctxMax > 0
+                        val knownUsed = knownMax && ctxUsed != null
+                        val fraction = if (knownUsed) {
+                            (ctxUsed.toFloat() / ctxMax.toFloat()).coerceIn(0f, 1f)
+                        } else {
+                            0f
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            LinearProgressIndicator(
+                                progress = { fraction },
+                                modifier = Modifier
+                                    .width(64.dp)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(2.dp)),
+                                color = if (knownUsed && fraction > 0.8f) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                            Text(
+                                text = when {
+                                    knownUsed -> "${formatTokens(ctxUsed)}/${formatTokens(ctxMax)}"
+                                    knownMax -> "—/${formatTokens(ctxMax)}"
+                                    else -> "—/—"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (knownUsed) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                },
+                            )
                         }
                     }
                 },
