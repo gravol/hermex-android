@@ -42,6 +42,25 @@ private val dateFormat = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).
     timeZone = TimeZone.getDefault()
 }
 
+/** Best available "last message received" timestamp for a session (v0.1.82). */
+private fun SessionSummary.lastActivityTs(): Double? =
+    lastActivityAt ?: lastActive ?: startedAt
+
+/** Compact relative time: 5m ago / 3h ago / 2d ago / absolute after 7d. */
+private fun relativeTime(epochSeconds: Double): String {
+    val now = System.currentTimeMillis()
+    val ts = (epochSeconds * 1000).toLong()
+    val diffMs = now - ts
+    val minutes = diffMs / 60_000
+    return when {
+        minutes < 1 -> "just now"
+        minutes < 60 -> "${minutes}m ago"
+        minutes < 60 * 24 -> "${minutes / 60}h ago"
+        minutes < 60 * 24 * 7 -> "${minutes / (60 * 24)}d ago"
+        else -> dateFormat.format(Date(ts))
+    }
+}
+
 /** How many recent sessions show before the "All sessions" expander. */
 private const val RECENT_LIMIT = 5
 
@@ -462,9 +481,9 @@ private fun SessionRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    session.startedAt?.let { ts ->
+                    session.lastActivityTs()?.let { ts ->
                         Text(
-                            text = dateFormat.format(Date((ts * 1000).toLong())),
+                            text = relativeTime(ts),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -479,6 +498,18 @@ private fun SessionRow(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                session.lastActivityDescription?.let { desc ->
+                    if (desc.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "Last message: $desc",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }

@@ -53,6 +53,11 @@ fun CronScreen(onBack: () -> Unit) {
                 is NetworkResult.HttpError -> error = "Server error (${r.code})"
                 is NetworkResult.Error -> error = r.exception.message
             }
+            // v0.1.82: viewing the cron list re-arms the alarm watcher. Jobs
+            // created elsewhere (API/Telegram/desktop) arm here — previously
+            // only a chat connect did, so a job created while the app was
+            // closed never got an alarm (the 1-min test that didn't ping).
+            CronWatcher.sync(context)
         }
     }
     LaunchedEffect(Unit) { load() }
