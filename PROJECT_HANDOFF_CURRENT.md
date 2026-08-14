@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-14 (v0.1.81 — one-shot catch-up)
-**Current version:** v0.1.81 (versionCode 81)
-**HEAD commit:** `6d49260` (v0.1.81 — one-shot catch-up)
+**Last updated:** 2026-08-14 (v0.1.82 — cron re-arm + session times)
+**Current version:** v0.1.82 (versionCode 82)
+**HEAD commit:** `e483df0` (v0.1.82 — cron re-arm + session times)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.82 (2026-08-14)
+- **Cron list re-arms alarms** — root cause of the 1-min test not pinging: opening Settings → Cron only refreshed the list; `CronWatcher.sync` ran only on chat connect, so a job created while the app was closed never had its alarm armed. `CronScreen.load()` now syncs after every list fetch (also runs catch-up — missed test runs surface on open). (`SystemScreens.kt`.)
+- **Session last-activity times** — landing-screen session rows show relative last-message time (`5m ago` / `3h ago` / `2d ago`) via `last_activity_at` (fallback `last_active` → `started_at`) + a "Last message: <description>" provenance line. (`SessionSummary` DTO, `SessionsScreen`.)
 
 ### DONE in v0.1.81 (2026-08-14)
 - **One-shot catch-up** — the 10-min cron test never notified because (a) the job was created via API while the app was closed → no sync → no alarm armed, and (b) catchUpMissedRuns only considered enabled jobs with a future next_run, but fired one-shots are marked `state=completed, enabled=false, next_run_at=null` — excluded twice over. Catch-up candidates now = 5 soonest scheduled jobs + up to 3 completed one-shots (started-within-12h + finished + unseen checks bound it). Missed one-shot reminders surface on the next app open. (`CronWatcher.catchUpMissedRuns`.)
