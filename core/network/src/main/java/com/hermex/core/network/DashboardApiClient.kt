@@ -339,6 +339,25 @@ object DashboardApiClient {
             }
         }
 
+    @Serializable
+    data class SessionMessagesResult(
+        @SerialName("session_id") val sessionId: String? = null,
+        val messages: List<JsonRpcClient.MessageData> = emptyList(),
+    )
+
+    /** A session's messages (cron run output lives here) — v0.1.78. */
+    suspend fun sessionMessages(sessionId: String, limit: Int = 10): NetworkResult<SessionMessagesResult> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = httpClient.newCall(
+                    Request.Builder().url("$restUrl/api/sessions/$sessionId/messages?limit=$limit").get().build()
+                ).execute()
+                response.handleResult(json, SessionMessagesResult.serializer())
+            } catch (e: Exception) {
+                NetworkResult.Error(e)
+            }
+        }
+
     /** List skills. Response: JSON array of skill infos. */
     suspend fun skillsList(): NetworkResult<List<SkillInfo>> =
         withContext(Dispatchers.IO) {

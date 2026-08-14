@@ -91,7 +91,10 @@ object CronWatcher {
             if (startedAt < now - 12 * 3600_000L) continue  // too old to surface
             if (run.endedAt == null) continue               // still running — alarms handle it
             prefs.edit().putString(KEY_LAST_SEEN + job.id, run.id).apply()
-            NotificationHelper.postCronRun(context, job.name, run.title, run.id)
+            NotificationHelper.postCronRun(
+                context, job.name, run.title, run.id,
+                output = fetchRunOutput(context, run.id),
+            )
             notified++
         }
         if (notified > 0) DebugLog.log("CRON", "Watcher", "catch-up: $notified missed run notification(s)")
@@ -121,7 +124,10 @@ object CronWatcher {
                                 val jobsResult = DashboardApiClient.cronJobs()
                                 val jobName = (jobsResult as? NetworkResult.Success)
                                     ?.data?.firstOrNull { it.id == jobId }?.name ?: jobId
-                                NotificationHelper.postCronRun(app, jobName, run.title, run.id)
+                                NotificationHelper.postCronRun(
+                                    app, jobName, run.title, run.id,
+                                    output = fetchRunOutput(app, run.id),
+                                )
                             }
                             // Re-arm everything from fresh data (schedule may have moved)
                             sync(app)
@@ -146,6 +152,22 @@ object CronWatcher {
                 Log.w(TAG, "onAlarm failed: ${e.message}")
                 sync(app)
             }
+        }
+    }
+
+    /** v0.1.78: the run's final assistant text = the cron report. */
+    private suspend fun fetchRunOutput(context: Context, runId: String): String? {
+        return try {
+            val res = DashboardApiClient.sessionMessages(runId, limit = 12)
+            if (res is NetworkResult.Success) {
+                res.data.messages
+                    .filter { it.role == "assistant" }
+                    .mapNotNull { it.resolvedContent }
+                    .lastOrNull { it.isNotBlank() }
+                    ?.trim()
+            } else null
+        } catch (e: Exception) {
+            null
         }
     }
 
