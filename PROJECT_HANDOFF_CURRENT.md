@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-14 (v0.1.87 — full-bleed + gauge)
-**Current version:** v0.1.87 (versionCode 87)
-**HEAD commit:** `1fbc280` (v0.1.87 — full-bleed + gauge)
+**Last updated:** 2026-08-14 (v0.1.88 — model picker)
+**Current version:** v0.1.88 (versionCode 88)
+**HEAD commit:** `fe9095d` (v0.1.88 — model picker)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.88 (2026-08-14)
+- **Model + reasoning display & picker** — compact chip next to the context gauge shows the current model (from `session.resume` info.model, refreshed on every 30s poll) + reasoning effort (config.yaml `reasoning_effort` or the saved pick). Tap opens a bottom sheet: model list from `model.options` (grouped by provider, current highlighted) + Low/Med/High effort chips. The pick persists (SettingsRepository) and flows into `session.create` for NEW chats — the desktop-composer contract; the server has no mid-conversation switch RPC yet (candidate patch). (`JsonRpcClient.modelOptions/createSession`, `ChatViewModelContract`, `DashboardChatViewModel`, `SessionsViewModel`, `ChatScreen.ModelPickerSheet`.)
 
 ### DONE in v0.1.87 (2026-08-14)
 - **Full-bleed assistant messages** — assistant text was capped at 400dp inside the bubble (`Markdown widthIn`) plus 8dp side insets, so neither the bubble nor the text used the full screen width (user-reported with screenshot). Assistant bubbles now go edge to edge (0 side padding) and text spans the full bubble; user bubbles keep the 320dp right-aligned style. (`ChatScreen.MessageBubble`.)
