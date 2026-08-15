@@ -11,7 +11,10 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
@@ -110,9 +113,44 @@ data class UiColorOverrides(
     val userBubble: Color? = null,
     val assistantBubble: Color? = null,
     val text: Color? = null,
+    // v0.1.95: extra chat surfaces (code blocks, thinking box, tool cards, gauge)
+    val codeBlock: Color? = null,
+    val thinkingBox: Color? = null,
+    val toolCard: Color? = null,
+    val gaugeTrack: Color? = null,
 ) {
     val isEmpty: Boolean
-        get() = background == null && userBubble == null && assistantBubble == null && text == null
+        get() = background == null && userBubble == null && assistantBubble == null && text == null &&
+            codeBlock == null && thinkingBox == null && toolCard == null && gaugeTrack == null
+}
+
+/**
+ * Resolved extra-surface colors (non-null) for the chat (v0.1.95). Defaults
+ * derive from the active scheme exactly as the pre-override code did
+ * (surfaceVariant alpha-over the background), so a user who never touches the
+ * new Appearance rows sees zero change. Provided via [LocalUiSurfaces] by
+ * [HermexTheme]; consumers read the resolved color directly — no alpha math at
+ * the call site.
+ */
+data class UiSurfaces(
+    /** Code block header + highlighted content + inline code chips. */
+    val codeBlock: Color,
+    /** THINKING box (finished messages) + live thinking ticker pill. */
+    val thinkingBox: Color,
+    /** TOOLS box, live activity panel, tool card surfaces. */
+    val toolCard: Color,
+    /** Context-window gauge track (bar stays accent/error — semantic). */
+    val gaugeTrack: Color,
+)
+
+/** CompositionLocal for the resolved extra chat surfaces (v0.1.95). */
+val LocalUiSurfaces = staticCompositionLocalOf {
+    UiSurfaces(
+        codeBlock = Color.Unspecified,
+        thinkingBox = Color.Unspecified,
+        toolCard = Color.Unspecified,
+        gaugeTrack = Color.Unspecified,
+    )
 }
 
 @Composable
@@ -137,6 +175,18 @@ fun HermexTheme(
         else -> LightColorScheme
     }
 
+    // v0.1.95: resolve the extra chat surfaces — per-part overrides win,
+    // otherwise derive from the scheme (same alpha math the pre-override code
+    // used, so defaults are byte-identical to before).
+    val uiSurfaces = remember(colorScheme, uiOverrides) {
+        UiSurfaces(
+            codeBlock = uiOverrides.codeBlock ?: colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            thinkingBox = uiOverrides.thinkingBox ?: colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            toolCard = uiOverrides.toolCard ?: colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            gaugeTrack = uiOverrides.gaugeTrack ?: colorScheme.surfaceVariant,
+        )
+    }
+
     // Set status bar color
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -147,9 +197,11 @@ fun HermexTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = if (monospace) MonoTypography else Typography,
-        content = content
-    )
+    CompositionLocalProvider(LocalUiSurfaces provides uiSurfaces) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = if (monospace) MonoTypography else Typography,
+            content = content
+        )
+    }
 }

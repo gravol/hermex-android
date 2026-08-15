@@ -80,13 +80,25 @@ class MainActivity : ComponentActivity() {
             val uiUserBubbleHex by settingsRepo.uiUserBubbleHex.collectAsState(initial = null)
             val uiAssistantBubbleHex by settingsRepo.uiAssistantBubbleHex.collectAsState(initial = null)
             val uiTextHex by settingsRepo.uiTextHex.collectAsState(initial = null)
+            // v0.1.95: extra chat surfaces (code/thinking/tool/gauge) — null = derive from scheme
+            val uiCodeBlockHex by settingsRepo.uiCodeBlockHex.collectAsState(initial = null)
+            val uiThinkingHex by settingsRepo.uiThinkingHex.collectAsState(initial = null)
+            val uiToolCardHex by settingsRepo.uiToolCardHex.collectAsState(initial = null)
+            val uiGaugeHex by settingsRepo.uiGaugeHex.collectAsState(initial = null)
             val uiMonospace by settingsRepo.uiMonospace.collectAsState(initial = false)
-            val uiOverrides = remember(uiBgHex, uiUserBubbleHex, uiAssistantBubbleHex, uiTextHex) {
+            val uiOverrides = remember(
+                uiBgHex, uiUserBubbleHex, uiAssistantBubbleHex, uiTextHex,
+                uiCodeBlockHex, uiThinkingHex, uiToolCardHex, uiGaugeHex,
+            ) {
                 UiColorOverrides(
                     background = uiBgHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
                     userBubble = uiUserBubbleHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
                     assistantBubble = uiAssistantBubbleHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
                     text = uiTextHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
+                    codeBlock = uiCodeBlockHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
+                    thinkingBox = uiThinkingHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
+                    toolCard = uiToolCardHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
+                    gaugeTrack = uiGaugeHex?.let { hex -> runCatching { hexToColor(hex) }.getOrNull() },
                 )
             }
             HermexTheme(accentColor = accentColor, uiOverrides = uiOverrides, monospace = uiMonospace) {

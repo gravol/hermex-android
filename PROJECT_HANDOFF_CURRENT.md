@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.94 — reply via ⋯ button, not long-press)
-**Current version:** v0.1.94 (versionCode 94)
-**HEAD commit:** see `git log` (v0.1.94 — reply via ⋯ button)
+**Last updated:** 2026-08-15 (v0.1.95 — theme extra surfaces: code/thinking/tool/gauge colors)
+**Current version:** v0.1.95 (versionCode 95)
+**HEAD commit:** see `git log` (v0.1.95 — theme extra surfaces)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -83,6 +83,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Retry/regenerate** — `retry()` finds the last user prompt, removes the last assistant message, and re-submits via `promptSubmit`. Retry button (Refresh icon) shown in the bottom bar when an assistant response exists. Same functionality in legacy SSE stack.
 - **Markdown rendering** — Assistant and user messages are rendered with the `multiplatform-markdown-renderer` library (v0.34.0, `-m3` module). Supports headings, bold, italic, code, fenced code blocks, tables, quotes, lists, and task lists. **Syntax highlighting** for code blocks (Kotlin, Java, Python, Bash, JSON, XML, Markdown) via the `-code` module and Highlights library. Streaming cursor preserved after markdown block. Uses `rememberMarkdownState` for efficient re-composition on delta updates.
 - **Background keepalive** — `WsKeepaliveService` foreground service keeps the process alive while the chat WebSocket is active. Started on WS connect, stopped on ViewModel clear. Uses `dataSync` foreground service type with a low-importance persistent notification.
+- **Theme extra surfaces (v0.1.95)** — code blocks, thinking box, tool cards and the context gauge each get their own color override (Settings → Appearance) via `LocalUiSurfaces`, independent of the assistant bubble color. Null = derive from the scheme (previous behavior).
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)
 `ApiClient`, `DTOs`, `SseParser`, `SetupScreen`/`SetupViewModel`, legacy `ChatViewModel`, and `HermesForegroundService` were fully deleted in v0.1.42. The app is dashboard JSON-RPC/WebSocket only.
@@ -545,13 +546,22 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
 
 ### Pinned (2026-08-15) — Theme/color versatility
-Parked at Jeff's request; implement on a future pass:
+Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95** (see below); 1–5 remain:
 1. **Custom color picker** — hex input + hue/sat wheel per part (removes the ~11-swatch ceiling).
 2. **Split assistant bubble from top bars/composer/drawer** — they currently share one `surfaceVariant` color.
 3. **Separate text roles** — user / assistant / secondary (timestamps/labels) instead of one global text color.
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
-6. **Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.
+6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.95 (2026-08-15) — Theme extra surfaces (pinned #6)
+- **Code blocks / thinking box / tool cards / context gauge get their own colors** — previously all four derived from `surfaceVariant` (the "Assistant bubbles & top bars" pick) with hardcoded alpha multipliers, so you couldn't give code a dark slab while keeping thinking subtle. New `UiColorOverrides` fields (`codeBlock`, `thinkingBox`, `toolCard`, `gaugeTrack`) resolve into a `UiSurfaces` value provided by a new `LocalUiSurfaces` CompositionLocal inside `HermexTheme`; defaults are byte-identical to the old alpha math, so nothing changes until you touch the new rows. (`Theme.kt`.)
+- **Settings → Appearance gains 4 rows** — Code blocks / Thinking box / Tool cards / Context gauge, each a swatch row from the same palette (Default = derive). New DataStore keys `ui_code_block_hex` / `ui_thinking_hex` / `ui_tool_card_hex` / `ui_gauge_hex`; `applyAppearance` extended (new params default null so presets still compile). (`SettingsRepository.kt`, `SettingsScreen.kt`, `MainActivity.kt`.)
+- **Honest live preview** — `AppearancePreview` now renders a code-block sample (header + mono line), a tool-card row sample (🔍 web_search · 1.2s ✓), the thinking box with the thinking color, and the context gauge as an accent fill over the themeable track — the old hardcoded `surfaceVariant@35%` thinking box that lied is gone. (`SettingsScreen.kt`.)
+- **Terminal preset sets code blocks to Input dark `#121512`** — the classic dark-on-charcoal slab; chip selection checks cover the new fields, Classic/Reset clear them. (`SettingsScreen.kt`.)
+- **Wired into the chat** — gauge `trackColor`, `ThinkingScrollBox` + live thinking pill, `ToolScrollBox` + `LiveActivityPanel` + tool-card surfaces, `CodeBlockShell` header, and code-block/inline-code backgrounds via the markdown library's `markdownColor(codeBackground=…)` hook on the `Markdown` call. Diff colors (semantic red/green/blue) and alert/error surfaces intentionally untouched. (`ChatScreen.kt`.)
+- **Minor default unification (note):** the live-activity panel, live thinking pill and tool-card surfaces previously used slightly different alphas (0.45 / 0.6 / 0.4); they now share the surface default (0.35) unless overridden. Code-block content background now follows the header at 55% surfaceVariant via `markdownColor` instead of the library's opaque default — marginally lighter, more consistent.
+- **Stream-end re-scroll** — when a turn finishes, the completed message's final layout (usage footer, markdown settle) lands a frame AFTER the state write, so the auto-scroll key (content length) doesn't re-fire and the last line could end up hidden behind the composer. The StreamLoop now waits one frame when streaming stops and re-scrolls to the true bottom (skipped when the user has scrolled up). (`ChatScreen.kt` StreamLoop.)
 
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)

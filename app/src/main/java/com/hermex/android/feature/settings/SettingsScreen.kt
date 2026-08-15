@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.hermex.android.ui.theme.LocalUiSurfaces
 import com.hermex.android.ui.theme.hexToColor
 import com.hermex.android.ui.theme.isDarkForeground
 import com.hermex.core.data.auth.KeychainStore
@@ -263,7 +264,7 @@ fun SettingsScreen(
 
             Text("Appearance", style = MaterialTheme.typography.titleSmall)
             Text(
-                "Tweak individual UI parts, or apply a full preset. Assistant bubbles and top bars share one color.",
+                "Tweak individual UI parts, or apply a full preset. Assistant bubbles and top bars share one color; code blocks, thinking box, tool cards and the context gauge have their own (v0.1.95).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -272,6 +273,11 @@ fun SettingsScreen(
             val savedUserBubble by settingsRepo.uiUserBubbleHex.collectAsState(initial = null)
             val savedAssistantBubble by settingsRepo.uiAssistantBubbleHex.collectAsState(initial = null)
             val savedTextColor by settingsRepo.uiTextHex.collectAsState(initial = null)
+            // v0.1.95: extra chat surfaces
+            val savedCodeBlock by settingsRepo.uiCodeBlockHex.collectAsState(initial = null)
+            val savedThinking by settingsRepo.uiThinkingHex.collectAsState(initial = null)
+            val savedToolCard by settingsRepo.uiToolCardHex.collectAsState(initial = null)
+            val savedGauge by settingsRepo.uiGaugeHex.collectAsState(initial = null)
             val savedMonospace by settingsRepo.uiMonospace.collectAsState(initial = false)
 
             // Live preview — see color changes instantly (v0.1.79)
@@ -281,6 +287,10 @@ fun SettingsScreen(
                 userBubbleHex = savedUserBubble,
                 assistantBubbleHex = savedAssistantBubble,
                 textHex = savedTextColor,
+                codeBlockHex = savedCodeBlock,
+                thinkingHex = savedThinking,
+                toolCardHex = savedToolCard,
+                gaugeHex = savedGauge,
                 monospace = savedMonospace,
             )
 
@@ -292,6 +302,10 @@ fun SettingsScreen(
                         savedUserBubble.isNullOrBlank() &&
                         savedAssistantBubble.isNullOrBlank() &&
                         savedTextColor.isNullOrBlank() &&
+                        savedCodeBlock.isNullOrBlank() &&
+                        savedThinking.isNullOrBlank() &&
+                        savedToolCard.isNullOrBlank() &&
+                        savedGauge.isNullOrBlank() &&
                         !savedMonospace,
                     onClick = {
                         scope.launch {
@@ -307,12 +321,20 @@ fun SettingsScreen(
                         savedUserBubble.equals("#1E3D24", ignoreCase = true) &&
                         savedAssistantBubble.equals("#0A0C0A", ignoreCase = true) &&
                         savedTextColor.equals("#A5D6A7", ignoreCase = true) &&
+                        savedCodeBlock.equals("#121512", ignoreCase = true) &&
+                        savedThinking.isNullOrBlank() &&
+                        savedToolCard.isNullOrBlank() &&
+                        savedGauge.isNullOrBlank() &&
                         savedMonospace,
                     onClick = {
                         // Desktop look: flat charcoal, no assistant bubble (same
-                        // color as bg), muted green user box, mint text, mono font.
+                        // color as bg), muted green user box, mint text, mono font,
+                        // input-dark code blocks.
                         scope.launch {
-                            settingsRepo.applyAppearance("#00FF41", "#0A0C0A", "#1E3D24", "#0A0C0A", "#A5D6A7")
+                            settingsRepo.applyAppearance(
+                                "#00FF41", "#0A0C0A", "#1E3D24", "#0A0C0A", "#A5D6A7",
+                                codeBlockHex = "#121512",
+                            )
                             settingsRepo.setUiMonospace(true)
                         }
                     },
@@ -324,6 +346,10 @@ fun SettingsScreen(
                         savedUserBubble.isNullOrBlank() &&
                         savedAssistantBubble.isNullOrBlank() &&
                         savedTextColor.isNullOrBlank() &&
+                        savedCodeBlock.isNullOrBlank() &&
+                        savedThinking.isNullOrBlank() &&
+                        savedToolCard.isNullOrBlank() &&
+                        savedGauge.isNullOrBlank() &&
                         !savedMonospace,
                     onClick = {
                         scope.launch {
@@ -369,6 +395,43 @@ fun SettingsScreen(
                 options = uiOptions,
                 selectedHex = savedTextColor,
                 onSelect = { hex -> scope.launch { settingsRepo.setUiTextHex(hex) } },
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            // v0.1.95: extra chat surfaces — separate from the assistant bubble
+            Text("Code blocks", style = MaterialTheme.typography.bodyMedium)
+            ColorSwatchRow(
+                options = uiOptions,
+                selectedHex = savedCodeBlock,
+                onSelect = { hex -> scope.launch { settingsRepo.setUiCodeBlockHex(hex) } },
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text("Thinking box", style = MaterialTheme.typography.bodyMedium)
+            ColorSwatchRow(
+                options = uiOptions,
+                selectedHex = savedThinking,
+                onSelect = { hex -> scope.launch { settingsRepo.setUiThinkingHex(hex) } },
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text("Tool cards", style = MaterialTheme.typography.bodyMedium)
+            ColorSwatchRow(
+                options = uiOptions,
+                selectedHex = savedToolCard,
+                onSelect = { hex -> scope.launch { settingsRepo.setUiToolCardHex(hex) } },
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text("Context gauge", style = MaterialTheme.typography.bodyMedium)
+            ColorSwatchRow(
+                options = uiOptions,
+                selectedHex = savedGauge,
+                onSelect = { hex -> scope.launch { settingsRepo.setUiGaugeHex(hex) } },
             )
 
             Spacer(Modifier.height(4.dp))
@@ -455,7 +518,9 @@ private val uiOptions = listOf(
 /**
  * Live mini-chat preview (v0.1.79) — renders with the current appearance
  * overrides so color changes are visible instantly: a user bubble (right,
- * green-tinted), a flat assistant message, and an accent context gauge.
+ * green-tinted), a flat assistant message, an accent context gauge, and since
+ * v0.1.95 the extra chat surfaces (code block, thinking box, tool card) so
+ * those new rows preview honestly too.
  */
 @Composable
 private fun AppearancePreview(
@@ -464,6 +529,10 @@ private fun AppearancePreview(
     userBubbleHex: String?,
     assistantBubbleHex: String?,
     textHex: String?,
+    codeBlockHex: String?,
+    thinkingHex: String?,
+    toolCardHex: String?,
+    gaugeHex: String?,
     monospace: Boolean,
 ) {
     val accent = accentHex?.let { runCatching { hexToColor(it) }.getOrNull() }
@@ -476,6 +545,16 @@ private fun AppearancePreview(
         ?: MaterialTheme.colorScheme.background
     val textColor = textHex?.let { runCatching { hexToColor(it) }.getOrNull() }
         ?: MaterialTheme.colorScheme.onBackground
+    // v0.1.95: extra surfaces — explicit hex wins, otherwise the exact resolved
+    // value the chat uses (LocalUiSurfaces, provided by HermexTheme).
+    val codeBlock = codeBlockHex?.let { runCatching { hexToColor(it) }.getOrNull() }
+        ?: LocalUiSurfaces.current.codeBlock
+    val thinkingBox = thinkingHex?.let { runCatching { hexToColor(it) }.getOrNull() }
+        ?: LocalUiSurfaces.current.thinkingBox
+    val toolCard = toolCardHex?.let { runCatching { hexToColor(it) }.getOrNull() }
+        ?: LocalUiSurfaces.current.toolCard
+    val gaugeTrack = gaugeHex?.let { runCatching { hexToColor(it) }.getOrNull() }
+        ?: LocalUiSurfaces.current.gaugeTrack
     val fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default
     val textStyle = MaterialTheme.typography.bodySmall.copy(
         fontFamily = fontFamily,
@@ -494,15 +573,22 @@ private fun AppearancePreview(
         shape = RoundedCornerShape(14.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Context gauge, accent-colored like the chat top bar
+            // Context gauge — accent fill over the themeable track (v0.1.95)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
                         .width(48.dp)
                         .height(3.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(accent),
-                )
+                        .background(gaugeTrack),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(0.24f)
+                            .background(accent),
+                    )
+                }
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = "243k/1.0M",
@@ -534,9 +620,9 @@ private fun AppearancePreview(
 
             Spacer(Modifier.height(10.dp))
 
-            // Thinking box (matching the chat's box styling)
+            // Thinking box (themeable surface, v0.1.95)
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                color = thinkingBox,
                 shape = RoundedCornerShape(10.dp),
             ) {
                 Column {
@@ -544,14 +630,82 @@ private fun AppearancePreview(
                         text = "THINKING",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = textColor.copy(alpha = 0.7f),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                    HorizontalDivider(color = textColor.copy(alpha = 0.15f))
                     Text(
                         text = "Checking the weather and calendar…",
                         style = textStyle.copy(fontSize = 10.sp, color = textStyle.color.copy(alpha = 0.7f)),
                         modifier = Modifier.padding(10.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Code block sample (themeable surface, v0.1.95)
+            Surface(
+                color = codeBlock,
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "bash",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = fontFamily,
+                                color = textColor.copy(alpha = 0.6f),
+                            ),
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = "Copy",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = fontFamily,
+                                color = textColor.copy(alpha = 0.6f),
+                            ),
+                        )
+                    }
+                    HorizontalDivider(color = textColor.copy(alpha = 0.15f))
+                    Text(
+                        text = "pip install hermes-agent",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            color = textColor.copy(alpha = 0.85f),
+                        ),
+                        modifier = Modifier.padding(10.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Tool card sample (themeable surface, v0.1.95)
+            Surface(
+                color = toolCard,
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("🔍", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "web_search · 1.2s ✓",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = fontFamily,
+                            color = textColor.copy(alpha = 0.8f),
+                        ),
                     )
                 }
             }

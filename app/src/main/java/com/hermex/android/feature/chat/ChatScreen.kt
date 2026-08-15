@@ -60,6 +60,7 @@ import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.highlightedCodeBlock
 import com.mikepenz.markdown.compose.elements.highlightedCodeFence
 import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -88,6 +89,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.hermex.android.ui.theme.LocalUiSurfaces
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import com.hermex.core.network.JsonRpcClient
@@ -357,6 +359,24 @@ fun ChatScreen(
                             scrollGeneration = s.scrollGeneration,
                             reason = "StreamLoop",
                         )
+                        // Turn completion (v0.1.95): the finished message's final
+                        // layout (usage footer, markdown settle) lands a frame
+                        // AFTER the state write, so the snapshot key (content
+                        // length) doesn't change and no re-scroll fires — the
+                        // last line can end up behind the composer. Wait one
+                        // frame and re-scroll to the true bottom.
+                        if (!s.isStreaming) {
+                            withFrameNanos { }
+                            if (!userScrolledUp && s.messages.isNotEmpty()) {
+                                autoScrollToBottom(
+                                    listState = listState,
+                                    targetIndex = s.messages.lastIndex,
+                                    totalItems = s.messages.size,
+                                    scrollGeneration = s.scrollGeneration,
+                                    reason = "StreamEnd",
+                                )
+                            }
+                        }
                     }
                 }
             DebugLog.log("SCROLL", "StreamLoop", "ended (isStreaming=${state.isStreaming} messages=${state.messages.size})")
@@ -514,7 +534,8 @@ fun ChatScreen(
                                 } else {
                                     MaterialTheme.colorScheme.primary
                                 },
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                // v0.1.95: gauge track is a themeable extra surface
+                                trackColor = LocalUiSurfaces.current.gaugeTrack,
                             )
                             Text(
                                 text = when {
@@ -1151,7 +1172,8 @@ private fun ThinkingScrollBox(text: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        // v0.1.95: thinking box is a themeable extra surface
+        color = LocalUiSurfaces.current.thinkingBox,
         shape = RoundedCornerShape(10.dp),
     ) {
         Column {
@@ -1198,7 +1220,8 @@ private fun LiveThinkingTicker(text: String) {
     ) {
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+            // v0.1.95: live thinking pill shares the themeable thinking-box color
+            color = LocalUiSurfaces.current.thinkingBox,
             modifier = Modifier.widthIn(max = 340.dp),
         ) {
             Row(
@@ -1327,6 +1350,13 @@ private fun MessageBubble(
                 SelectionContainer {
                     Markdown(
                         markdownState = mdState,
+                        // v0.1.95: code block + inline code backgrounds are a
+                        // themeable extra surface (library reads these via
+                        // MarkdownTheme.colors inside highlightedCodeBlock).
+                        colors = markdownColor(
+                            codeBackground = LocalUiSurfaces.current.codeBlock,
+                            inlineCodeBackground = LocalUiSurfaces.current.codeBlock,
+                        ),
                         // v0.1.87: no width cap for assistant messages — text spans
                         // the full bubble edge to edge. User bubbles keep the cap
                         // (they're 320dp max anyway).
@@ -1448,7 +1478,8 @@ private fun ToolCallCard(toolCall: UiToolCall) {
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
+        // v0.1.95: tool cards are a themeable extra surface
+        color = LocalUiSurfaces.current.toolCard,
         shape = RoundedCornerShape(8.dp),
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
@@ -1525,7 +1556,8 @@ private fun ToolCallCard(toolCall: UiToolCall) {
                         )
                         Spacer(Modifier.height(2.dp))
                         Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            // v0.1.95: args box inside a tool card
+                            color = LocalUiSurfaces.current.toolCard,
                             shape = RoundedCornerShape(4.dp),
                         ) {
                             Text(
@@ -1548,7 +1580,8 @@ private fun ToolCallCard(toolCall: UiToolCall) {
                         )
                         Spacer(Modifier.height(2.dp))
                         Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            // v0.1.95: result box inside a tool card
+                            color = LocalUiSurfaces.current.toolCard,
                             shape = RoundedCornerShape(4.dp),
                         ) {
                             Text(
@@ -1844,7 +1877,8 @@ private fun LiveActivityPanel(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        // v0.1.95: live activity panel is a themeable extra surface (tool cards)
+        color = LocalUiSurfaces.current.toolCard,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
     ) {
         Column {
@@ -1975,7 +2009,8 @@ private fun ToolScrollBox(toolCalls: List<UiToolCall>) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        // v0.1.95: tools box is a themeable extra surface
+        color = LocalUiSurfaces.current.toolCard,
         shape = RoundedCornerShape(10.dp),
     ) {
         Column {
@@ -2251,7 +2286,8 @@ private fun CodeBlockShell(code: String, language: String, content: @Composable 
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                // v0.1.95: code block header is a themeable extra surface
+                .background(LocalUiSurfaces.current.codeBlock)
                 .padding(start = 10.dp, end = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,

@@ -21,6 +21,14 @@ import kotlinx.coroutines.flow.map
  * - uiUserBubbleHex → user message bubbles (primaryContainer)
  * - uiAssistantBubbleHex → assistant bubbles + top bars / composer chrome (surfaceVariant)
  *
+ * Extra chat surfaces (v0.1.95): separate per-surface colors so e.g. code
+ * blocks can be dark while thinking stays subtle, independent of the assistant
+ * bubble color:
+ * - uiCodeBlockHex → code block header + highlighted content + inline code
+ * - uiThinkingHex → THINKING box (finished) + live thinking ticker pill
+ * - uiToolCardHex → TOOLS box, live activity panel, tool card surfaces
+ * - uiGaugeHex → context-window gauge track (bar stays accent/error)
+ *
  * Pinned sessions (v0.1.49): locally-pinned session ids (mirrors the desktop
  * app's client-side pinning — there is no server-side pin).
  */
@@ -50,6 +58,19 @@ class SettingsRepository(context: Context) {
     val uiTextHex: Flow<String?> = store.getString(KEY_UI_TEXT)
         .map { it?.takeIf { s -> s.isNotBlank() } }
 
+    // v0.1.95: extra chat surfaces — null/blank = derive from scheme
+    val uiCodeBlockHex: Flow<String?> = store.getString(KEY_UI_CODE_BLOCK)
+        .map { it?.takeIf { s -> s.isNotBlank() } }
+
+    val uiThinkingHex: Flow<String?> = store.getString(KEY_UI_THINKING)
+        .map { it?.takeIf { s -> s.isNotBlank() } }
+
+    val uiToolCardHex: Flow<String?> = store.getString(KEY_UI_TOOL_CARD)
+        .map { it?.takeIf { s -> s.isNotBlank() } }
+
+    val uiGaugeHex: Flow<String?> = store.getString(KEY_UI_GAUGE)
+        .map { it?.takeIf { s -> s.isNotBlank() } }
+
     /** Monospace font everywhere (desktop terminal look). */
     val uiMonospace: Flow<Boolean> = store.getBoolean(KEY_UI_MONOSPACE).map { it ?: false }
 
@@ -69,6 +90,15 @@ class SettingsRepository(context: Context) {
     suspend fun setUiAssistantBubbleHex(value: String?) = store.setString(KEY_UI_ASSISTANT_BUBBLE, value.orEmpty())
 
     suspend fun setUiTextHex(value: String?) = store.setString(KEY_UI_TEXT, value.orEmpty())
+
+    // v0.1.95: extra chat surface setters
+    suspend fun setUiCodeBlockHex(value: String?) = store.setString(KEY_UI_CODE_BLOCK, value.orEmpty())
+
+    suspend fun setUiThinkingHex(value: String?) = store.setString(KEY_UI_THINKING, value.orEmpty())
+
+    suspend fun setUiToolCardHex(value: String?) = store.setString(KEY_UI_TOOL_CARD, value.orEmpty())
+
+    suspend fun setUiGaugeHex(value: String?) = store.setString(KEY_UI_GAUGE, value.orEmpty())
 
     suspend fun setUiMonospace(value: Boolean) = store.setBoolean(KEY_UI_MONOSPACE, value)
 
@@ -94,12 +124,21 @@ class SettingsRepository(context: Context) {
         userBubbleHex: String?,
         assistantBubbleHex: String?,
         textHex: String?,
+        // v0.1.95: extra chat surfaces — presets may set them or leave null (= derive)
+        codeBlockHex: String? = null,
+        thinkingHex: String? = null,
+        toolCardHex: String? = null,
+        gaugeHex: String? = null,
     ) {
         store.setString(KEY_ACCENT_COLOR, accentHex.orEmpty())
         store.setString(KEY_UI_BACKGROUND, backgroundHex.orEmpty())
         store.setString(KEY_UI_USER_BUBBLE, userBubbleHex.orEmpty())
         store.setString(KEY_UI_ASSISTANT_BUBBLE, assistantBubbleHex.orEmpty())
         store.setString(KEY_UI_TEXT, textHex.orEmpty())
+        store.setString(KEY_UI_CODE_BLOCK, codeBlockHex.orEmpty())
+        store.setString(KEY_UI_THINKING, thinkingHex.orEmpty())
+        store.setString(KEY_UI_TOOL_CARD, toolCardHex.orEmpty())
+        store.setString(KEY_UI_GAUGE, gaugeHex.orEmpty())
     }
 
     private companion object {
@@ -110,6 +149,10 @@ class SettingsRepository(context: Context) {
         const val KEY_UI_USER_BUBBLE = "ui_user_bubble_hex"
         const val KEY_UI_ASSISTANT_BUBBLE = "ui_assistant_bubble_hex"
         const val KEY_UI_TEXT = "ui_text_hex"
+        const val KEY_UI_CODE_BLOCK = "ui_code_block_hex"
+        const val KEY_UI_THINKING = "ui_thinking_hex"
+        const val KEY_UI_TOOL_CARD = "ui_tool_card_hex"
+        const val KEY_UI_GAUGE = "ui_gauge_hex"
         const val KEY_UI_MONOSPACE = "ui_monospace"
         const val KEY_PINNED_SESSIONS = "pinned_session_ids"
         const val KEY_MODEL_PICK = "model_pick"
