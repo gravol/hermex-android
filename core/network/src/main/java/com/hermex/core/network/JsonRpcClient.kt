@@ -454,14 +454,40 @@ class JsonRpcClient(
     }
 
     /** Create a new session. Returns the live session id (usable with session.resume). */
-    suspend fun createSession(): String {
-        DebugLog.log("RPC", "JsonRpc", "session.create")
+    suspend fun createSession(model: String? = null, reasoningEffort: String? = null): String {
+        DebugLog.log("RPC", "JsonRpc", "session.create (model=$model effort=$reasoningEffort)")
+        val params = mutableMapOf<String, Any>("source" to "api")
+        if (!model.isNullOrBlank()) params["model"] = model
+        if (!reasoningEffort.isNullOrBlank()) params["reasoning_effort"] = reasoningEffort
         val result: CreateSessionResult = request(
             "session.create",
-            mapOf("source" to "api"),
+            params,
         )
         return result.session_id
             ?: throw JsonRpcException(-1, "session.create returned no session_id")
+    }
+
+    @Serializable
+    data class ModelProviderRow(
+        val slug: String = "",
+        val name: String? = null,
+        val models: List<String> = emptyList(),
+    )
+
+    @Serializable
+    data class ModelOptionsResult(
+        val model: String? = null,
+        val provider: String? = null,
+        val providers: List<ModelProviderRow> = emptyList(),
+    )
+
+    /** Model picker data (v0.1.88): current model + provider/model list. */
+    suspend fun modelOptions(): ModelOptionsResult {
+        val result: ModelOptionsResult = request(
+            "model.options",
+            mapOf("explicit_only" to true),
+        )
+        return result
     }
 
     /**

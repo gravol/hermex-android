@@ -3,10 +3,14 @@ package com.hermex.android.feature.chat
 import android.app.Application
 import android.util.Log
 import com.hermex.android.AppState
+import com.hermex.android.feature.settings.SettingsRepository
 import com.hermex.android.service.WsKeepaliveService
 import com.hermex.android.notify.CronWatcher
 import com.hermex.android.notify.NotificationHelper
+import com.hermex.core.network.DashboardApiClient
+import com.hermex.core.network.NetworkResult
 import androidx.compose.runtime.getValue
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
@@ -83,6 +87,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         DebugLog.log("STATE", "SessionID",
             "init() — sessionId ASSIGNED: old=$oldSid new=$sessionId (DB key) title=$sessionTitle")
         connectWsAndStart()
+        loadReasoningFromConfig()
     }
 
     override fun loadMessages() {
@@ -184,6 +189,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     error = null,
                     contextUsed = context.first,
                     contextMax = context.second,
+                    // v0.1.88: current model from the resume payload
+                    currentModel = (result.info?.get("model") as? JsonObject)?.get("id")
+                        ?.jsonPrimitive?.contentOrNull
+                        ?: result.info?.get("model")?.jsonPrimitive?.contentOrNull
+                        ?: uiState.currentModel,
                     todos = todos.orEmpty(),
                 )
                 val loadDuration = if (sessionLoadStartTime > 0) System.currentTimeMillis() - sessionLoadStartTime else -1L
@@ -921,6 +931,46 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     override suspend fun completeSlash(text: String): List<JsonRpcClient.SlashItem> =
         rpcClient.completeSlash(text)
 
+    // ── v0.1.88: model picker ──
+
+    /** Model options for the picker sheet. */
+    override suspend fun loadModelOptions(): JsonRpcClient.ModelOptionsResult = rpcClient.modelOptions()
+
+    /** Persist the user's model/effort pick (applies to NEW sessions) + reflect it. */
+    override fun saveModelPick(model: String, reasoning: String) {
+        viewModelScope.launch {
+            val settingsRepo = SettingsRepository(getApplication())
+            settingsRepo.setModelPick(model)
+            settingsRepo.setReasoningPick(reasoning)
+            uiState = uiState.copy(currentReasoning = reasoning.ifBlank { null })
+        }
+    }
+
+    /** Read the profile's reasoning_effort (config.yaml) once, for the chip. */
+    fun loadReasoningFromConfig() {
+        viewModelScope.launch {
+            try {
+                val settingsRepo = SettingsRepository(getApplication())
+                val pick = settingsRepo.reasoningPick.first()
+                if (pick.isNotBlank()) {
+                    uiState = uiState.copy(currentReasoning = pick)
+                    return@launch
+                }
+                when (val r = DashboardApiClient.configRaw()) {
+                    is NetworkResult.Success -> {
+                        val yaml = r.data.yaml.orEmpty()
+                        val effort = Regex("""reasoning_effort:\s*["']?([a-z]+)""")
+                            .find(yaml)?.groupValues?.get(1)
+                        if (effort != null) {
+                            uiState = uiState.copy(currentReasoning = effort)
+                        }
+                    }
+                    else -> {}
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     /** Whether the chat screen is currently visible (background-turn tracking). */
     private var screenVisible = true
 
@@ -958,6 +1008,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                 contextUsed = ctx.first ?: uiState.contextUsed,
                                 contextMax = ctx.second ?: uiState.contextMax,
                             )
+                        }
+                        // v0.1.88: keep the model chip fresh on every poll
+                        val m = result.info?.get("model")?.jsonPrimitive?.contentOrNull
+                        if (!m.isNullOrBlank() && m != uiState.currentModel) {
+                            uiState = uiState.copy(currentModel = m)
                         }
                     } catch (_: Exception) {
                         // Best-effort — loop back and try again.

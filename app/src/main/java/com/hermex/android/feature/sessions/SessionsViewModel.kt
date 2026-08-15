@@ -12,6 +12,7 @@ import com.hermex.core.network.WsConnectionManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
@@ -64,8 +65,13 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
                 wsConnection.connect()
                 val rpcClient = JsonRpcClient(wsConnection, viewModelScope)
                 rpcClient.start()
-                val sid = rpcClient.createSession()
-                DebugLog.log("INFO", "SessionsVM", "session.create → $sid")
+                // v0.1.88: apply the user's model/effort pick (sticky, like the
+                // desktop composer) to the new session.
+                val modelPick = settingsRepo.modelPick.first().ifBlank { null }
+                val reasoningPick = settingsRepo.reasoningPick.first().ifBlank { null }
+                val sid = rpcClient.createSession(model = modelPick, reasoningEffort = reasoningPick)
+                DebugLog.log("INFO", "SessionsVM",
+                    "session.create → $sid (model=$modelPick effort=$reasoningPick)")
                 onDone(sid)
             } catch (e: Exception) {
                 Log.e("Hermex", "SessionsViewModel: createSession failed", e)

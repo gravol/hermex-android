@@ -255,6 +255,10 @@ fun ChatScreen(
     // ── Slash-command completions (v0.1.65) ──
     var composerFocused by remember { mutableStateOf(false) }
     var slashItems by remember { mutableStateOf<List<JsonRpcClient.SlashItem>?>(null) }
+
+    // ── Model picker (v0.1.88) ──
+    var showModelPicker by remember { mutableStateOf(false) }
+
     LaunchedEffect(composerText, composerFocused, state.isStreaming) {
         val text = composerText
         if (composerFocused && !state.isStreaming && text.startsWith("/")) {
@@ -476,6 +480,25 @@ fun ChatScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
+                            // v0.1.88: model chip — shows current model + reasoning
+                            // effort; tap opens the picker sheet.
+                            val modelText = buildString {
+                                append(state.currentModel?.let { shortModelName(it) } ?: "")
+                                if (isNotBlank()) append(" · ")
+                                append(state.currentReasoning?.let { effortShort(it) } ?: "")
+                            }
+                            if (modelText.isNotBlank()) {
+                                Text(
+                                    text = modelText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { showModelPicker = true }
+                                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                                )
+                            }
                             LinearProgressIndicator(
                                 progress = { fraction },
                                 modifier = Modifier
@@ -943,6 +966,14 @@ fun ChatScreen(
                 )
             }
         }
+    }
+
+    // ── Model Picker Sheet (v0.1.88) ──
+    if (showModelPicker) {
+        ModelPickerSheet(
+            viewModel = viewModel,
+            onDismiss = { showModelPicker = false },
+        )
     }
 
     // ── Tool Approval Dialog ──
@@ -2153,5 +2184,147 @@ private fun TodoRow(todo: UiTodo) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/** Short display name for a model id (v0.1.88). */
+private fun shortModelName(model: String): String {
+    // "deepseek/deepseek-v4-pro" → "v4-pro"; "deepseek-v4-flash" → "v4-flash"
+    val last = model.substringAfterLast('/').substringAfterLast(':')
+    return last.removePrefix("deepseek-").removePrefix("deepseek").take(24)
+}
+
+/** Reasoning effort label (v0.1.88). */
+private fun effortShort(effort: String): String = when (effort.lowercase()) {
+    "ultra" -> "ultra"
+    "high" -> "high"
+    "medium", "med" -> "med"
+    "low" -> "low"
+    else -> effort.take(8)
+}
+
+private val EFFORT_OPTIONS = listOf("low", "medium", "high")
+
+/**
+ * Model + reasoning picker (v0.1.88). Reads model.options from the server,
+ * shows providers grouped with their models; the selection persists and
+ * applies to NEW sessions (desktop-composer contract — there is no
+ * mid-conversation switch RPC yet).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModelPickerSheet(
+    viewModel: ChatViewModelContract,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var options by remember { mutableStateOf<JsonRpcClient.ModelOptionsResult?>(null) }
+    var selectedModel by remember { mutableStateOf("") }
+    var selectedEffort by remember { mutableStateOf("medium") }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        try {
+            val opts = viewModel.loadModelOptions()
+            options = opts
+            selectedModel = opts.model ?: ""
+        } catch (e: Exception) {
+            error = e.message ?: "Failed to load models"
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text("Model & Reasoning", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Applies to new chats (server contract). Current chat stays as-is.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            error?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+            }
+
+            if (options == null) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                }
+            } else {
+                options!!.providers.forEach { provider ->
+                    if (provider.models.isEmpty()) return@forEach
+                    Text(
+                        text = provider.name ?: provider.slug,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                    )
+                    provider.models.forEach { model ->
+                        val selected = model == selectedModel
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                )
+                                .clickable { selectedModel = model }
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = shortModelName(model),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (selected) {
+                                Text("✓", color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text("Reasoning effort", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    EFFORT_OPTIONS.forEach { effort ->
+                        FilterChip(
+                            selected = selectedEffort == effort,
+                            onClick = { selectedEffort = effort },
+                            label = { Text(effort.replaceFirstChar { it.uppercase() }) },
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        scope.launch {
+                            saving = true
+                            viewModel.saveModelPick(selectedModel, selectedEffort)
+                            saving = false
+                            Toast.makeText(context, "Saved — applies to new chats", Toast.LENGTH_SHORT).show()
+                            onDismiss()
+                        }
+                    },
+                    enabled = !saving && selectedModel.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (saving) "Saving…" else "Save for new chats")
+                }
+            }
+        }
     }
 }

@@ -61,6 +61,9 @@ data class ChatUiState(
     // Null until the server reports a real reading.
     val contextUsed: Long? = null,
     val contextMax: Long? = null,
+    // v0.1.88: current model + reasoning effort (from resume info / config).
+    val currentModel: String? = null,
+    val currentReasoning: String? = null,
     // Agent task list (todo tool state, from tool.complete events / history replay).
     // Non-empty = the Tasks card shows above the message list.
     val todos: List<UiTodo> = emptyList(),

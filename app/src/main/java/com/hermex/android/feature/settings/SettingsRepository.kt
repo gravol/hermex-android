@@ -72,6 +72,13 @@ class SettingsRepository(context: Context) {
 
     suspend fun setUiMonospace(value: Boolean) = store.setBoolean(KEY_UI_MONOSPACE, value)
 
+    // v0.1.88: model picker — applied to NEW sessions (desktop-composer contract)
+    val modelPick: Flow<String> = store.getString(KEY_MODEL_PICK).map { it ?: "" }
+    val reasoningPick: Flow<String> = store.getString(KEY_REASONING_PICK).map { it ?: "" }
+
+    suspend fun setModelPick(value: String) = store.setString(KEY_MODEL_PICK, value)
+    suspend fun setReasoningPick(value: String) = store.setString(KEY_REASONING_PICK, value)
+
     suspend fun setPinnedSessionIds(ids: Set<String>) = store.setStringSet(KEY_PINNED_SESSIONS, ids)
 
     suspend fun togglePinned(sessionId: String) {
@@ -105,5 +112,7 @@ class SettingsRepository(context: Context) {
         const val KEY_UI_TEXT = "ui_text_hex"
         const val KEY_UI_MONOSPACE = "ui_monospace"
         const val KEY_PINNED_SESSIONS = "pinned_session_ids"
+        const val KEY_MODEL_PICK = "model_pick"
+        const val KEY_REASONING_PICK = "reasoning_pick"
     }
 }

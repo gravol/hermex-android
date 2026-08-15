@@ -34,4 +34,10 @@ abstract class ChatViewModelContract(application: Application) : AndroidViewMode
     open fun clearCompletedWhileAway() {}
     /** Slash-command completion (server-ranked). */
     open suspend fun completeSlash(text: String): List<JsonRpcClient.SlashItem> = emptyList()
+
+    /** Model picker (v0.1.88): model options + persisting the pick. */
+    open suspend fun loadModelOptions(): JsonRpcClient.ModelOptionsResult =
+        JsonRpcClient.ModelOptionsResult()
+
+    open fun saveModelPick(model: String, reasoning: String) {}
 }
