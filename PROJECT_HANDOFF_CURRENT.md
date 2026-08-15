@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.92 — mid-turn slash commands)
-**Current version:** v0.1.92 (versionCode 92)
-**HEAD commit:** see `git log` (v0.1.92 — mid-turn slash commands)
+**Last updated:** 2026-08-15 (v0.1.93 — copy/select/reply)
+**Current version:** v0.1.93 (versionCode 93)
+**HEAD commit:** see `git log` (v0.1.93 — copy/select/reply)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -556,6 +556,11 @@ Parked at Jeff's request; implement on a future pass:
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.93 (2026-08-15)
+- **Code-block copy buttons** — every code block/fence now renders with a header bar (language label + Copy button) above the highlighted code; copies just the code. Custom `CopyableCodeBlock`/`CopyableCodeFence` wrap the existing `highlightedCodeBlock`/`highlightedCodeFence` via `markdownComponents`. (`ChatScreen.kt` `CodeBlockShell`.)
+- **Selectable text** — messages wrapped in `SelectionContainer`, so any text can be selected (not just whole-message copy). (`ChatScreen.kt` `MessageBubble`.)
+- **Reply-to-message** — long-press a message opens a Reply/Copy dialog; Reply quotes the message (`> …`) into the composer for follow-ups like "what did you mean by this". Replaces the old long-press-copy-whole-message. (`ChatScreen.kt` `replyTarget` + dialog.)
 
 ### DONE in v0.1.92 (2026-08-15)
 - **Mid-turn slash commands** — removed the Stop button; the composer now always shows Send. While a turn streams you can type `/stop` / `/interrupt` / `/halt` (→ `session.interrupt` — NOT slash.exec, whose `/stop` kills background processes), `/steer <x>` (injects after the next tool call), `/queue <x>` (submits as a prompt, server auto-queues), or normal text (also auto-queued). `sendSlashCommand` now handles the `{"type":"send","message":...}` response shape (was rendering raw JSON for `/queue`). (`ChatScreen` button row, `DashboardChatViewModel.sendMessage`/`submitPrompt`/`sendSlashCommand`.)

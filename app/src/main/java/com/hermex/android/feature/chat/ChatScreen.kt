@@ -28,6 +28,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
@@ -52,6 +54,7 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import com.mikepenz.markdown.compose.components.MarkdownComponentModel
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.highlightedCodeBlock
 import com.mikepenz.markdown.compose.elements.highlightedCodeFence
@@ -257,6 +260,7 @@ fun ChatScreen(
 
     // ── Model picker (v0.1.88) ──
     var showModelPicker by remember { mutableStateOf(false) }
+    var replyTarget by remember { mutableStateOf<UiMessage?>(null) }
 
     LaunchedEffect(composerText, composerFocused, state.isStreaming) {
         val text = composerText
@@ -924,13 +928,7 @@ fun ChatScreen(
                                 MessageBubble(
                                     message = msg,
                                     sameSender = sameSender,
-                                    onLongPress = {
-                                        val textToCopy = if (msg.content.isNotBlank()) msg.content
-                                            else msg.thinkingText ?: return@MessageBubble
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        clipboard.setPrimaryClip(ClipData.newPlainText("Hermes message", textToCopy))
-                                        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                                    },
+                                    onLongPress = { replyTarget = msg },
                                     onToggleThinking = { viewModel.toggleThinking(msg.id) },
                                 )
                             }
@@ -961,6 +959,43 @@ fun ChatScreen(
         ModelPickerSheet(
             viewModel = viewModel,
             onDismiss = { showModelPicker = false },
+        )
+    }
+
+    // ── Reply / Copy dialog (v0.1.93) — long-press a message ──
+    replyTarget?.let { target ->
+        val replyText = target.content.ifBlank { target.thinkingText ?: "" }
+        AlertDialog(
+            onDismissRequest = { replyTarget = null },
+            title = { Text("Message") },
+            text = {
+                Text(
+                    text = replyText.take(300).ifBlank { "(tool activity)" },
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 8,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    // Quote the message into the composer so the user can ask
+                    // "what did you mean by this".
+                    val quote = replyText.take(500).lineSequence()
+                        .joinToString("\n") { if (it.isBlank()) ">" else "> $it" }
+                    composerText = "$quote\n\n"
+                    replyTarget = null
+                }) { Text("Reply") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    if (replyText.isNotBlank()) {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Hermes message", replyText))
+                        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                    }
+                    replyTarget = null
+                }) { Text("Copy") }
+            },
         )
     }
 
@@ -1289,26 +1324,30 @@ private fun MessageBubble(
                     content = message.content,
                     immediate = true,
                 )
-                Markdown(
-                    markdownState = mdState,
-                    // v0.1.87: no width cap for assistant messages — text spans
-                    // the full bubble edge to edge. User bubbles keep the cap
-                    // (they're 320dp max anyway).
-                    modifier = if (isUser) Modifier.widthIn(max = 400.dp) else Modifier.fillMaxWidth(),
-                    typography = markdownTypography(
-                        h1 = MaterialTheme.typography.titleLarge,
-                        h2 = MaterialTheme.typography.titleMedium,
-                        h3 = MaterialTheme.typography.titleSmall,
-                        h4 = MaterialTheme.typography.bodyLarge,
-                        h5 = MaterialTheme.typography.bodyMedium,
-                        h6 = MaterialTheme.typography.bodyMedium,
-                        text = MaterialTheme.typography.bodyMedium,
-                    ),
-                    components = markdownComponents(
-                        codeBlock = highlightedCodeBlock,
-                        codeFence = highlightedCodeFence,
-                    ),
-                )
+                // Selectable text (v0.1.93): wrap in SelectionContainer so any
+                // text — not just whole-message copy — can be selected.
+                SelectionContainer {
+                    Markdown(
+                        markdownState = mdState,
+                        // v0.1.87: no width cap for assistant messages — text spans
+                        // the full bubble edge to edge. User bubbles keep the cap
+                        // (they're 320dp max anyway).
+                        modifier = if (isUser) Modifier.widthIn(max = 400.dp) else Modifier.fillMaxWidth(),
+                        typography = markdownTypography(
+                            h1 = MaterialTheme.typography.titleLarge,
+                            h2 = MaterialTheme.typography.titleMedium,
+                            h3 = MaterialTheme.typography.titleSmall,
+                            h4 = MaterialTheme.typography.bodyLarge,
+                            h5 = MaterialTheme.typography.bodyMedium,
+                            h6 = MaterialTheme.typography.bodyMedium,
+                            text = MaterialTheme.typography.bodyMedium,
+                        ),
+                        components = markdownComponents(
+                            codeBlock = { CopyableCodeBlock(it) },
+                            codeFence = { CopyableCodeFence(it) },
+                        ),
+                    )
+                }
                 if (message.isStreaming) {
                     Text(
                         text = " ▌",
@@ -2172,6 +2211,56 @@ private fun TodoRow(todo: UiTodo) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/** Code block / fence wrapper with a copy button (v0.1.93). */
+@Composable
+private fun CopyableCodeBlock(model: MarkdownComponentModel) {
+    CodeBlockShell(code = model.content, language = (model.extra["language"] as? String) ?: "code") {
+        highlightedCodeBlock(model)
+    }
+}
+
+@Composable
+private fun CopyableCodeFence(model: MarkdownComponentModel) {
+    CodeBlockShell(code = model.content, language = (model.extra["language"] as? String) ?: "code") {
+        highlightedCodeFence(model)
+    }
+}
+
+@Composable
+private fun CodeBlockShell(code: String, language: String, content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                .padding(start = 10.dp, end = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = language,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(
+                onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
+                    Toast.makeText(context, "Copied code", Toast.LENGTH_SHORT).show()
+                },
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = "Copy code", modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Copy", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        content()
     }
 }
 
