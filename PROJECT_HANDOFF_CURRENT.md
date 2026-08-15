@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-14 (v0.1.86 — missed-run labels)
-**Current version:** v0.1.86 (versionCode 86)
-**HEAD commit:** `fb9c1e4` (v0.1.86 — missed-run labels)
+**Last updated:** 2026-08-14 (v0.1.87 — full-bleed + gauge)
+**Current version:** v0.1.87 (versionCode 87)
+**HEAD commit:** `1fbc280` (v0.1.87 — full-bleed + gauge)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,10 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.87 (2026-08-14)
+- **Full-bleed assistant messages** — assistant text was capped at 400dp inside the bubble (`Markdown widthIn`) plus 8dp side insets, so neither the bubble nor the text used the full screen width (user-reported with screenshot). Assistant bubbles now go edge to edge (0 side padding) and text spans the full bubble; user bubbles keep the 320dp right-aligned style. (`ChatScreen.MessageBubble`.)
+- **Always-live context gauge** — the gauge's 5s poll stopped after the FIRST reading, then relied on `session.info` events, which aren't guaranteed to reach the phone (single-owner transport — desktop usually owns the live stream) → gauge froze at the last value or "—/—" forever. The poll now runs continuously while the chat is open: 2s burst until first data, then a lightweight resume every 30s. (`DashboardChatViewModel.setScreenVisible`.)
 
 ### DONE in v0.1.86 (2026-08-14)
 - **Stale catch-up deliveries labeled** — a missed 7am weather run surfaced 12h late via the catch-up net (first successful sync after the half-open saga), delivering "Good morning" at 7pm with no context. Catch-up notifications for runs started >30 min ago now get `⏪ Missed run from 7:00 AM —` prepended (phone-local time), so stale briefings are instantly recognizable. (`CronWatcher` catch-up, `NotificationHelper.postCronRun` missedLabel.)
