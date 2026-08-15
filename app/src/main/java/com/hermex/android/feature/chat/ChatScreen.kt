@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -89,6 +90,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.hermex.android.feature.settings.SettingsRepository
 import com.hermex.android.ui.theme.LocalUiSurfaces
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
@@ -128,6 +130,11 @@ fun ChatScreen(
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // v0.1.96: tool-call visibility toggle — persisted; flipped from the top
+    // bar or Settings. Off hides tool-call boxes/rows (thinking + response stay).
+    val settingsRepo = remember { SettingsRepository(context.applicationContext) }
+    val showToolCalls by settingsRepo.showToolCalls.collectAsState(initial = true)
 
     // ── Photo attach state ──
     var pendingImageB64 by remember { mutableStateOf<String?>(null) }
@@ -558,6 +565,23 @@ fun ChatScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                // v0.1.96: quick tool-call visibility toggle — wrench icon,
+                // tinted when shown, dimmed when hidden.
+                actions = {
+                    IconButton(
+                        onClick = { scope.launch { settingsRepo.setShowToolCalls(!showToolCalls) } },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Handyman,
+                            contentDescription = if (showToolCalls) "Hide tool calls" else "Show tool calls",
+                            tint = if (showToolCalls) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                            },
+                        )
+                    }
+                },
             )
         },
         bottomBar = {
@@ -938,8 +962,9 @@ fun ChatScreen(
 
                             // Tool calls render ABOVE the response in one
                             // scrollable box (v0.1.68); tap a row for the full
-                            // card (args/diff).
-                            if (msg.role == "assistant" && msg.toolCalls.isNotEmpty() && !msg.isStreaming) {
+                            // card (args/diff). Hidden when the tool-call toggle
+                            // is off (v0.1.96).
+                            if (msg.role == "assistant" && msg.toolCalls.isNotEmpty() && !msg.isStreaming && showToolCalls) {
                                 ToolScrollBox(toolCalls = msg.toolCalls)
                             }
 
@@ -965,11 +990,13 @@ fun ChatScreen(
             // message shows tools + thinking above the final answer instead.
             val liveMsg = state.messages.lastOrNull { it.isStreaming }
             val livePanelVisible = state.isStreaming && liveMsg != null &&
-                (liveMsg.thinkingText?.isNotBlank() == true || liveMsg.toolCalls.isNotEmpty())
+                (liveMsg.thinkingText?.isNotBlank() == true ||
+                    (showToolCalls && liveMsg.toolCalls.isNotEmpty()))
             if (livePanelVisible) {
                 LiveActivityPanel(
                     thinking = liveMsg!!.thinkingText.orEmpty(),
-                    toolCalls = liveMsg.toolCalls,
+                    toolCalls = if (showToolCalls) liveMsg.toolCalls else emptyList(),
+                    showTools = showToolCalls,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 )
             }
@@ -1871,9 +1898,13 @@ private fun formatTokens(tokens: Long): String {
 private fun LiveActivityPanel(
     thinking: String,
     toolCalls: List<UiToolCall>,
+    showTools: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val now by remember { mutableStateOf(System.currentTimeMillis()) }
+    // v0.1.96: tools are their own labeled section, and disappear entirely
+    // when the tool-call toggle is off.
+    val toolsVisible = showTools && toolCalls.isNotEmpty()
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
@@ -1902,7 +1933,8 @@ private fun LiveActivityPanel(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.weight(1f))
-                if (toolCalls.isNotEmpty()) {
+                // Tool counter only when tools are visible (v0.1.96)
+                if (toolsVisible) {
                     Text(
                         text = "${toolCalls.count { !it.completed }} working · ${toolCalls.size} tools",
                         style = MaterialTheme.typography.labelSmall,
@@ -1940,15 +1972,43 @@ private fun LiveActivityPanel(
                         }
                     }
                 }
-                // itemsIndexed (positional key): tool ids can duplicate (history
-                // replay defaults them to "tc") — an explicit key would crash.
-                itemsIndexed(toolCalls) { _, tc ->
-                    ToolActivityRow(toolCall = tc, now = now)
+                // v0.1.96: TOOLS section — its own header (matching the finished
+                // ToolScrollBox), visually separated from the THINKING block.
+                if (toolsVisible) {
+                    item(key = "tools-header") {
+                        Column {
+                            if (thinking.isNotBlank()) {
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "TOOLS · ${toolCalls.size}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    // itemsIndexed (positional key): tool ids can duplicate (history
+                    // replay defaults them to "tc") — an explicit key would crash.
+                    itemsIndexed(toolCalls) { _, tc ->
+                        ToolActivityRow(toolCall = tc, now = now)
+                    }
                 }
             }
             // Auto-scroll the panel to the newest activity
-            LaunchedEffect(thinking.length, toolCalls.size) {
-                val count = toolCalls.size + if (thinking.isNotBlank()) 1 else 0
+            LaunchedEffect(thinking.length, toolCalls.size, toolsVisible) {
+                val headerCount = (if (thinking.isNotBlank()) 1 else 0) + (if (toolsVisible) 1 else 0)
+                val count = (if (toolsVisible) toolCalls.size else 0) + headerCount
                 if (count > 0) listState.scrollToItem(count - 1)
             }
         }

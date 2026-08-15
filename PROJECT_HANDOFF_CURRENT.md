@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.95 — theme extra surfaces: code/thinking/tool/gauge colors)
-**Current version:** v0.1.95 (versionCode 95)
-**HEAD commit:** see `git log` (v0.1.95 — theme extra surfaces)
+**Last updated:** 2026-08-15 (v0.1.96 — tool-call visibility toggle + live TOOLS section)
+**Current version:** v0.1.96 (versionCode 96)
+**HEAD commit:** see `git log` (v0.1.96 — tool-call visibility toggle)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -84,6 +84,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Markdown rendering** — Assistant and user messages are rendered with the `multiplatform-markdown-renderer` library (v0.34.0, `-m3` module). Supports headings, bold, italic, code, fenced code blocks, tables, quotes, lists, and task lists. **Syntax highlighting** for code blocks (Kotlin, Java, Python, Bash, JSON, XML, Markdown) via the `-code` module and Highlights library. Streaming cursor preserved after markdown block. Uses `rememberMarkdownState` for efficient re-composition on delta updates.
 - **Background keepalive** — `WsKeepaliveService` foreground service keeps the process alive while the chat WebSocket is active. Started on WS connect, stopped on ViewModel clear. Uses `dataSync` foreground service type with a low-importance persistent notification.
 - **Theme extra surfaces (v0.1.95)** — code blocks, thinking box, tool cards and the context gauge each get their own color override (Settings → Appearance) via `LocalUiSurfaces`, independent of the assistant bubble color. Null = derive from the scheme (previous behavior).
+- **Tool-call visibility toggle (v0.1.96)** — persisted "Show tool calls" switch (Settings → Appearance + wrench icon in the chat top bar). Off hides the finished tools box, live-panel tool rows and tool detail dialogs; thinking and the response stay. During streaming, tools render in their own labeled TOOLS section (separate from the THINKING block) inside the live panel.
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)
 `ApiClient`, `DTOs`, `SseParser`, `SetupScreen`/`SetupViewModel`, legacy `ChatViewModel`, and `HermesForegroundService` were fully deleted in v0.1.42. The app is dashboard JSON-RPC/WebSocket only.
@@ -553,6 +554,12 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.96 (2026-08-15) — Tool-call visibility toggle + live TOOLS section
+- **"Show tool calls" toggle (persisted)** — new `show_tool_calls` DataStore key (`SettingsRepository.showToolCalls`, default true). Off hides tool-call UI everywhere: the finished `ToolScrollBox`, the live panel's tool rows + "N working · N tools" counter, and the tool detail dialogs (gated via the box). Thinking, the response, the tasks panel and approval dialogs are unaffected — exactly the approved scope. (`SettingsRepository.kt`, `ChatScreen.kt`.)
+- **Quick toggle in the chat top bar** — a wrench icon (`Icons.Outlined.Handyman`) in the TopAppBar actions: tinted primary when tools are shown, dimmed when hidden; tap flips the persisted setting mid-conversation. (`ChatScreen.kt` TopAppBar.)
+- **Settings switch** — Settings → Appearance gains a "Show tool calls" switch with a subtitle explaining it hides tools only. (`SettingsScreen.kt`.)
+- **Tools separated from thinking while streaming** — the docked `LiveActivityPanel` now renders tools as their own labeled section: a `TOOLS · N` header (matching the finished `ToolScrollBox` style) with a subtle divider above it when thinking is present, so tools no longer read as part of the same box as thinking. The section (and the tool counter) vanishes when the toggle is off; auto-scroll count accounts for the header item. (`ChatScreen.kt` `LiveActivityPanel`, new `showTools` param.)
 
 ### DONE in v0.1.95 (2026-08-15) — Theme extra surfaces (pinned #6)
 - **Code blocks / thinking box / tool cards / context gauge get their own colors** — previously all four derived from `surfaceVariant` (the "Assistant bubbles & top bars" pick) with hardcoded alpha multipliers, so you couldn't give code a dark slab while keeping thinking subtle. New `UiColorOverrides` fields (`codeBlock`, `thinkingBox`, `toolCard`, `gaugeTrack`) resolve into a `UiSurfaces` value provided by a new `LocalUiSurfaces` CompositionLocal inside `HermexTheme`; defaults are byte-identical to the old alpha math, so nothing changes until you touch the new rows. (`Theme.kt`.)

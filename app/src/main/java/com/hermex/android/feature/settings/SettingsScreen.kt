@@ -279,6 +279,8 @@ fun SettingsScreen(
             val savedToolCard by settingsRepo.uiToolCardHex.collectAsState(initial = null)
             val savedGauge by settingsRepo.uiGaugeHex.collectAsState(initial = null)
             val savedMonospace by settingsRepo.uiMonospace.collectAsState(initial = false)
+            // v0.1.96: tool-call visibility (also toggled from the chat top bar)
+            val savedShowToolCalls by settingsRepo.showToolCalls.collectAsState(initial = true)
 
             // Live preview — see color changes instantly (v0.1.79)
             AppearancePreview(
@@ -451,6 +453,25 @@ fun SettingsScreen(
                 Switch(
                     checked = savedMonospace,
                     onCheckedChange = { checked -> scope.launch { settingsRepo.setUiMonospace(checked) } },
+                )
+            }
+
+            // v0.1.96: tool-call visibility (persisted; also toggled from the chat top bar)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Show tool calls", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Tool-call boxes while working and above each answer. Off hides tools only — thinking and replies stay.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = savedShowToolCalls,
+                    onCheckedChange = { checked -> scope.launch { settingsRepo.setShowToolCalls(checked) } },
                 )
             }
 
