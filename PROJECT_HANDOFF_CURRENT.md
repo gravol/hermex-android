@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.89 — new-session fix + mid-session switch)
-**Current version:** v0.1.89 (versionCode 89)
-**HEAD commit:** `e7801ed` (v0.1.89 — new-session fix + mid-session switch)
+**Last updated:** 2026-08-15 (v0.1.90 — slash.exec fix)
+**Current version:** v0.1.90 (versionCode 90)
+**HEAD commit:** `aaede1a` (v0.1.90 — slash.exec fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,9 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.90 (2026-08-15)
+- **Mid-session switch uses slash.exec** — "Apply to this chat" sent `/model …` via `prompt.submit`, which delivers it as LITERAL text (proven: Jeff's typed `/model` + `/reasoning` arrived as regular messages). The server only intercepts slash commands through the `slash.exec` RPC (desktop/TUI path). Also discovered: slash commands are rejected while a turn streams (busy session) — apply when idle. (`applyModelToSession`.)
 
 ### DONE in v0.1.89 (2026-08-15)
 - **New-session 4007 fix** — root cause: the server only flushes a new session's DB row on its FIRST run, so `session.resume` right after `session.create` 4007s (reproduced server-side: fails with EITHER id, model param irrelevant). `prompt.submit` works on the fresh session (agent attaches + persists — verified). `loadMessages` now treats 4007 as a fresh/deleted session → empty chat, no error screen; the first message attaches.
