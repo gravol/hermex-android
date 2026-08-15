@@ -99,9 +99,18 @@ object CronWatcher {
             if (startedAt < now - 12 * 3600_000L) continue  // too old to surface
             if (run.endedAt == null) continue               // still running — alarms handle it
             prefs.edit().putString(KEY_LAST_SEEN + job.id, run.id).apply()
+            // v0.1.86: label stale catch-up deliveries so a "good morning"
+            // briefing isn't mistaken for fresh at 7pm.
+            val missedLabel = if (now - startedAt > 30 * 60_000L) {
+                val localStart = java.text.SimpleDateFormat(
+                    "h:mm a", java.util.Locale.getDefault()
+                ).format(java.util.Date(startedAt))
+                "⏪ Missed run from $localStart — "
+            } else null
             NotificationHelper.postCronRun(
                 context, job.name, run.title, run.id,
                 output = fetchRunOutput(context, run.id),
+                missedLabel = missedLabel,
             )
             notified++
         }

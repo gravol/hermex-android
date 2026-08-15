@@ -84,12 +84,19 @@ object NotificationHelper {
     }
 
     /** A cron job produced a finished run. Tap opens the run's session. */
-    fun postCronRun(context: Context, jobName: String, runTitle: String?, runId: String, output: String? = null) {
+    fun postCronRun(
+        context: Context,
+        jobName: String,
+        runTitle: String?,
+        runId: String,
+        output: String? = null,
+        missedLabel: String? = null,
+    ) {
         ensureChannels(context)
         val title = "Cron: ${jobName.ifBlank { "job" }}"
-        val text = output?.take(400)?.ifBlank { null }
+        val text = missedLabel.orEmpty() + (output?.take(400)?.ifBlank { null }
             ?: runTitle?.take(120)
-            ?: "Run finished"
+            ?: "Run finished")
         val notification = NotificationCompat.Builder(context, CHANNEL_CRON)
             .setSmallIcon(android.R.drawable.stat_notify_more)
             .setContentTitle(title)
