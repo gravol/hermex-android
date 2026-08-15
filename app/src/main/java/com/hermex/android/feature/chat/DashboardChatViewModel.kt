@@ -965,21 +965,23 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     }
 
     /**
-     * v0.1.89: switch THIS session's model/effort mid-conversation via the
-     * standard slash commands (/model, /reasoning) — the same path the
-     * desktop and Telegram use. The server applies them session-scoped and
-     * replies in the chat.
+     * v0.1.89/90: switch THIS session's model/effort mid-conversation via the
+     * slash.exec RPC (/model, /reasoning) — the same path the desktop and
+     * Telegram use. v0.1.90: was prompt.submit (which delivers "/model ..." as
+     * LITERAL text to the agent — the server only intercepts slash commands
+     * through slash.exec). Requires an idle session; the server rejects
+     * commands while a turn is streaming.
      */
     override fun applyModelToSession(model: String, reasoning: String) {
         viewModelScope.launch {
             try {
                 if (model.isNotBlank()) {
-                    rpcClient.promptSubmit(sessionId, "/model $model")
-                    DebugLog.log("RPC", "DashboardChat", "mid-session /model $model")
+                    rpcClient.slashExec(sessionId, "/model $model")
+                    DebugLog.log("RPC", "DashboardChat", "mid-session slash.exec /model $model")
                 }
                 if (reasoning.isNotBlank()) {
-                    rpcClient.promptSubmit(sessionId, "/reasoning $reasoning")
-                    DebugLog.log("RPC", "DashboardChat", "mid-session /reasoning $reasoning")
+                    rpcClient.slashExec(sessionId, "/reasoning $reasoning")
+                    DebugLog.log("RPC", "DashboardChat", "mid-session slash.exec /reasoning $reasoning")
                 }
                 uiState = uiState.copy(
                     currentModel = model.ifBlank { uiState.currentModel },
@@ -987,6 +989,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 )
             } catch (e: Exception) {
                 Log.e("Hermex", "applyModelToSession failed", e)
+                DebugLog.log("ERROR", "DashboardChat", "applyModelToSession failed: ${e.message}")
             }
         }
     }
