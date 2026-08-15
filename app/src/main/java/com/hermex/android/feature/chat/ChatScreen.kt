@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import com.mikepenz.markdown.compose.components.MarkdownComponentModel
 import com.mikepenz.markdown.compose.components.markdownComponents
@@ -135,6 +136,8 @@ fun ChatScreen(
     // bar or Settings. Off hides tool-call boxes/rows (thinking + response stay).
     val settingsRepo = remember { SettingsRepository(context.applicationContext) }
     val showToolCalls by settingsRepo.showToolCalls.collectAsState(initial = true)
+    // v0.1.97: thinking visibility toggle — same pattern (tools + response stay).
+    val showThinking by settingsRepo.showThinking.collectAsState(initial = true)
 
     // ── Photo attach state ──
     var pendingImageB64 by remember { mutableStateOf<String?>(null) }
@@ -581,6 +584,20 @@ fun ChatScreen(
                             },
                         )
                     }
+                    // v0.1.97: quick thinking visibility toggle — brain icon.
+                    IconButton(
+                        onClick = { scope.launch { settingsRepo.setShowThinking(!showThinking) } },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Psychology,
+                            contentDescription = if (showThinking) "Hide thinking" else "Show thinking",
+                            tint = if (showThinking) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                            },
+                        )
+                    }
                 },
             )
         },
@@ -949,14 +966,17 @@ fun ChatScreen(
                             // in the docked LiveActivityPanel (bottom); the
                             // in-stream versions only render once the turn is
                             // done (tools + thinking above the final answer).
-                            if (showLiveThinking && !state.isStreaming) {
+                            if (showLiveThinking && !state.isStreaming && showThinking) {
                                 LiveThinkingTicker(text = msg.thinkingText)
                             }
 
                             // After the turn, thinking persists as a scrollable
                             // box above the tools+answer (during streaming it
-                            // lives in the docked live panel instead).
-                            if (msg.role == "assistant" && msg.thinkingText?.isNotBlank() == true && !msg.isStreaming) {
+                            // lives in the docked live panel instead). Hidden
+                            // when the thinking toggle is off (v0.1.97).
+                            if (msg.role == "assistant" && msg.thinkingText?.isNotBlank() == true &&
+                                !msg.isStreaming && showThinking
+                            ) {
                                 ThinkingScrollBox(text = msg.thinkingText)
                             }
 
@@ -990,13 +1010,14 @@ fun ChatScreen(
             // message shows tools + thinking above the final answer instead.
             val liveMsg = state.messages.lastOrNull { it.isStreaming }
             val livePanelVisible = state.isStreaming && liveMsg != null &&
-                (liveMsg.thinkingText?.isNotBlank() == true ||
+                ((showThinking && liveMsg.thinkingText?.isNotBlank() == true) ||
                     (showToolCalls && liveMsg.toolCalls.isNotEmpty()))
             if (livePanelVisible) {
                 LiveActivityPanel(
-                    thinking = liveMsg!!.thinkingText.orEmpty(),
+                    thinking = if (showThinking) liveMsg!!.thinkingText.orEmpty() else "",
                     toolCalls = if (showToolCalls) liveMsg.toolCalls else emptyList(),
                     showTools = showToolCalls,
+                    showThinking = showThinking,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 )
             }
@@ -1899,12 +1920,15 @@ private fun LiveActivityPanel(
     thinking: String,
     toolCalls: List<UiToolCall>,
     showTools: Boolean = true,
+    showThinking: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val now by remember { mutableStateOf(System.currentTimeMillis()) }
     // v0.1.96: tools are their own labeled section, and disappear entirely
     // when the tool-call toggle is off.
     val toolsVisible = showTools && toolCalls.isNotEmpty()
+    // v0.1.97: thinking section disappears when the thinking toggle is off.
+    val thinkingVisible = showThinking && thinking.isNotBlank()
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
@@ -1950,7 +1974,7 @@ private fun LiveActivityPanel(
                     .fillMaxWidth()
                     .heightIn(max = 200.dp),
             ) {
-                if (thinking.isNotBlank()) {
+                if (thinkingVisible) {
                     item(key = "thinking") {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                             Text(
@@ -1977,7 +2001,7 @@ private fun LiveActivityPanel(
                 if (toolsVisible) {
                     item(key = "tools-header") {
                         Column {
-                            if (thinking.isNotBlank()) {
+                            if (thinkingVisible) {
                                 HorizontalDivider(
                                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
@@ -2006,8 +2030,9 @@ private fun LiveActivityPanel(
                 }
             }
             // Auto-scroll the panel to the newest activity
-            LaunchedEffect(thinking.length, toolCalls.size, toolsVisible) {
-                val headerCount = (if (thinking.isNotBlank()) 1 else 0) + (if (toolsVisible) 1 else 0)
+            LaunchedEffect(thinking.length, toolCalls.size, toolsVisible, showThinking) {
+                val thinkingShown = showThinking && thinking.isNotBlank()
+                val headerCount = (if (thinkingShown) 1 else 0) + (if (toolsVisible) 1 else 0)
                 val count = (if (toolsVisible) toolCalls.size else 0) + headerCount
                 if (count > 0) listState.scrollToItem(count - 1)
             }

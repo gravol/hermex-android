@@ -78,6 +78,10 @@ class SettingsRepository(context: Context) {
      *  box, live-panel tool rows and tool dialogs; thinking + response stay. */
     val showToolCalls: Flow<Boolean> = store.getBoolean(KEY_SHOW_TOOL_CALLS).map { it ?: true }
 
+    /** Show thinking boxes in chat (v0.1.97). Off hides finished thinking box,
+     *  live THINKING section and ticker; tools + response stay. */
+    val showThinking: Flow<Boolean> = store.getBoolean(KEY_SHOW_THINKING).map { it ?: true }
+
     /** Locally pinned session ids (desktop-style client-side pinning). */
     val pinnedSessionIds: Flow<Set<String>> = store.getStringSet(KEY_PINNED_SESSIONS)
 
@@ -108,6 +112,9 @@ class SettingsRepository(context: Context) {
 
     // v0.1.96: tool-call visibility
     suspend fun setShowToolCalls(value: Boolean) = store.setBoolean(KEY_SHOW_TOOL_CALLS, value)
+
+    // v0.1.97: thinking visibility
+    suspend fun setShowThinking(value: Boolean) = store.setBoolean(KEY_SHOW_THINKING, value)
 
     // v0.1.88: model picker — applied to NEW sessions (desktop-composer contract)
     val modelPick: Flow<String> = store.getString(KEY_MODEL_PICK).map { it ?: "" }
@@ -162,6 +169,7 @@ class SettingsRepository(context: Context) {
         const val KEY_UI_GAUGE = "ui_gauge_hex"
         const val KEY_UI_MONOSPACE = "ui_monospace"
         const val KEY_SHOW_TOOL_CALLS = "show_tool_calls"
+        const val KEY_SHOW_THINKING = "show_thinking"
         const val KEY_PINNED_SESSIONS = "pinned_session_ids"
         const val KEY_MODEL_PICK = "model_pick"
         const val KEY_REASONING_PICK = "reasoning_pick"

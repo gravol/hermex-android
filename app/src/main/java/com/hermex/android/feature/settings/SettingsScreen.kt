@@ -281,6 +281,8 @@ fun SettingsScreen(
             val savedMonospace by settingsRepo.uiMonospace.collectAsState(initial = false)
             // v0.1.96: tool-call visibility (also toggled from the chat top bar)
             val savedShowToolCalls by settingsRepo.showToolCalls.collectAsState(initial = true)
+            // v0.1.97: thinking visibility (also toggled from the chat top bar)
+            val savedShowThinking by settingsRepo.showThinking.collectAsState(initial = true)
 
             // Live preview — see color changes instantly (v0.1.79)
             AppearancePreview(
@@ -472,6 +474,25 @@ fun SettingsScreen(
                 Switch(
                     checked = savedShowToolCalls,
                     onCheckedChange = { checked -> scope.launch { settingsRepo.setShowToolCalls(checked) } },
+                )
+            }
+
+            // v0.1.97: thinking visibility (persisted; also toggled from the chat top bar)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Show thinking", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Thinking boxes while working and above each answer. Off hides thinking only — tools and replies stay.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = savedShowThinking,
+                    onCheckedChange = { checked -> scope.launch { settingsRepo.setShowThinking(checked) } },
                 )
             }
 

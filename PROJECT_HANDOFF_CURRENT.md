@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.96 — tool-call visibility toggle + live TOOLS section)
-**Current version:** v0.1.96 (versionCode 96)
-**HEAD commit:** see `git log` (v0.1.96 — tool-call visibility toggle)
+**Last updated:** 2026-08-15 (v0.1.97 — thinking visibility toggle; model picker re-verified)
+**Current version:** v0.1.97 (versionCode 97)
+**HEAD commit:** see `git log` (v0.1.97 — thinking visibility toggle)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -85,6 +85,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Background keepalive** — `WsKeepaliveService` foreground service keeps the process alive while the chat WebSocket is active. Started on WS connect, stopped on ViewModel clear. Uses `dataSync` foreground service type with a low-importance persistent notification.
 - **Theme extra surfaces (v0.1.95)** — code blocks, thinking box, tool cards and the context gauge each get their own color override (Settings → Appearance) via `LocalUiSurfaces`, independent of the assistant bubble color. Null = derive from the scheme (previous behavior).
 - **Tool-call visibility toggle (v0.1.96)** — persisted "Show tool calls" switch (Settings → Appearance + wrench icon in the chat top bar). Off hides the finished tools box, live-panel tool rows and tool detail dialogs; thinking and the response stay. During streaming, tools render in their own labeled TOOLS section (separate from the THINKING block) inside the live panel.
+- **Thinking visibility toggle (v0.1.97)** — persisted "Show thinking" switch (Settings → Appearance + brain icon in the chat top bar). Off hides the finished thinking box, the live THINKING section and the in-stream thinking ticker; tools and the response stay. Model selector + reasoning flow re-verified (v0.1.97): `model.options` picker → "Apply to this chat" via `config.set` with the live SID, "Save for new chats" via `model_pick`/`reasoning_pick` → `session.create`.
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)
 `ApiClient`, `DTOs`, `SseParser`, `SetupScreen`/`SetupViewModel`, legacy `ChatViewModel`, and `HermesForegroundService` were fully deleted in v0.1.42. The app is dashboard JSON-RPC/WebSocket only.
@@ -554,6 +555,12 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.97 (2026-08-15) — Thinking visibility toggle + model picker re-verify
+- **"Show thinking" toggle (persisted)** — new `show_thinking` DataStore key (`SettingsRepository.showThinking`, default true), mirroring the v0.1.96 tool-calls toggle. Off hides thinking UI everywhere: the finished `ThinkingScrollBox`, the live `LiveActivityPanel` THINKING section (plus the divider above the TOOLS header), and the in-stream `LiveThinkingTicker`. Tools, the response, tasks panel and approval dialogs are unaffected. (`SettingsRepository.kt`, `ChatScreen.kt`.)
+- **Quick toggle in the chat top bar** — a brain icon (`Icons.Outlined.Psychology`) sits next to the wrench: tinted primary when thinking is shown, dimmed when hidden; tap flips the persisted setting mid-conversation. (`ChatScreen.kt` TopAppBar actions — now two icons: wrench = tools, brain = thinking.)
+- **Settings switch** — Settings → Appearance gains a "Show thinking" switch (subtitle: hides thinking only). (`SettingsScreen.kt`.)
+- **Model selector + reasoning re-verified (no code changes needed)** — walked the full path: `ModelPickerSheet` loads `model.options` (grouped by provider, current highlighted, effort chips start at the session's current effort); **Apply to this chat** → `applyModelToSession` → `config.set` (model + reasoning) with `liveSid.ifBlank { sessionId }` → chip/gauge refresh via lightweight resume; **Save for new chats** → `model_pick`/`reasoning_pick` DataStore → `session.create` with `model` + `reasoning_effort`. Chip stays live via `session.info` + 30s poll. None of the v0.1.95/96/97 display changes touched these paths.
 
 ### DONE in v0.1.96 (2026-08-15) — Tool-call visibility toggle + live TOOLS section
 - **"Show tool calls" toggle (persisted)** — new `show_tool_calls` DataStore key (`SettingsRepository.showToolCalls`, default true). Off hides tool-call UI everywhere: the finished `ToolScrollBox`, the live panel's tool rows + "N working · N tools" counter, and the tool detail dialogs (gated via the box). Thinking, the response, the tasks panel and approval dialogs are unaffected — exactly the approved scope. (`SettingsRepository.kt`, `ChatScreen.kt`.)
