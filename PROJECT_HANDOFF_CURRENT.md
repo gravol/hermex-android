@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.90 — slash.exec fix)
-**Current version:** v0.1.90 (versionCode 90)
-**HEAD commit:** `aaede1a` (v0.1.90 — slash.exec fix)
+**Last updated:** 2026-08-15 (v0.1.91 — model switcher: config.set)
+**Current version:** v0.1.91 (versionCode 91)
+**HEAD commit:** see `git log` (v0.1.91 — model switcher: config.set)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -547,6 +547,12 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.91 (2026-08-15)
+- **Model switcher fixed** — "Apply to this chat" sent `/model` + `/reasoning` through `slash.exec`, but the server's slash-exec mirror (`_mirror_slash_side_effects`) has **no `/reasoning` branch** (silently no-ops) and only mirrors `/model` when a live agent already exists (fresh/reaped sessions no-op; busy sessions rejected). Now uses the **`config.set` RPC** (`key=model`/`key=reasoning`) — the desktop's path, which defers a busy model switch to the next turn and builds the agent for a fresh session. `config.set` resolves `_sessions` by LIVE SID only, so the app sends `liveSid.ifBlank { sessionId }` (not the DB key, which would apply the change globally). Verified live: `config.set model=deepseek-v4-pro` + `reasoning=high` → server emits `session.info {model, provider, reasoning_effort}`. (`JsonRpcClient.configSet`, `DashboardChatViewModel.applyModelToSession` + `refreshUsageAndModel`.)
+- **Chip refreshes from session.info** — the model/reasoning chip now updates from `session.info` notifications (and resume info + the 30s poll), so a switch made from the app OR desktop/Telegram reflects immediately. (`DashboardChatViewModel` SessionInfo handler, `loadMessages`, `setScreenVisible`.)
+- **Picker starts at current effort** — no longer hardcodes "medium", so a model-only switch won't silently reset reasoning. (`ChatScreen.ModelPickerSheet`.)
+- `AGENTS.md` corrected from stale v0.1.48 → v0.1.91.
 
 ### DONE in v0.1.90 (2026-08-15)
 - **Mid-session switch uses slash.exec** — "Apply to this chat" sent `/model …` via `prompt.submit`, which delivers it as LITERAL text (proven: Jeff's typed `/model` + `/reasoning` arrived as regular messages). The server only intercepts slash commands through the `slash.exec` RPC (desktop/TUI path). Also discovered: slash commands are rejected while a turn streams (busy session) — apply when idle. (`applyModelToSession`.)

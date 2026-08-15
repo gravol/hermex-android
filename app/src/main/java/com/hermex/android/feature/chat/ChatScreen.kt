@@ -2221,7 +2221,9 @@ private fun ModelPickerSheet(
     val scope = rememberCoroutineScope()
     var options by remember { mutableStateOf<JsonRpcClient.ModelOptionsResult?>(null) }
     var selectedModel by remember { mutableStateOf("") }
-    var selectedEffort by remember { mutableStateOf("medium") }
+    // Start from the session's current effort so "Apply to this chat" doesn't
+    // silently reset reasoning to medium when the user only meant to switch model.
+    var selectedEffort by remember { mutableStateOf(viewModel.uiState.currentReasoning ?: "medium") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -2230,6 +2232,7 @@ private fun ModelPickerSheet(
             val opts = viewModel.loadModelOptions()
             options = opts
             selectedModel = opts.model ?: ""
+            selectedEffort = viewModel.uiState.currentReasoning ?: selectedEffort
         } catch (e: Exception) {
             error = e.message ?: "Failed to load models"
         }

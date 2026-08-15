@@ -511,6 +511,23 @@ class JsonRpcClient(
     }
 
     /**
+     * Set a per-session config key (v0.1.91) — the desktop's model/reasoning
+     * switch path. `sessionId` MUST be the LIVE SID (8-hex from session.resume /
+     * session.create), NOT the persistent DB key: `config.set` resolves
+     * `_sessions` directly with no DB-key fallback. Unlike slash.exec, this
+     * handles busy sessions (model switch is deferred to the next turn) and
+     * agent-less fresh sessions (agent is built on demand).
+     */
+    suspend fun configSet(sessionId: String, key: String, value: String): JsonObject {
+        DebugLog.log("RPC", "JsonRpc", "config.set $key=$value")
+        return request(
+            "config.set",
+            mapOf("session_id" to sessionId, "key" to key, "value" to value),
+            timeoutMs = 60_000,
+        )
+    }
+
+    /**
      * Stage an image into the session (base64 bytes → gateway images dir).
      * The NEXT prompt.submit carries the staged image automatically.
      * Returns the server response (contains the image path + placeholder text).

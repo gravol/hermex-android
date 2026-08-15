@@ -194,6 +194,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                         ?.jsonPrimitive?.contentOrNull
                         ?: result.info?.get("model")?.jsonPrimitive?.contentOrNull
                         ?: uiState.currentModel,
+                    // v0.1.91: reasoning_effort comes straight from session.info
+                    // (authoritative per-session) — fall back to the saved pick.
+                    currentReasoning = result.info?.get("reasoning_effort")
+                        ?.jsonPrimitive?.contentOrNull
+                        ?.takeIf { it.isNotBlank() }
+                        ?: uiState.currentReasoning,
                     todos = todos.orEmpty(),
                 )
                 val loadDuration = if (sessionLoadStartTime > 0) System.currentTimeMillis() - sessionLoadStartTime else -1L
@@ -915,12 +921,18 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             is RpcNotification.SessionInfo -> {
                 DebugLog.log("RPC", "DashboardChat", "session.info received")
                 val context = parseContextUsage(n.info)
-                if (context.first != null || context.second != null) {
-                    uiState = uiState.copy(
-                        contextUsed = context.first ?: uiState.contextUsed,
-                        contextMax = context.second ?: uiState.contextMax,
-                    )
-                }
+                // session.info also carries the live model + reasoning_effort —
+                // refresh the chip so a config.set switch (or desktop/Telegram
+                // switch) reflects here without a full resume.
+                val infoModel = n.info?.get("model")?.jsonPrimitive?.contentOrNull
+                val infoReasoning = n.info?.get("reasoning_effort")?.jsonPrimitive?.contentOrNull
+                uiState = uiState.copy(
+                    contextUsed = context.first ?: uiState.contextUsed,
+                    contextMax = context.second ?: uiState.contextMax,
+                    currentModel = infoModel ?: uiState.currentModel,
+                    currentReasoning = infoReasoning?.takeIf { it.isNotBlank() }
+                        ?: uiState.currentReasoning,
+                )
             }
 
             is RpcNotification.Unknown -> {
@@ -965,33 +977,62 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     }
 
     /**
-     * v0.1.89/90: switch THIS session's model/effort mid-conversation via the
-     * slash.exec RPC (/model, /reasoning) — the same path the desktop and
-     * Telegram use. v0.1.90: was prompt.submit (which delivers "/model ..." as
-     * LITERAL text to the agent — the server only intercepts slash commands
-     * through slash.exec). Requires an idle session; the server rejects
-     * commands while a turn is streaming.
+     * v0.1.89/90/91: switch THIS session's model/effort mid-conversation.
+     *
+     * v0.1.90 sent `/model` + `/reasoning` via slash.exec — broken: the server's
+     * slash-exec mirror (`_mirror_slash_side_effects`) has NO reasoning branch
+     * (so /reasoning silently no-ops the live session) and its /model branch
+     * requires a live agent (fresh/reaped sessions no-op) and rejects a busy
+     * session instead of deferring. v0.1.91 uses the `config.set` RPC — the
+     * desktop's path — which defers a busy model switch to the next turn and
+     * builds the agent for a fresh session. `config.set` resolves `_sessions`
+     * by LIVE SID only, so send the resolved live sid (fall back to sessionId,
+     * which IS the live sid for a just-created session).
      */
     override fun applyModelToSession(model: String, reasoning: String) {
         viewModelScope.launch {
             try {
+                val sid = liveSid.ifBlank { sessionId }
                 if (model.isNotBlank()) {
-                    rpcClient.slashExec(sessionId, "/model $model")
-                    DebugLog.log("RPC", "DashboardChat", "mid-session slash.exec /model $model")
+                    val res = rpcClient.configSet(sid, "model", model)
+                    val applied = res["value"]?.jsonPrimitive?.contentOrNull ?: model
+                    DebugLog.log("RPC", "DashboardChat",
+                        "config.set model=$model → applied=$applied")
                 }
                 if (reasoning.isNotBlank()) {
-                    rpcClient.slashExec(sessionId, "/reasoning $reasoning")
-                    DebugLog.log("RPC", "DashboardChat", "mid-session slash.exec /reasoning $reasoning")
+                    rpcClient.configSet(sid, "reasoning", reasoning)
+                    DebugLog.log("RPC", "DashboardChat",
+                        "config.set reasoning=$reasoning")
                 }
                 uiState = uiState.copy(
                     currentModel = model.ifBlank { uiState.currentModel },
                     currentReasoning = reasoning.ifBlank { uiState.currentReasoning },
                 )
+                // The server emits session.info with the new model/reasoning; a
+                // lightweight resume also refreshes the gauge + chip immediately.
+                refreshUsageAndModel()
             } catch (e: Exception) {
                 Log.e("Hermex", "applyModelToSession failed", e)
                 DebugLog.log("ERROR", "DashboardChat", "applyModelToSession failed: ${e.message}")
+                uiState = uiState.copy(error = e.message ?: "Model switch failed")
             }
         }
+    }
+
+    /** Lightweight resume to refresh context gauge + model chip (v0.1.91). */
+    private suspend fun refreshUsageAndModel() {
+        try {
+            val res = rpcClient.sessionResume(sessionId, omitMessages = true)
+            val ctx = parseContextUsage(res.info)
+            val m = res.info?.get("model")?.jsonPrimitive?.contentOrNull
+            val r = res.info?.get("reasoning_effort")?.jsonPrimitive?.contentOrNull
+            uiState = uiState.copy(
+                contextUsed = ctx.first ?: uiState.contextUsed,
+                contextMax = ctx.second ?: uiState.contextMax,
+                currentModel = m ?: uiState.currentModel,
+                currentReasoning = r?.takeIf { it.isNotBlank() } ?: uiState.currentReasoning,
+            )
+        } catch (_: Exception) { }
     }
 
     /** Read the profile's reasoning_effort (config.yaml) once, for the chip. */
@@ -1059,8 +1100,14 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                         }
                         // v0.1.88: keep the model chip fresh on every poll
                         val m = result.info?.get("model")?.jsonPrimitive?.contentOrNull
-                        if (!m.isNullOrBlank() && m != uiState.currentModel) {
-                            uiState = uiState.copy(currentModel = m)
+                        val r = result.info?.get("reasoning_effort")?.jsonPrimitive?.contentOrNull
+                        if ((!m.isNullOrBlank() && m != uiState.currentModel) ||
+                            (!r.isNullOrBlank() && r != uiState.currentReasoning)) {
+                            uiState = uiState.copy(
+                                currentModel = m ?: uiState.currentModel,
+                                currentReasoning = r?.takeIf { it.isNotBlank() }
+                                    ?: uiState.currentReasoning,
+                            )
                         }
                     } catch (_: Exception) {
                         // Best-effort — loop back and try again.
