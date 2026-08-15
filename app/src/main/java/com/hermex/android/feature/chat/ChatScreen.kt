@@ -49,7 +49,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -742,32 +741,21 @@ fun ChatScreen(
                             ),
                         )
                         Spacer(Modifier.width(4.dp))
-                        if (state.isStreaming) {
-                            FilledIconButton(
-                                onClick = { viewModel.stopStreaming() },
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                ),
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IconButton(
+                                onClick = { sendComposer() },
+                                enabled = (composerText.isNotBlank() || pendingImageB64 != null) &&
+                                    !isTranscribing,
                             ) {
-                                Icon(Icons.Default.Stop, contentDescription = "Stop")
+                                Icon(Icons.Default.Send, contentDescription = "Send")
                             }
-                        } else {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                IconButton(
-                                    onClick = { sendComposer() },
-                                    enabled = (composerText.isNotBlank() || pendingImageB64 != null) &&
-                                        !isTranscribing,
-                                ) {
-                                    Icon(Icons.Default.Send, contentDescription = "Send")
-                                }
-                                // Retry button — visible when not streaming and last msg is assistant
-                                if (!state.isStreaming && state.messages.any { it.role == "assistant" }) {
-                                    IconButton(onClick = { viewModel.retry() }) {
-                                        Icon(Icons.Default.Refresh, contentDescription = "Retry")
-                                    }
+                            // Retry button — visible when not streaming and last msg is assistant
+                            if (!state.isStreaming && state.messages.any { it.role == "assistant" }) {
+                                IconButton(onClick = { viewModel.retry() }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Retry")
                                 }
                             }
                         }

@@ -264,15 +264,34 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
     override fun sendMessage(text: String) {
         if (text.isBlank() || sessionId.isEmpty()) return
+        val trimmed = text.trim()
 
-        // Slash commands (v0.1.67): messages starting with "/" route to
-        // slash.exec (same path as desktop/TUI) instead of the agent. The
-        // output lands as an assistant message.
-        if (text.startsWith("/") && text.length > 1 && !text.startsWith("//")) {
-            sendSlashCommand(text)
+        // /stop / /interrupt / /halt: end the turn via session.interrupt — NOT
+        // slash.exec (the server's /stop kills background processes, it does not
+        // interrupt the live turn).
+        if (trimmed == "/stop" || trimmed == "/interrupt" || trimmed == "/halt") {
+            stopStreaming()
             return
         }
 
+        // Slash commands (v0.1.67): messages starting with "/" route to
+        // slash.exec (same path as desktop/TUI) instead of the agent. The
+        // output lands as an assistant message. /steer and /queue work mid-turn.
+        if (trimmed.startsWith("/") && trimmed.length > 1 && !trimmed.startsWith("//")) {
+            sendSlashCommand(trimmed)
+            return
+        }
+
+        submitPrompt(trimmed)
+    }
+
+    /**
+     * Submit a normal (non-slash) prompt. While a turn is already streaming the
+     * server auto-queues it for the next turn (prompt.submit busy path), so we
+     * add the user message but no second streaming placeholder — the queued
+     * turn's first event creates one via [ensureStreamingPlaceholder].
+     */
+    private fun submitPrompt(text: String) {
         val userMsgId = "user_${tempIdCounter.incrementAndGet()}"
         val assistantMsgId = "asst_${tempIdCounter.incrementAndGet()}"
         val now = System.currentTimeMillis()
@@ -288,12 +307,16 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         val current = uiState.messages.toMutableList()
         current.add(userMsg)
 
-        // Add empty streaming assistant message placeholder
-        val asstMsg = UiMessage(
-            id = assistantMsgId, role = "assistant",
-            isStreaming = true, isWaitingForFirstEvent = true, timestamp = now,
-        )
-        current.add(asstMsg)
+        // Add an empty streaming placeholder only when this is the active turn
+        // (not a queued prompt sent mid-turn — that one gets its placeholder
+        // lazily when its deltas start arriving).
+        if (!uiState.isStreaming) {
+            val asstMsg = UiMessage(
+                id = assistantMsgId, role = "assistant",
+                isStreaming = true, isWaitingForFirstEvent = true, timestamp = now,
+            )
+            current.add(asstMsg)
+        }
 
         uiState = uiState.copy(
             messages = current,
@@ -349,6 +372,22 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         viewModelScope.launch {
             try {
                 val result = rpcClient.slashExec(sessionId, command)
+                // "send" response (e.g. /queue, /retry, /undo, or /steer with no
+                // live turn): the server wants a message submitted as a prompt.
+                // Swap the command text for the real prompt and submit it — the
+                // server auto-queues it if a turn is already streaming.
+                val sendType = result["type"]?.jsonPrimitive?.contentOrNull
+                val sendMsg = result["message"]?.jsonPrimitive?.contentOrNull
+                if (sendType == "send" && sendMsg != null) {
+                    val msgs = uiState.messages.toMutableList()
+                    val phIdx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+                    if (phIdx >= 0) msgs.removeAt(phIdx)
+                    val cmdIdx = msgs.indexOfLast { it.role == "user" && it.content == command }
+                    if (cmdIdx >= 0) msgs.removeAt(cmdIdx)
+                    uiState = uiState.copy(messages = msgs)  // keep isStreaming as-is
+                    submitPrompt(sendMsg)
+                    return@launch
+                }
                 val output = result["output"]?.jsonPrimitive?.contentOrNull
                     ?: result.toString()
                 val msgs = uiState.messages.toMutableList()
@@ -654,6 +693,24 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
     // ── RPC Notification handler ──
 
+    /** Return the index of the live streaming assistant message, creating one
+     * if a queued turn's first event arrives with no placeholder yet (a prompt
+     * sent mid-turn gets its placeholder lazily when its deltas start). */
+    private fun ensureStreamingPlaceholder(msgs: MutableList<UiMessage>): Int {
+        val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+        if (idx >= 0) return idx
+        msgs.add(
+            UiMessage(
+                id = "asst_${tempIdCounter.incrementAndGet()}",
+                role = "assistant",
+                isStreaming = true,
+                isWaitingForFirstEvent = true,
+                timestamp = System.currentTimeMillis(),
+            )
+        )
+        return msgs.size - 1
+    }
+
     private fun handleNotification(n: RpcNotification) {
         // Filter: only process events for our session
         val nSid = n.sessionId
@@ -693,100 +750,86 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 DebugLog.log("RPC", "DashboardChat",
                     "message.start — serverId=${n.messageId}")
                 val serverId = n.messageId
-                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                if (idx >= 0) {
-                    msgs[idx] = msgs[idx].copy(
-                        id = serverId ?: msgs[idx].id,
-                        isWaitingForFirstEvent = false,
-                    )
-                }
+                val idx = ensureStreamingPlaceholder(msgs)
+                msgs[idx] = msgs[idx].copy(
+                    id = serverId ?: msgs[idx].id,
+                    isWaitingForFirstEvent = false,
+                )
             }
 
             is RpcNotification.ReasoningAvailable -> {
-                val idx = msgs.indexOfLast { it.role == "assistant" }
-                if (idx >= 0) {
-                    val cur = msgs[idx]
-                    msgs[idx] = cur.copy(thinkingHasContent = true)
-                }
+                val idx = ensureStreamingPlaceholder(msgs)
+                val cur = msgs[idx]
+                msgs[idx] = cur.copy(thinkingHasContent = true)
             }
 
             is RpcNotification.MessageDelta -> {
-                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                if (idx >= 0) {
-                    val cur = msgs[idx]
-                    msgs[idx] = cur.copy(
-                        content = cur.content + n.text,
-                        thinkingHasContent = true,
-                        isWaitingForFirstEvent = false,
-                    )
-                }
+                val idx = ensureStreamingPlaceholder(msgs)
+                val cur = msgs[idx]
+                msgs[idx] = cur.copy(
+                    content = cur.content + n.text,
+                    thinkingHasContent = true,
+                    isWaitingForFirstEvent = false,
+                )
             }
 
             is RpcNotification.ThinkingDelta -> {
-                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                if (idx >= 0) {
-                    val cur = msgs[idx]
-                    val existing = cur.thinkingText ?: ""
-                    msgs[idx] = cur.copy(
-                        thinkingText = existing + n.text,
-                        isWaitingForFirstEvent = false,
-                    )
-                }
+                val idx = ensureStreamingPlaceholder(msgs)
+                val cur = msgs[idx]
+                val existing = cur.thinkingText ?: ""
+                msgs[idx] = cur.copy(
+                    thinkingText = existing + n.text,
+                    isWaitingForFirstEvent = false,
+                )
             }
 
             is RpcNotification.ReasoningDelta -> {
                 // Treat reasoning same as thinking — append to thinkingText
-                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                if (idx >= 0) {
-                    val cur = msgs[idx]
-                    val existing = cur.thinkingText ?: ""
-                    msgs[idx] = cur.copy(
-                        thinkingText = existing + n.text,
-                        isWaitingForFirstEvent = false,
-                    )
-                }
+                val idx = ensureStreamingPlaceholder(msgs)
+                val cur = msgs[idx]
+                val existing = cur.thinkingText ?: ""
+                msgs[idx] = cur.copy(
+                    thinkingText = existing + n.text,
+                    isWaitingForFirstEvent = false,
+                )
             }
 
             is RpcNotification.ToolGenerating -> {
                 DebugLog.log("RPC", "ToolEvent", "generating: ${n.toolName}")
-                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                if (idx >= 0) {
-                    val cur = msgs[idx]
-                    val existing = cur.toolCalls.toMutableList()
-                    // _thinking and todo are rendered as dedicated UI (thinking
-                    // block / Tasks card), not as tool cards.
-                    if (n.toolName != "_thinking" && n.toolName != "todo") {
-                        val tc = UiToolCall(
-                            id = "tc_${existing.size}",
-                            toolName = n.toolName,
-                        )
-                        existing.add(tc)
-                    }
-                    msgs[idx] = cur.copy(
-                        toolCalls = existing,
-                        isWaitingForFirstEvent = false,
+                val idx = ensureStreamingPlaceholder(msgs)
+                val cur = msgs[idx]
+                val existing = cur.toolCalls.toMutableList()
+                // _thinking and todo are rendered as dedicated UI (thinking
+                // block / Tasks card), not as tool cards.
+                if (n.toolName != "_thinking" && n.toolName != "todo") {
+                    val tc = UiToolCall(
+                        id = "tc_${existing.size}",
+                        toolName = n.toolName,
                     )
+                    existing.add(tc)
                 }
+                msgs[idx] = cur.copy(
+                    toolCalls = existing,
+                    isWaitingForFirstEvent = false,
+                )
             }
 
             is RpcNotification.ToolStart -> {
                 DebugLog.log("RPC", "ToolEvent", "start: toolId=${n.toolId} name=${n.toolName} context=${n.context ?: ""}")
                 if (n.toolName == "todo") return
-                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                if (idx >= 0) {
-                    val cur = msgs[idx]
-                    val updated = cur.toolCalls.map { tc ->
-                        // Match by id, or the FIRST not-yet-started card with this
-                        // name (a tool that runs twice must not overwrite the
-                        // previous run's id — that created duplicate ids → crash).
-                        if (tc.id == n.toolId || (tc.toolName == n.toolName && tc.startedAt == null)) tc.copy(
-                            id = n.toolId,
-                            preview = n.context,
-                            startedAt = System.currentTimeMillis(),
-                        ) else tc
-                    }
-                    msgs[idx] = cur.copy(toolCalls = updated)
+                val idx = ensureStreamingPlaceholder(msgs)
+                val cur = msgs[idx]
+                val updated = cur.toolCalls.map { tc ->
+                    // Match by id, or the FIRST not-yet-started card with this
+                    // name (a tool that runs twice must not overwrite the
+                    // previous run's id — that created duplicate ids → crash).
+                    if (tc.id == n.toolId || (tc.toolName == n.toolName && tc.startedAt == null)) tc.copy(
+                        id = n.toolId,
+                        preview = n.context,
+                        startedAt = System.currentTimeMillis(),
+                    ) else tc
                 }
+                msgs[idx] = cur.copy(toolCalls = updated)
             }
 
             is RpcNotification.ToolComplete -> {
@@ -806,23 +849,21 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     }
                     return
                 }
-                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                if (idx >= 0) {
-                    val cur = msgs[idx]
-                    val updated = cur.toolCalls.map { tc ->
-                        // Match by id, or the first not-yet-completed card with
-                        // this name (repeated tool runs must update THEIR card).
-                        if (tc.id == n.toolId || (tc.toolName == n.toolName && !tc.completed)) tc.copy(
-                            completed = true,
-                            args = n.args?.toString() ?: tc.args,
-                            preview = n.summary ?: tc.preview,
-                            result = n.result?.toString(),
-                            summary = n.summary,
-                            inlineDiff = n.inlineDiff ?: tc.inlineDiff,
-                        ) else tc
-                    }
-                    msgs[idx] = cur.copy(toolCalls = updated)
+                val idx = ensureStreamingPlaceholder(msgs)
+                val cur = msgs[idx]
+                val updated = cur.toolCalls.map { tc ->
+                    // Match by id, or the first not-yet-completed card with
+                    // this name (repeated tool runs must update THEIR card).
+                    if (tc.id == n.toolId || (tc.toolName == n.toolName && !tc.completed)) tc.copy(
+                        completed = true,
+                        args = n.args?.toString() ?: tc.args,
+                        preview = n.summary ?: tc.preview,
+                        result = n.result?.toString(),
+                        summary = n.summary,
+                        inlineDiff = n.inlineDiff ?: tc.inlineDiff,
+                    ) else tc
                 }
+                msgs[idx] = cur.copy(toolCalls = updated)
             }
 
             is RpcNotification.MessageCompleted -> {
@@ -947,9 +988,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
         }
 
-        // Emit updated state with scrollGeneration bump for auto-scroll
+        // Emit updated state with scrollGeneration bump for auto-scroll.
+        // isStreaming follows whether any assistant message is still streaming
+        // (a queued turn's first delta creates its placeholder mid-turn).
         uiState = uiState.copy(
             messages = msgs,
+            isStreaming = msgs.any { it.role == "assistant" && it.isStreaming },
             scrollGeneration = uiState.scrollGeneration + 1,
         )
     }

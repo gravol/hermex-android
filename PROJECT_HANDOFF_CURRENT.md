@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.91 — model switcher: config.set)
-**Current version:** v0.1.91 (versionCode 91)
-**HEAD commit:** see `git log` (v0.1.91 — model switcher: config.set)
+**Last updated:** 2026-08-15 (v0.1.92 — mid-turn slash commands)
+**Current version:** v0.1.92 (versionCode 92)
+**HEAD commit:** see `git log` (v0.1.92 — mid-turn slash commands)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -544,9 +544,22 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
 
+### Pinned (2026-08-15) — Theme/color versatility
+Parked at Jeff's request; implement on a future pass:
+1. **Custom color picker** — hex input + hue/sat wheel per part (removes the ~11-swatch ceiling).
+2. **Split assistant bubble from top bars/composer/drawer** — they currently share one `surfaceVariant` color.
+3. **Separate text roles** — user / assistant / secondary (timestamps/labels) instead of one global text color.
+4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
+5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
+6. **Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.
+
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.92 (2026-08-15)
+- **Mid-turn slash commands** — removed the Stop button; the composer now always shows Send. While a turn streams you can type `/stop` / `/interrupt` / `/halt` (→ `session.interrupt` — NOT slash.exec, whose `/stop` kills background processes), `/steer <x>` (injects after the next tool call), `/queue <x>` (submits as a prompt, server auto-queues), or normal text (also auto-queued). `sendSlashCommand` now handles the `{"type":"send","message":...}` response shape (was rendering raw JSON for `/queue`). (`ChatScreen` button row, `DashboardChatViewModel.sendMessage`/`submitPrompt`/`sendSlashCommand`.)
+- **Queued turns render** — a prompt sent mid-turn no longer fights the live placeholder: `submitPrompt` adds the user message without a second streaming placeholder, and `ensureStreamingPlaceholder` lazily creates one when the queued turn's first delta arrives. All delta/thinking/tool handlers route through it; `isStreaming` now derives from `messages.any { isStreaming }`. (Known minor: multiple queued messages stack responses in submission order after the last user message, not interleaved.) (`DashboardChatViewModel`.)
 
 ### DONE in v0.1.91 (2026-08-15)
 - **Model switcher fixed** — "Apply to this chat" sent `/model` + `/reasoning` through `slash.exec`, but the server's slash-exec mirror (`_mirror_slash_side_effects`) has **no `/reasoning` branch** (silently no-ops) and only mirrors `/model` when a live agent already exists (fresh/reaped sessions no-op; busy sessions rejected). Now uses the **`config.set` RPC** (`key=model`/`key=reasoning`) — the desktop's path, which defers a busy model switch to the next turn and builds the agent for a fresh session. `config.set` resolves `_sessions` by LIVE SID only, so the app sends `liveSid.ifBlank { sessionId }` (not the DB key, which would apply the change globally). Verified live: `config.set model=deepseek-v4-pro` + `reasoning=high` → server emits `session.info {model, provider, reasoning_effort}`. (`JsonRpcClient.configSet`, `DashboardChatViewModel.applyModelToSession` + `refreshUsageAndModel`.)
