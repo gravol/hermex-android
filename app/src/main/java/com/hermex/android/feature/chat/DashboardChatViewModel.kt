@@ -941,9 +941,14 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         if (visible && sessionId.isNotEmpty()) {
             viewModelScope.launch {
                 var attempts = 0
-                while (screenVisible &&
-                    (uiState.contextUsed == null || uiState.contextMax == null)
-                ) {
+                // v0.1.87: poll CONTINUOUSLY while the chat is open — burst
+                // (2s) until first data, then every 30s to keep the gauge live.
+                // session.info events aren't guaranteed to reach this client
+                // (single-owner transport — the desktop usually owns the live
+                // stream), so without this the gauge freezes at the last
+                // reading or "—/—" forever. One lightweight resume per 30s is
+                // trivial while the screen is open.
+                while (screenVisible) {
                     attempts++
                     try {
                         val result = rpcClient.sessionResume(sessionId, omitMessages = true)
@@ -957,7 +962,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     } catch (_: Exception) {
                         // Best-effort — loop back and try again.
                     }
-                    delay(if (attempts <= 3) 2_000 else 5_000)
+                    delay(if (attempts <= 3) 2_000 else 30_000)
                 }
             }
         }

@@ -1212,8 +1212,10 @@ private fun MessageBubble(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = 8.dp,
-                end = 8.dp,
+                // v0.1.87: assistant bubbles are full-bleed (edge to edge) —
+                // only user bubbles keep side insets.
+                start = if (isUser) 8.dp else 0.dp,
+                end = if (isUser) 8.dp else 0.dp,
                 top = if (sameSender) 1.dp else 6.dp,
                 bottom = 0.dp,
             ),
@@ -1270,7 +1272,10 @@ private fun MessageBubble(
                 )
                 Markdown(
                     markdownState = mdState,
-                    modifier = Modifier.widthIn(max = 400.dp),
+                    // v0.1.87: no width cap for assistant messages — text spans
+                    // the full bubble edge to edge. User bubbles keep the cap
+                    // (they're 320dp max anyway).
+                    modifier = if (isUser) Modifier.widthIn(max = 400.dp) else Modifier.fillMaxWidth(),
                     typography = markdownTypography(
                         h1 = MaterialTheme.typography.titleLarge,
                         h2 = MaterialTheme.typography.titleMedium,
