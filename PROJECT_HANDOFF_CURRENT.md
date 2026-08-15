@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.93 — copy/select/reply)
-**Current version:** v0.1.93 (versionCode 93)
-**HEAD commit:** see `git log` (v0.1.93 — copy/select/reply)
+**Last updated:** 2026-08-15 (v0.1.94 — reply via ⋯ button, not long-press)
+**Current version:** v0.1.94 (versionCode 94)
+**HEAD commit:** see `git log` (v0.1.94 — reply via ⋯ button)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -556,6 +556,9 @@ Parked at Jeff's request; implement on a future pass:
 ### DONE in v0.1.69 (2026-08-13)
 - **slash.exec timeout 30s → 180s** — `/compress` on a big session takes minutes; the client bailed at 30s with `timed out after 30000ms` (and the command may have actually completed server-side). (`JsonRpcClient.slashExec`.)
 - **Slash menu keeps the `/`** — server completions omit the leading slash (it's already typed); tapping inserted bare text, killing the command. Prefix restored on insert. (`ChatScreen` popup.)
+
+### DONE in v0.1.94 (2026-08-15)
+- **Reply/Copy off long-press** — the v0.1.93 long-press → Reply/Copy dialog was stealing the long-press gesture from `SelectionContainer`, so text selection never fired (user-reported). Removed the bubble's `combinedClickable(onLongClick)`; text selection now works natively, and Reply/Copy moved to a small "⋯" (`MoreVert`) button overlaid on each bubble's corner. (`ChatScreen.kt` `MessageBubble`.)
 
 ### DONE in v0.1.93 (2026-08-15)
 - **Code-block copy buttons** — every code block/fence now renders with a header bar (language label + Copy button) above the highlighted code; copies just the code. Custom `CopyableCodeBlock`/`CopyableCodeFence` wrap the existing `highlightedCodeBlock`/`highlightedCodeFence` via `markdownComponents`. (`ChatScreen.kt` `CodeBlockShell`.)

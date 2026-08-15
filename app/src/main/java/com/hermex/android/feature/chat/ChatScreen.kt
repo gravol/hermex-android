@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.Mic
@@ -928,7 +929,7 @@ fun ChatScreen(
                                 MessageBubble(
                                     message = msg,
                                     sameSender = sameSender,
-                                    onLongPress = { replyTarget = msg },
+                                    onReply = { replyTarget = msg },
                                     onToggleThinking = { viewModel.toggleThinking(msg.id) },
                                 )
                             }
@@ -1234,7 +1235,7 @@ private fun LiveThinkingTicker(text: String) {
 private fun MessageBubble(
     message: UiMessage,
     sameSender: Boolean,
-    onLongPress: () -> Unit,
+    onReply: () -> Unit,
     onToggleThinking: () -> Unit,
 ) {
     val isUser = message.role == "user"
@@ -1293,23 +1294,20 @@ private fun MessageBubble(
             Modifier.fillMaxWidth()
         }
 
-        Column(
-            modifier = bubbleWidthModifier
-                .clip(bubbleShape)
-                .background(bubbleColor)
-                // Border in the context-gauge color (primary) — subtle outline
-                // around each message (v0.1.67).
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
-                    shape = bubbleShape,
-                )
-                .combinedClickable(
-                    onClick = {},
-                    onLongClick = onLongPress,
-                )
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-        ) {
+        Box {
+            Column(
+                modifier = bubbleWidthModifier
+                    .clip(bubbleShape)
+                    .background(bubbleColor)
+                    // Border in the context-gauge color (primary) — subtle outline
+                    // around each message (v0.1.67).
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+                        shape = bubbleShape,
+                    )
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
             // Thinking no longer renders in the message (v0.1.65): it streams
             // in the docked Live Activity panel while working — showing it here
             // too caused double-thinking. Tool cards above the answer remain.
@@ -1396,6 +1394,22 @@ private fun MessageBubble(
                     text = formatTime(message.timestamp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                )
+            }
+            }
+            // "⋯" message actions — long-press is reserved for text selection,
+            // so Reply/Copy lives behind this small button (v0.1.94).
+            IconButton(
+                onClick = onReply,
+                modifier = Modifier
+                    .align(if (isUser) Alignment.TopStart else Alignment.TopEnd)
+                    .size(28.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = "Message actions",
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 )
             }
         }
