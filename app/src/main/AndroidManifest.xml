@@ -51,6 +51,18 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- v0.1.98: inline notification reply (lock screen / shade). -->
+        <service
+            android:name=".notify.NotificationReplyService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".notify.NotificationReplyReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <receiver
             android:name=".service.CronAlarmReceiver"
             android:exported="true"

@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.97 — thinking visibility toggle; model picker re-verified)
-**Current version:** v0.1.97 (versionCode 97)
-**HEAD commit:** see `git log` (v0.1.97 — thinking visibility toggle)
+**Last updated:** 2026-08-15 (v0.1.98 — lock-screen notification Reply via RemoteInput)
+**Current version:** v0.1.98 (versionCode 98)
+**HEAD commit:** see `git log` (v0.1.98 — lock-screen Reply)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -21,7 +21,7 @@
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
 | Version | v0.1.76 (versionCode 76) |
 | Completed phase | **v0.1.74–76 — notifications** (turn-finished + scheduled-alarm cron watcher) |
-| Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) ② custom colors for everything (refine text color/text size controls) ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response ④ re-verify Obtainium update flow after CI races ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking). Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
+| Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) — **DONE v0.1.80** ② custom colors for everything (refine text color/text size controls) — **DONE v0.1.49–58/79/95** ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response — **DONE v0.1.66–79** ④ re-verify Obtainium update flow after CI races — **DONE v0.1.76** ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking) — **DONE v0.1.98**. Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
 
@@ -86,6 +86,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Theme extra surfaces (v0.1.95)** — code blocks, thinking box, tool cards and the context gauge each get their own color override (Settings → Appearance) via `LocalUiSurfaces`, independent of the assistant bubble color. Null = derive from the scheme (previous behavior).
 - **Tool-call visibility toggle (v0.1.96)** — persisted "Show tool calls" switch (Settings → Appearance + wrench icon in the chat top bar). Off hides the finished tools box, live-panel tool rows and tool detail dialogs; thinking and the response stay. During streaming, tools render in their own labeled TOOLS section (separate from the THINKING block) inside the live panel.
 - **Thinking visibility toggle (v0.1.97)** — persisted "Show thinking" switch (Settings → Appearance + brain icon in the chat top bar). Off hides the finished thinking box, the live THINKING section and the in-stream thinking ticker; tools and the response stay. Model selector + reasoning flow re-verified (v0.1.97): `model.options` picker → "Apply to this chat" via `config.set` with the live SID, "Save for new chats" via `model_pick`/`reasoning_pick` → `session.create`.
+- **Lock-screen notification Reply (v0.1.98)** — turn-finished notifications carry an inline "Reply" action (RemoteInput). Typing a reply from the lock screen or shade → `NotificationReplyReceiver` → `NotificationReplyService` (foreground, dataSync) → fresh WS + `session.resume` + `prompt.submit` → the assistant's reply arrives as a new turn-finished notification (which carries the Reply action again — full notification chat loop without unlocking). Pinned 2026-08-14 plan item ⑤ done.
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)
 `ApiClient`, `DTOs`, `SseParser`, `SetupScreen`/`SetupViewModel`, legacy `ChatViewModel`, and `HermesForegroundService` were fully deleted in v0.1.42. The app is dashboard JSON-RPC/WebSocket only.
@@ -555,6 +556,13 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.98 (2026-08-15) — Lock-screen notification Reply (pinned 2026-08-14 item ⑤)
+- **Inline Reply action on turn-finished notifications** — `NotificationHelper.replyAction()` builds a "Reply" action with `RemoteInput` (`KEY_REPLY_TEXT`, label "Reply", `ic_menu_send` icon) targeting `NotificationReplyReceiver` (non-exported BroadcastReceiver, same-app PendingIntent). Every `postTurnFinished` notification now carries it, so replies chain. New low-importance "reply" channel for the in-flight foreground notification. (`NotificationHelper.kt`.)
+- **`NotificationReplyService`** (new, foreground `dataSync` like `WsKeepaliveService`, `START_NOT_STICKY` so a system restart never re-sends a reply) — on the action: fresh `WsConnectionManager` + `JsonRpcClient` (the exact stack the chat VM uses), `session.resume(omitMessages=true)` to attach the session, `prompt.submit` with the DB key (server resolves), then waits (up to 10 min) for `message.completed` matching the DB key OR live sid (same two-phase filter as the VM) and posts the assistant's reply via `postTurnFinished` — the Reply action rides along, so the loop continues without ever unlocking. Failure → "⚠️ Reply failed" notification; stale turn notification cancelled on submit. (`notify/NotificationReplyService.kt`.)
+- **`NotificationReplyReceiver`** (new) — reads `RemoteInput.getResultsFromIntent`, ignores blank replies, cancels the stale turn notification, starts the service with session/title/reply extras. (`notify/NotificationReplyReceiver.kt`.)
+- **Manifest** — `<service .notify.NotificationReplyService foregroundServiceType="dataSync">` + `<receiver .notify.NotificationReplyReceiver exported="false">` (permissions already present from WsKeepaliveService). (`AndroidManifest.xml`.)
+- **Device QA checklist:** reply from lock screen and from the shade; confirm the "Sending reply…" foreground pill appears and clears; confirm the reply lands as a new notification and chains (Reply action on the reply); verify no double-post when the chat for that session is open in the foreground (ID_TURNS replace-semantics prevent dupes).
 
 ### DONE in v0.1.97 (2026-08-15) — Thinking visibility toggle + model picker re-verify
 - **"Show thinking" toggle (persisted)** — new `show_thinking` DataStore key (`SettingsRepository.showThinking`, default true), mirroring the v0.1.96 tool-calls toggle. Off hides thinking UI everywhere: the finished `ThinkingScrollBox`, the live `LiveActivityPanel` THINKING section (plus the divider above the TOOLS header), and the in-stream `LiveThinkingTicker`. Tools, the response, tasks panel and approval dialogs are unaffected. (`SettingsRepository.kt`, `ChatScreen.kt`.)
