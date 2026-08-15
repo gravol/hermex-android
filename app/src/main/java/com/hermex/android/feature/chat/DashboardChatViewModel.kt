@@ -201,6 +201,24 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     "session.resume → ${messages.size} messages in ${loadDuration}ms" +
                     " (message_count=${result.message_count})")
                 sessionLoadStartTime = 0L
+            } catch (e: JsonRpcException) {
+                if (e.code == 4007) {
+                    // v0.1.89: 4007 = session not found. For a JUST-CREATED
+                    // session that's NORMAL — the server only flushes the DB
+                    // row on the first run, so resume can't find it yet. Show
+                    // an empty chat; the first prompt.submit attaches the agent
+                    // and persists (verified server-side). Also covers deleted
+                    // sessions (nothing to show anyway).
+                    DebugLog.log("RPC", "DashboardChat",
+                        "loadMessages 4007 (fresh/deleted session) — starting empty: $sessionId")
+                    uiState = uiState.copy(isLoading = false, messages = emptyList(), error = null)
+                } else {
+                    Log.e("Hermex", "DashboardChatViewModel: loadMessages failed", e)
+                    uiState = uiState.copy(
+                        isLoading = false,
+                        error = e.message ?: "Failed to load messages",
+                    )
+                }
             } catch (e: Exception) {
                 Log.e("Hermex", "DashboardChatViewModel: loadMessages failed", e)
                 uiState = uiState.copy(
@@ -943,6 +961,33 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             settingsRepo.setModelPick(model)
             settingsRepo.setReasoningPick(reasoning)
             uiState = uiState.copy(currentReasoning = reasoning.ifBlank { null })
+        }
+    }
+
+    /**
+     * v0.1.89: switch THIS session's model/effort mid-conversation via the
+     * standard slash commands (/model, /reasoning) — the same path the
+     * desktop and Telegram use. The server applies them session-scoped and
+     * replies in the chat.
+     */
+    override fun applyModelToSession(model: String, reasoning: String) {
+        viewModelScope.launch {
+            try {
+                if (model.isNotBlank()) {
+                    rpcClient.promptSubmit(sessionId, "/model $model")
+                    DebugLog.log("RPC", "DashboardChat", "mid-session /model $model")
+                }
+                if (reasoning.isNotBlank()) {
+                    rpcClient.promptSubmit(sessionId, "/reasoning $reasoning")
+                    DebugLog.log("RPC", "DashboardChat", "mid-session /reasoning $reasoning")
+                }
+                uiState = uiState.copy(
+                    currentModel = model.ifBlank { uiState.currentModel },
+                    currentReasoning = reasoning.ifBlank { uiState.currentReasoning },
+                )
+            } catch (e: Exception) {
+                Log.e("Hermex", "applyModelToSession failed", e)
+            }
         }
     }
 

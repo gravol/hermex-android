@@ -40,4 +40,7 @@ abstract class ChatViewModelContract(application: Application) : AndroidViewMode
         JsonRpcClient.ModelOptionsResult()
 
     open fun saveModelPick(model: String, reasoning: String) {}
+
+    /** v0.1.89: mid-session switch via /model + /reasoning slash commands. */
+    open fun applyModelToSession(model: String, reasoning: String) {}
 }

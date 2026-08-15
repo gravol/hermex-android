@@ -2245,7 +2245,7 @@ private fun ModelPickerSheet(
         ) {
             Text("Model & Reasoning", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "Applies to new chats (server contract). Current chat stays as-is.",
+                "Apply to this chat, or save as the default for new chats.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -2309,7 +2309,25 @@ private fun ModelPickerSheet(
                 }
 
                 Spacer(Modifier.height(16.dp))
+                // v0.1.89: switch THIS chat immediately (slash commands)…
                 Button(
+                    onClick = {
+                        scope.launch {
+                            saving = true
+                            viewModel.applyModelToSession(selectedModel, selectedEffort)
+                            saving = false
+                            Toast.makeText(context, "Applied to this chat", Toast.LENGTH_SHORT).show()
+                            onDismiss()
+                        }
+                    },
+                    enabled = !saving && selectedModel.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (saving) "Applying…" else "Apply to this chat")
+                }
+                Spacer(Modifier.height(8.dp))
+                // …and persist the pick for future chats.
+                OutlinedButton(
                     onClick = {
                         scope.launch {
                             saving = true
@@ -2322,7 +2340,7 @@ private fun ModelPickerSheet(
                     enabled = !saving && selectedModel.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (saving) "Saving…" else "Save for new chats")
+                    Text("Save for new chats")
                 }
             }
         }
