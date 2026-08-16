@@ -277,7 +277,9 @@ fun ChatScreen(
 
     LaunchedEffect(composerText, composerFocused, state.isStreaming) {
         val text = composerText
-        if (composerFocused && !state.isStreaming && text.startsWith("/")) {
+        // v0.1.99: completions work mid-turn too — /stop, /steer, /queue etc.
+        // are first-class while a turn streams (v0.1.92).
+        if (composerFocused && text.startsWith("/")) {
             delay(150)  // debounce while typing
             slashItems = runCatching { viewModel.completeSlash(text) }
                 .getOrNull()

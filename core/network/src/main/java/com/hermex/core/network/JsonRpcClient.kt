@@ -511,6 +511,25 @@ class JsonRpcClient(
     }
 
     /**
+     * Route a command through command.dispatch (v0.1.99) — the server's path
+     * for skill/bundle commands that slash.exec rejects with 4018
+     * ("use command.dispatch"). Returns the same shapes as slash.exec
+     * ({"type":"send"|"skill","message":...}, {"output":...}, …).
+     *
+     * NOTE: `sessionId` MUST be the LIVE SID (8-hex from session.resume /
+     * session.create), NOT the persistent DB key — command.dispatch resolves
+     * `_sessions` directly with no DB-key fallback (same rule as config.set).
+     */
+    suspend fun commandDispatch(sessionId: String, name: String, arg: String = ""): JsonObject {
+        DebugLog.log("RPC", "JsonRpc", "command.dispatch $name${if (arg.isNotBlank()) " $arg" else ""}")
+        return request(
+            "command.dispatch",
+            mapOf("session_id" to sessionId, "name" to name, "arg" to arg),
+            timeoutMs = 60_000,
+        )
+    }
+
+    /**
      * Set a per-session config key (v0.1.91) — the desktop's model/reasoning
      * switch path. `sessionId` MUST be the LIVE SID (8-hex from session.resume /
      * session.create), NOT the persistent DB key: `config.set` resolves

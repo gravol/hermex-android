@@ -371,40 +371,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         uiState = uiState.copy(messages = current, error = null)
         viewModelScope.launch {
             try {
-                val result = rpcClient.slashExec(sessionId, command)
-                // "send" response (e.g. /queue, /retry, /undo, or /steer with no
-                // live turn): the server wants a message submitted as a prompt.
-                // Swap the command text for the real prompt and submit it — the
-                // server auto-queues it if a turn is already streaming.
-                val sendType = result["type"]?.jsonPrimitive?.contentOrNull
-                val sendMsg = result["message"]?.jsonPrimitive?.contentOrNull
-                if (sendType == "send" && sendMsg != null) {
-                    val msgs = uiState.messages.toMutableList()
-                    val phIdx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                    if (phIdx >= 0) msgs.removeAt(phIdx)
-                    val cmdIdx = msgs.indexOfLast { it.role == "user" && it.content == command }
-                    if (cmdIdx >= 0) msgs.removeAt(cmdIdx)
-                    uiState = uiState.copy(messages = msgs)  // keep isStreaming as-is
-                    submitPrompt(sendMsg)
-                    return@launch
-                }
-                val output = result["output"]?.jsonPrimitive?.contentOrNull
-                    ?: result.toString()
-                val msgs = uiState.messages.toMutableList()
-                val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
-                if (idx >= 0) {
-                    msgs[idx] = msgs[idx].copy(content = output, isStreaming = false)
-                } else {
-                    msgs.add(
-                        UiMessage(
-                            id = "slash_${tempIdCounter.incrementAndGet()}",
-                            role = "assistant",
-                            content = output,
-                            timestamp = System.currentTimeMillis(),
-                        )
-                    )
-                }
-                uiState = uiState.copy(messages = msgs)
+                val result = execSlashWithFallbacks(command)
+                applySlashResult(result, command)
                 // Slash commands can change context (e.g. /compress) — refresh gauge
                 try {
                     val res = rpcClient.sessionResume(sessionId, omitMessages = true)
@@ -436,6 +404,79 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 uiState = uiState.copy(messages = msgs)
             }
         }
+    }
+
+    /**
+     * v0.1.99: run slash.exec with two server-side fallbacks:
+     *  1. Skill/bundle commands are rejected by slash.exec with 4018
+     *     "use command.dispatch" — route them through command.dispatch, which
+     *     resolves `_sessions` by LIVE SID only (pass liveSid, not the DB key).
+     *  2. 4001 session not found — the session was reaped; re-register it with
+     *     session.resume and retry once (same self-heal as prompt.submit).
+     */
+    private suspend fun execSlashWithFallbacks(command: String): JsonObject {
+        return try {
+            rpcClient.slashExec(sessionId, command)
+        } catch (e: JsonRpcException) {
+            when {
+                e.code == 4018 && e.message?.contains("command.dispatch") == true -> {
+                    val trimmed = command.trim().removePrefix("/")
+                    val base = trimmed.substringBefore(' ').lowercase()
+                    val arg = trimmed.substringAfter(' ', "").trim()
+                    DebugLog.log("RPC", "DashboardChat",
+                        "slash.exec 4018 → command.dispatch name=$base arg=$arg (liveSid=$liveSid)")
+                    rpcClient.commandDispatch(liveSid.ifBlank { sessionId }, base, arg)
+                }
+                e.code == 4001 -> {
+                    DebugLog.log("STATE", "SessionID",
+                        "slash.exec 4001 — self-heal resume + retry (dbKey=$sessionId)")
+                    val resume = rpcClient.sessionResume(sessionId, omitMessages = true)
+                    liveSid = resume.session_id
+                    resumedSessionId = resume.resumed ?: sessionId
+                    rpcClient.slashExec(sessionId, command)
+                }
+                else -> throw e
+            }
+        }
+    }
+
+    /**
+     * Apply a slash.exec / command.dispatch result to the placeholder:
+     *  - {"type":"send"|"skill","message":...} → submit the message as a real
+     *    prompt (the server wants a turn: /queue, /steer, skill invocations)
+     *  - {"output":...} → render as the assistant message
+     *  - anything else → render the raw JSON (debuggable)
+     */
+    private fun applySlashResult(result: JsonObject, command: String) {
+        val sendType = result["type"]?.jsonPrimitive?.contentOrNull
+        val sendMsg = result["message"]?.jsonPrimitive?.contentOrNull
+        if ((sendType == "send" || sendType == "skill") && sendMsg != null) {
+            val msgs = uiState.messages.toMutableList()
+            val phIdx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+            if (phIdx >= 0) msgs.removeAt(phIdx)
+            val cmdIdx = msgs.indexOfLast { it.role == "user" && it.content == command }
+            if (cmdIdx >= 0) msgs.removeAt(cmdIdx)
+            uiState = uiState.copy(messages = msgs)  // keep isStreaming as-is
+            submitPrompt(sendMsg)
+            return
+        }
+        val output = result["output"]?.jsonPrimitive?.contentOrNull
+            ?: result.toString()
+        val msgs = uiState.messages.toMutableList()
+        val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
+        if (idx >= 0) {
+            msgs[idx] = msgs[idx].copy(content = output, isStreaming = false)
+        } else {
+            msgs.add(
+                UiMessage(
+                    id = "slash_${tempIdCounter.incrementAndGet()}",
+                    role = "assistant",
+                    content = output,
+                    timestamp = System.currentTimeMillis(),
+                )
+            )
+        }
+        uiState = uiState.copy(messages = msgs)
     }
 
     override fun sendMessageWithImage(text: String, imageBase64: String, filename: String?) {

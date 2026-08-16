@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-15 (v0.1.98 — lock-screen notification Reply via RemoteInput)
-**Current version:** v0.1.98 (versionCode 98)
-**HEAD commit:** see `git log` (v0.1.98 — lock-screen Reply)
+**Last updated:** 2026-08-16 (v0.1.99 — slash command fix: command.dispatch fallback + self-heal)
+**Current version:** v0.1.99 (versionCode 99)
+**HEAD commit:** see `git log` (v0.1.99 — slash command fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -87,6 +87,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Tool-call visibility toggle (v0.1.96)** — persisted "Show tool calls" switch (Settings → Appearance + wrench icon in the chat top bar). Off hides the finished tools box, live-panel tool rows and tool detail dialogs; thinking and the response stay. During streaming, tools render in their own labeled TOOLS section (separate from the THINKING block) inside the live panel.
 - **Thinking visibility toggle (v0.1.97)** — persisted "Show thinking" switch (Settings → Appearance + brain icon in the chat top bar). Off hides the finished thinking box, the live THINKING section and the in-stream thinking ticker; tools and the response stay. Model selector + reasoning flow re-verified (v0.1.97): `model.options` picker → "Apply to this chat" via `config.set` with the live SID, "Save for new chats" via `model_pick`/`reasoning_pick` → `session.create`.
 - **Lock-screen notification Reply (v0.1.98)** — turn-finished notifications carry an inline "Reply" action (RemoteInput). Typing a reply from the lock screen or shade → `NotificationReplyReceiver` → `NotificationReplyService` (foreground, dataSync) → fresh WS + `session.resume` + `prompt.submit` → the assistant's reply arrives as a new turn-finished notification (which carries the Reply action again — full notification chat loop without unlocking). Pinned 2026-08-14 plan item ⑤ done.
+- **Slash commands fixed (v0.1.99)** — verified live against the gateway (WS RPC probe): completion, exec, worker, and DB-key paths all work server-side. Root-caused the failure: **skill commands** (`/hermes-agent`, `/hermexandroid`, … — a large share of the completion menu) are rejected by `slash.exec` with 4018 *"use command.dispatch"*, which the app never implemented → "⚠️ Command failed". Now: 4018 → `command.dispatch` (live SID only, like `config.set`); 4001 → self-heal resume + retry (same as `prompt.submit`); `{"type":"skill"|"send","message":...}` → submitted as a real prompt. Slash completions also work mid-turn now.
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)
 `ApiClient`, `DTOs`, `SseParser`, `SetupScreen`/`SetupViewModel`, legacy `ChatViewModel`, and `HermesForegroundService` were fully deleted in v0.1.42. The app is dashboard JSON-RPC/WebSocket only.
@@ -556,6 +557,13 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.99 (2026-08-16) — Slash command fix (root-caused via live gateway probe)
+- **Verification** — connected to the local gateway (`hermes dashboard` PID 111987, creds from its env) and exercised the exact app RPCs: `complete.slash` returns clean items (text/display/meta/kind); `slash.exec /status` (live-direct) and `/help` (worker) return output; **DB-key resolution works** (the v0.1.44 fallback is present in the running code).
+- **Root cause of "slash commands don't work"** — skill commands (a large share of the completion list, marked ⚡) are rejected by `slash.exec` with `4018 "skill command: use command.dispatch for /xxx"` — the app had no `command.dispatch` implementation, so every skill tap rendered "⚠️ Command failed". Reproduced live: `slash.exec /hermes-agent` → 4018; `command.dispatch` → skill content. (`tui_gateway/methods_tools.py` confirmed: `_PENDING_INPUT_COMMANDS` and skill/bundle commands must go through `command.dispatch`, which resolves `_sessions` by LIVE SID only.)
+- **Fix** — `JsonRpcClient.commandDispatch(sessionId, name, arg)` (new RPC, 60s timeout). `sendSlashCommand` reworked: `execSlashWithFallbacks()` retries `slash.exec` → on 4018 "use command.dispatch" calls `command.dispatch(liveSid.ifBlank { sessionId }, base, arg)`; on 4001 re-registers via `session.resume` + retries once (self-heal, mirroring `submitWithSelfHeal`). Shared `applySlashResult()` now also treats `{"type":"skill","message":…}` as a prompt to submit (skill content → real turn), alongside the existing `"send"` type; `{"output":…}` still renders inline; unknown shapes fall back to raw JSON. (`DashboardChatViewModel.kt`.)
+- **Slash completions work mid-turn** — removed the `!state.isStreaming` gate from the completion `LaunchedEffect`, aligning the menu with v0.1.92's mid-turn slash commands (`/stop`, `/steer`, `/queue`). (`ChatScreen.kt`.)
+- **Device QA:** tap a skill command (⚡ row) → should now run via command.dispatch (submits skill content as a turn) instead of "Command failed"; `/queue`, `/steer` mid-turn; `/status` shows session output.
 
 ### DONE in v0.1.98 (2026-08-15) — Lock-screen notification Reply (pinned 2026-08-14 item ⑤)
 - **Inline Reply action on turn-finished notifications** — `NotificationHelper.replyAction()` builds a "Reply" action with `RemoteInput` (`KEY_REPLY_TEXT`, label "Reply", `ic_menu_send` icon) targeting `NotificationReplyReceiver` (non-exported BroadcastReceiver, same-app PendingIntent). Every `postTurnFinished` notification now carries it, so replies chain. New low-importance "reply" channel for the in-flight foreground notification. (`NotificationHelper.kt`.)
