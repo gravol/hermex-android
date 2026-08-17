@@ -326,6 +326,26 @@ fun ChatScreen(
                 scrollGeneration = 0L,
                 reason = "SessionOpen",
             )
+            // v0.1.101: settle pass — the loaded conversation's final layout
+            // (markdown parse, usage footer, bubble borders) lands a frame or two
+            // AFTER the messages arrive, so the first scrollToItem clamps to the
+            // pre-settle max scroll and the last message's bottom outline ends up
+            // a few px behind the composer ("99%" visible). Wait a frame and
+            // re-scroll to the true bottom until canScrollForward clears (same
+            // idea as the v0.1.95 StreamEnd settle, looped for multi-frame
+            // settles). No-op when the first scroll already landed exactly.
+            repeat(3) { pass ->
+                withFrameNanos { }
+                if (!userScrolledUp && state.messages.isNotEmpty() && listState.canScrollForward) {
+                    autoScrollToBottom(
+                        listState = listState,
+                        targetIndex = state.messages.lastIndex,
+                        totalItems = state.messages.size,
+                        scrollGeneration = 0L,
+                        reason = "SessionOpenSettle$pass",
+                    )
+                }
+            }
         }
     }
 

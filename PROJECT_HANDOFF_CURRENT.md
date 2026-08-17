@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-17 (v0.1.100 — cron notification reliability: exact alarms, no clobber, login-storm fix)
-**Current version:** v0.1.100 (versionCode 100)
-**HEAD commit:** see `git log` (v0.1.100 — cron notification reliability)
+**Last updated:** 2026-08-17 (v0.1.101 — session-open bottom scroll settle fix)
+**Current version:** v0.1.101 (versionCode 101)
+**HEAD commit:** see `git log` (v0.1.101 — session-open bottom scroll settle fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -558,6 +558,12 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.101 (2026-08-17) — Session-open bottom scroll settle fix
+- **Bug** — when a conversation loads, the last message's bottom outline sits ~1px short of the true bottom, its bottom border just hidden behind the composer ("99% there, splitting hairs").
+- **Root cause** — the initial-load scroll (`SessionOpen`, one-shot `LaunchedEffect`) calls `autoScrollToBottom()` exactly once. `scrollToItem` clamps to the max scroll computed from the *pre-settle* layout; the loaded conversation's final layout (markdown parse, usage footer, bubble borders) lands a frame or two AFTER the messages arrive, so the true max scroll is a few px more and the last message ends up clipped at the composer seam. The v0.1.95 `StreamEnd` path already had a one-frame re-scroll settle for exactly this class of bug — the load path didn't.
+- **Fix** — the `SessionOpen` effect now runs a 3-frame settle loop after the first scroll: wait a frame, and if the list still `canScrollForward` (not yet at the true bottom) and the user hasn't scrolled up, re-scroll (`reason="SessionOpenSettleN"`). No-op when the first scroll already lands exactly; respects `userScrolledUp`. (`ChatScreen.kt`.)
+- **Device QA** — open a few conversations (long ones with markdown/tables/code, ones with a usage footer) and confirm the last message's border sits fully above the composer with the normal ~8dp gap.
 
 ### DONE in v0.1.100 (2026-08-17) — Cron notification reliability (missed 7am weather ping)
 - **Forensics** — user missed the 7am weather ping (2026-08-16). Server side verified clean end-to-end: cron `0 14 * * *` UTC = 7am Vancouver, run started 14:00:07 / finished 14:05:33 UTC, status `completed`, no error; runs API returns `ended_at` (float seconds) matching the app's DTO; run output fetch works. The failure was the phone's alarm path. Phone evidence from the gateway auth log: pixel-8 (100.101.185.85) logged in **1987×** over ~2 days (~25-30/hour while connected) — a storm — with a login gap 14:05–14:15 UTC (7:05–7:15am PDT, deep Doze right when the run finished).
