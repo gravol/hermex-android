@@ -39,10 +39,14 @@ object CronWatcher {
     private const val RUN_BUFFER_MS = 120_000L   // alarm at next_run + 2 min (job runtime)
     private const val RE_CHECK_MS = 300_000L     // still-running runs re-checked every 5 min
     private const val MAX_CHECKS_PER_RUN = 24    // 2h patience for a run that never ends
-    private const val MIN_SYNC_GAP_MS = 10_000L  // debounce cron.changed storms
+    private const val MIN_SYNC_GAP_MS = 30_000L  // debounce cron.changed storms (v0.1.100: 10s→30s)
+    private const val LOGIN_COOLDOWN_MS = 30 * 60_000L  // v0.1.100: bound explicit logins
+    private const val CATCHUP_COOLDOWN_MS = 10 * 60_000L  // v0.1.100: bound catch-up scans
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var lastSyncMs = 0L
+    @Volatile private var lastLoginMs = 0L
+    @Volatile private var lastCatchUpMs = 0L
 
     /** Called from anywhere (app start, service, receiver, WS event). Cheap + debounced. */
     fun sync(context: Context) {
@@ -56,7 +60,14 @@ object CronWatcher {
                 val jobs = DashboardApiClient.cronJobs()
                 if (jobs is NetworkResult.Success) {
                     armAlarms(app, jobs.data)
-                    catchUpMissedRuns(app, jobs.data)
+                    // v0.1.100: catch-up scans fetch runs for up to 8 jobs — with
+                    // cron.changed syncing every ~1-2 min that's hundreds of REST
+                    // calls/hour. Bound it to one scan per 10 min.
+                    val nowC = System.currentTimeMillis()
+                    if (nowC - lastCatchUpMs >= CATCHUP_COOLDOWN_MS) {
+                        lastCatchUpMs = nowC
+                        catchUpMissedRuns(app, jobs.data)
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "sync failed: ${e.message}")
@@ -156,7 +167,9 @@ object CronWatcher {
                             // cron notifications). The re-check arms alone; the
                             // notify/give-up path syncs.
                             prefs.edit().putInt(KEY_CHECK_COUNT + jobId, checks + 1).apply()
-                            armOne(app, jobId, System.currentTimeMillis() + RE_CHECK_MS)
+                            // v0.1.100: distinct request code so a concurrent
+                            // sync() can't clobber this re-check alarm.
+                            armOne(app, jobId, System.currentTimeMillis() + RE_CHECK_MS, recheck = true)
                         }
                     } else {
                         // No new run (rescheduled / paused) — re-arm from fresh data
@@ -195,6 +208,16 @@ object CronWatcher {
         if (DashboardApiClient.baseUrl() != url) DashboardApiClient.setDashboardUrl(url)
         DashboardApiClient.setPassword(password)
         DashboardApiClient.setUsername(username)
+        // v0.1.100: the gateway broadcasts cron.changed every scheduler tick
+        // (jobs.json mtime moves on last_run/next_run bookkeeping) and the chat
+        // VM forwards each one here — an unconditional password-login on every
+        // sync hammered the gateway with ~25-30 logins/hour while connected.
+        // The OkHttp 401 authenticator re-logs in on demand, so a fresh cookie
+        // only needs an occasional explicit refresh. Cooldown bounds explicit
+        // logins to <= 48/day and turns the storm into a single cheap check.
+        val now = System.currentTimeMillis()
+        if (now - lastLoginMs < LOGIN_COOLDOWN_MS) return true
+        lastLoginMs = now
         // Ensure a fresh cookie before REST calls (cheap; 401 re-login also exists)
         when (DashboardApiClient.login(username, password)) {
             is NetworkResult.Success -> return true
@@ -219,20 +242,39 @@ object CronWatcher {
         DebugLog.log("CRON", "Watcher", "armed $armed alarms from ${jobs.size} jobs")
     }
 
-    private fun armOne(context: Context, jobId: String, fireAtMs: Long) {
+    private fun armOne(context: Context, jobId: String, fireAtMs: Long, recheck: Boolean = false) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, CronAlarmReceiver::class.java).apply {
             action = CronAlarmReceiver.ACTION_ALARM
             putExtra(CronAlarmReceiver.EXTRA_JOB_ID, jobId)
         }
+        // v0.1.100: re-check alarms use a DIFFERENT request code than the
+        // next-occurrence alarm. Previously both used jobId.hashCode(), so any
+        // sync() (e.g. a cron.changed WS event, app start, boot) re-armed the
+        // job for its NEXT occurrence with the same PendingIntent identity and
+        // silently REPLACED a pending re-check — the v0.1.77 bug class (one
+        // check, then silence until the next day) reintroduced via the WS path.
+        val requestCode = if (recheck) {
+            ((jobId.hashCode() and 0x7fffffff) xor 0x13579BDF) and 0x7fffffff
+        } else {
+            jobId.hashCode() and 0x7fffffff
+        }
         val pi = PendingIntent.getBroadcast(
             context,
-            jobId.hashCode() and 0x7fffffff,
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        // setAndAllowWhileIdle: inexact but fires in Doze — no exact-alarm permission needed
-        runCatching { alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pi) }
+        // v0.1.100: exact alarm (manifest already declares SCHEDULE_EXACT_ALARM
+        // + USE_EXACT_ALARM) so the 7am ping fires on time even in deep Doze —
+        // setAndAllowWhileIdle could be deferred 10+ minutes, which is how this
+        // morning's run finished at 7:05 but the check only ran ~7:16 (or never).
+        // Falls back to the inexact alarm if the exact-alarm grant was revoked.
+        try {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pi)
+        } catch (_: Exception) {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pi)
+        }
     }
 
     private fun parseIso(iso: String): Long? = runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()
