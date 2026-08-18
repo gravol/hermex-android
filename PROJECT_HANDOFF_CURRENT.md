@@ -1,6 +1,6 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-18 (v0.1.110 — new session login fix + tok/s rendered fallback)
+**Last updated:** 2026-08-18 (v0.1.110 — new session login fix + tok/s rendered fallback; local LLM took over development at v0.1.108)
 **Current version:** v0.1.110 (versionCode 110)
 **HEAD commit:** see `git log` (v0.1.108 — ReasoningDelta null-text fix)
 **Branch:** `master`  
