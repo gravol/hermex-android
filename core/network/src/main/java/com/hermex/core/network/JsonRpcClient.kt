@@ -253,7 +253,10 @@ class JsonRpcClient(
                 val payload = params["payload"]?.jsonObject
                 val text = payload?.get("text")?.jsonPrimitive?.content
                     ?: payload?.get("rendered")?.jsonPrimitive?.content ?: ""
-                RpcNotification.MessageDelta(sessionId ?: "", text)
+                val pps = payload?.get("timings")?.jsonObject
+                    ?.get("predicted_per_second")?.jsonPrimitive?.content?.toFloatOrNull()
+                    ?: payload?.get("predicted_per_second")?.jsonPrimitive?.content?.toFloatOrNull()
+                RpcNotification.MessageDelta(sessionId ?: "", text, pps)
             }
 
             "message.start", "message.started" -> {

@@ -36,6 +36,8 @@ data class UiUsage(
     val completionTokens: Int = 0,
     val totalTokens: Int = 0,
     val estimatedCostUsd: Double? = null,
+    /** Server-reported predicted tokens per second (e.g. Ollama timings). */
+    val predictedPerSecond: Float? = null,
 )
 
 /** One item in the agent's live task list (todo tool state). */
@@ -71,6 +73,10 @@ data class ChatUiState(
     // True when a turn completed while the chat screen wasn't visible (v0.1.60).
     // Shown as a banner on re-entry until dismissed.
     val completedWhileAway: Boolean = false,
+    // v0.1.110: server-reported live tokens/sec during streaming (from
+    // /v1/chat/completions timings.predicted_per_second). Replaces the
+    // stale-char-count estimate in the live panel header.
+    val liveTokPerSec: Float? = null,
 )
 
 /**

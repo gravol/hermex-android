@@ -834,6 +834,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     thinkingHasContent = true,
                     isWaitingForFirstEvent = false,
                 )
+                // v0.1.110: forward server-reported tok/s to UI for the live readout.
+                n.predictedPerSecond?.let { pps ->
+                    uiState = uiState.copy(liveTokPerSec = pps)
+                }
             }
 
             is RpcNotification.ThinkingDelta -> {
@@ -956,6 +960,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                             it.completionTokens ?: 0,
                             it.totalTokens ?: 0,
                             it.estimatedCostUsd,
+                            it.predictedPerSecond,
                         )
                     }
                     msgs[idx] = cur.copy(
@@ -980,6 +985,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 uiState = uiState.copy(
                     messages = msgs,
                     isStreaming = false,
+                    liveTokPerSec = null,
                     scrollGeneration = uiState.scrollGeneration + 1,
                 )
                 onTurnFinished()

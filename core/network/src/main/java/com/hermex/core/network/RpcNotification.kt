@@ -29,6 +29,8 @@ sealed class RpcNotification {
     data class MessageDelta(
         override val sessionId: String,
         val text: String,
+        /** Server-reported predicted tokens per second from the LLM timings (may be null). */
+        val predictedPerSecond: Float? = null,
     ) : RpcNotification()
 
     /** Thinking/reasoning stream (shown in collapsible block). Append-only. */
@@ -122,6 +124,8 @@ sealed class RpcNotification {
         val completionTokens: Int? = null,
         val totalTokens: Int? = null,
         val estimatedCostUsd: Double? = null,
+        /** Server-reported predicted tokens per second (e.g. Ollama /v1/chat/completions timings). */
+        val predictedPerSecond: Float? = null,
     )
 
     // ── User interaction requests (v1: auto-deny + visible notice) ──

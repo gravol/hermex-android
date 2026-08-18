@@ -150,6 +150,10 @@ fun ChatScreen(
     // live instead of looking missing; EMA-smoothed for a steady readout.
     // v0.1.107: separate THINKING speed (from thinkingText deltas) shown beside
     // the "Live activity" label while reasoning flows.
+    // v0.1.110: each tick re-reads viewModel.uiState (not the captured `state`)
+    // so the meter sees growing content — the old `state` snapshot was stale
+    // inside the LaunchedEffect coroutine, always returning the initial empty
+    // message → len−lastLen = 0 → tok/s stuck at 0.
     var streamTokPerSec by remember { mutableStateOf(0f) }
     var streamThinkingTokPerSec by remember { mutableStateOf(0f) }
     LaunchedEffect(state.isStreaming) {
@@ -158,14 +162,15 @@ fun ChatScreen(
             streamThinkingTokPerSec = 0f
             return@LaunchedEffect
         }
-        var lastLen = state.messages.lastOrNull { it.isStreaming }?.content?.length ?: 0
-        var lastThinkLen = state.messages.lastOrNull { it.isStreaming }?.thinkingText?.length ?: 0
+        var lastLen = viewModel.uiState.messages.lastOrNull { it.isStreaming }?.content?.length ?: 0
+        var lastThinkLen = viewModel.uiState.messages.lastOrNull { it.isStreaming }?.thinkingText?.length ?: 0
         var lastTime = System.currentTimeMillis()
         var firstSample = true
         var firstThinkSample = true
         while (true) {
             delay(1000)
-            val streamingMsg = state.messages.lastOrNull { it.isStreaming } ?: break
+            val currentUi = viewModel.uiState
+            val streamingMsg = currentUi.messages.lastOrNull { it.isStreaming } ?: break
             val now = System.currentTimeMillis()
             val len = streamingMsg.content.length
             val thinkLen = streamingMsg.thinkingText?.length ?: 0
@@ -1091,6 +1096,10 @@ fun ChatScreen(
             // v0.1.106: panel is now always visible while streaming — it hosts
             // the tok/s readout; the thinking/tools sections inside still
             // respect the visibility toggles.
+            // v0.1.110: use server-reported liveTokPerSec when available,
+            // falling back to the char-count estimate (streamTokPerSec).
+            val displayTokPerSec = state.liveTokPerSec?.takeIf { it > 0f } ?: streamTokPerSec
+            val isServerReported = state.liveTokPerSec != null && state.liveTokPerSec!! > 0f
             val livePanelVisible = state.isStreaming && liveMsg != null
             if (livePanelVisible) {
                 LiveActivityPanel(
@@ -1098,8 +1107,9 @@ fun ChatScreen(
                     toolCalls = if (showToolCalls) liveMsg.toolCalls else emptyList(),
                     showTools = showToolCalls,
                     showThinking = showThinking,
-                    tokPerSec = streamTokPerSec,
+                    tokPerSec = displayTokPerSec,
                     thinkingTokPerSec = streamThinkingTokPerSec,
+                    isServerReported = isServerReported,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 )
             }
@@ -2015,6 +2025,7 @@ private fun LiveActivityPanel(
     showThinking: Boolean = true,
     tokPerSec: Float = 0f,
     thinkingTokPerSec: Float = 0f,
+    isServerReported: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val now by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -2062,10 +2073,10 @@ private fun LiveActivityPanel(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                // v0.1.106: live streaming speed in the panel header — primary
-                // while text flows, dimmed at 0 during the first-token wait.
+                // v0.1.106/110: live streaming speed — server-reported (no ≈)
+                // when available, estimated (≈) from char-count fallback.
                 Text(
-                    text = "≈${String.format("%.1f", tokPerSec)} tok/s",
+                    text = "${if (isServerReported) "" else "≈"}${String.format("%.1f", tokPerSec)} tok/s",
                     style = MaterialTheme.typography.labelSmall,
                     color = if (tokPerSec > 0f) {
                         MaterialTheme.colorScheme.primary
