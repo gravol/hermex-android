@@ -140,16 +140,21 @@ class MainActivity : ComponentActivity() {
 fun HermexNavGraph(chatVmsHolder: ChatVmsHolder) {
     val navController = rememberNavController()
 
-    // v0.1.74: notification deep links — open_session extra → chat route
+    // v0.1.74: notification deep links — open_session extra → chat route.
+    // v0.1.103: handle EVERY new intent (the old one-shot handledDeepLink flag
+    // meant only the FIRST tap ever navigated — later taps did nothing). With
+    // MainActivity now singleTop, notification taps arrive via onNewIntent →
+    // setIntent, so this effect re-fires per tap; launchSingleTop makes re-taps
+    // to the same chat a no-op instead of stacking duplicates.
     val activity = LocalContext.current as? ComponentActivity
-    var handledDeepLink by remember { mutableStateOf(false) }
     LaunchedEffect(activity?.intent) {
-        val intent = activity?.intent
-        val sessionKey = intent?.getStringExtra(NotificationHelper.EXTRA_OPEN_SESSION)
-        if (!handledDeepLink && !sessionKey.isNullOrBlank() && DashboardApiClient.isConfigured) {
-            handledDeepLink = true
+        val intent = activity?.intent ?: return@LaunchedEffect
+        val sessionKey = intent.getStringExtra(NotificationHelper.EXTRA_OPEN_SESSION)
+        if (!sessionKey.isNullOrBlank() && DashboardApiClient.isConfigured) {
             val title = intent.getStringExtra(NotificationHelper.EXTRA_OPEN_TITLE) ?: sessionKey
-            navController.navigate(NotificationHelper.chatRoute(sessionKey, title))
+            navController.navigate(NotificationHelper.chatRoute(sessionKey, title)) {
+                launchSingleTop = true
+            }
         }
     }
     // Dashboard is the primary path. If not configured, user goes through

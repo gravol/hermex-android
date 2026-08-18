@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-17 (v0.1.102 — live tokens/sec readout)
-**Current version:** v0.1.102 (versionCode 102)
-**HEAD commit:** see `git log` (v0.1.102 — live tokens/sec readout)
+**Last updated:** 2026-08-17 (v0.1.103 — notification tap fix: no activity recreate, deep links per tap, per-session ids)
+**Current version:** v0.1.103 (versionCode 103)
+**HEAD commit:** see `git log` (v0.1.103 — notification tap fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -566,6 +566,13 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.103 (2026-08-17) — Notification tap fix (turns no longer die; deep links per tap; per-session ids)
+- **Bug (reported)** — notifications "don't work", and tapping the approval notification opened Hermex but instantly killed the turn (approval banner gone, agent dead).
+- **Root cause 1 — activity recreate on every tap:** MainActivity had no `launchMode` (standard). Notification PendingIntents use `FLAG_ACTIVITY_NEW_TASK | CLEAR_TOP`, which with standard launch mode **destroys and recreates the activity**. The Activity-scoped `ChatVmsHolder` is cleared on recreation → `disposeAll()` → every chat VM's WS disconnects + keepalive stops → the server orphan-reaps the sessions → **all running turns die**, and the `pendingApproval` state (held in the old VM) is gone, so the approval banner never shows. **Fix:** `android:launchMode="singleTop"` on MainActivity — taps now arrive via `onNewIntent` (already implemented), the holder survives, the same VM shows the pending approval, and the turn continues. (`AndroidManifest.xml`.)
+- **Root cause 2 — deep links only worked once:** `HermexNavGraph` used a one-shot `handledDeepLink` flag, so only the FIRST notification tap ever navigated; later taps (even for other sessions) did nothing. **Fix:** handle every new intent (the `LaunchedEffect` re-fires per `onNewIntent` → `setIntent`) with `launchSingleTop = true` so re-taps to the same chat are a no-op instead of stacking. (`MainActivity.kt`.)
+- **Root cause 3 — only one turn notification visible:** every turn-finished notification used the constant id 1001, so a second session's completion REPLACED the first. **Fix:** per-session notification ids (`2000 + hash%9000`); the reply-cancel and reply-failed paths use the same per-session id. (`NotificationHelper.kt`, `NotificationReplyReceiver.kt`, `NotificationReplyService.kt`.)
+- **Device QA:** start a turn that triggers an approval, background the app, tap the approval notification → app should open showing the approve/deny banner with the turn STILL running; approve → tool proceeds. Tap the same notification again → no-op, no stack. Two sessions finishing while away → two notifications (not one replaced).
 
 ### DONE in v0.1.102 (2026-08-17) — Live tokens/sec readout
 - **Live streaming speed** — while a turn streams, the chat top bar (next to the context gauge) shows `≈N tok/s`, ticked every second. OpenAI-compatible APIs (DeepSeek) don't stream per-delta token counts (verified: gateway `message.delta` payload is `{text, rendered}` only), so the live rate is estimated client-side: chars/sec ÷ ~4 chars/token, labeled `≈`. Works identically for cloud and local models — both arrive as plain `message.delta` text, no server change. (`ChatScreen.kt` — `LaunchedEffect(state.isStreaming)` 1s ticker + top-bar Text.)

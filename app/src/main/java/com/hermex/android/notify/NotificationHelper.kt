@@ -49,6 +49,13 @@ object NotificationHelper {
     private const val ID_APPROVAL = 1003
     private const val ID_REPLY_FOREGROUND = 1004
 
+    // v0.1.103: per-session turn-notification ids (2000-10999 band, away from the
+    // fixed ids above). Previously every turn-finished notification used ID_TURNS,
+    // so a second session's completion REPLACED the first — with several chats
+    // finishing while you're away you only ever saw the last one.
+    private fun turnNotificationId(sessionKey: String): Int =
+        2000 + ((sessionKey.hashCode() and 0x7fffffff) % 9000)
+
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
@@ -129,7 +136,7 @@ object NotificationHelper {
             .setContentIntent(openSessionIntent(context, sessionKey, title))
             .addAction(replyAction(context, sessionKey, title))
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(ID_TURNS, notification) }
+        runCatching { NotificationManagerCompat.from(context).notify(turnNotificationId(sessionKey), notification) }
     }
 
     /** Foreground notification while NotificationReplyService submits a reply (v0.1.98). */
@@ -146,7 +153,7 @@ object NotificationHelper {
     }
 
     /** The inline reply could not be delivered (v0.1.98). */
-    fun postReplyFailed(context: Context, title: String) {
+    fun postReplyFailed(context: Context, sessionKey: String, title: String) {
         ensureChannels(context)
         val notification = NotificationCompat.Builder(context, CHANNEL_TURNS)
             .setSmallIcon(android.R.drawable.stat_notify_error)
@@ -154,12 +161,12 @@ object NotificationHelper {
             .setContentText("⚠️ Reply failed — check connection and try again")
             .setAutoCancel(true)
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(ID_TURNS, notification) }
+        runCatching { NotificationManagerCompat.from(context).notify(turnNotificationId(sessionKey), notification) }
     }
 
     /** Clear the stale turn-finished notification once a reply is submitted (v0.1.98). */
-    fun cancelTurns(context: Context) {
-        runCatching { NotificationManagerCompat.from(context).cancel(ID_TURNS) }
+    fun cancelTurns(context: Context, sessionKey: String) {
+        runCatching { NotificationManagerCompat.from(context).cancel(turnNotificationId(sessionKey)) }
     }
 
     /** A cron job produced a finished run. Tap opens the run's session. */

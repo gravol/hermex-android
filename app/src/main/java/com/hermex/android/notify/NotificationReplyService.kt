@@ -122,7 +122,7 @@ class NotificationReplyService : Service() {
             DebugLog.log("REPLY", "Service", "reply complete — notification posted")
         } catch (e: Exception) {
             DebugLog.log("REPLY", "Service", "reply failed: ${e.message}")
-            NotificationHelper.postReplyFailed(this, title)
+            NotificationHelper.postReplyFailed(this, sessionKey, title)
         } finally {
             runCatching { ws?.disconnect() }
             stopSelf()

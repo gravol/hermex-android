@@ -29,7 +29,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
             return
         }
         DebugLog.log("REPLY", "Receiver", "reply to $sessionKey: ${reply.take(60)}")
-        NotificationHelper.cancelTurns(context)
+        NotificationHelper.cancelTurns(context, sessionKey)
         NotificationReplyService.start(context, sessionKey, title, reply)
     }
 }
