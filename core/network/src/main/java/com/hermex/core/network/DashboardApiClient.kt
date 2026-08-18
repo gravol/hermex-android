@@ -225,6 +225,8 @@ object DashboardApiClient {
      */
     suspend fun fetchWsTicket(): NetworkResult<WsTicketResponse> =
         withContext(Dispatchers.IO) {
+            // Ensure we have valid session cookies before fetching the ticket
+            if (isConfigured) login(dashboardUsername, dashboardPassword)
             Log.d("Hermex", "DashboardApiClient.fetchWsTicket() → $restUrl/api/auth/ws-ticket")
             DebugLog.log("REQ", "Dashboard", "POST /api/auth/ws-ticket")
             try {
