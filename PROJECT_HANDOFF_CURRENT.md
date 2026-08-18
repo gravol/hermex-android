@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-18 (v0.1.110 — new session login fix + tok/s rendered fallback; local LLM took over development at v0.1.108)
-**Current version:** v0.1.110 (versionCode 110)
+**Last updated:** 2026-08-18 (v0.1.111 — new session 4007 fix; local LLM took over at v0.1.108)
+**Current version:** v0.1.111 (versionCode 111)
 **HEAD commit:** see `git log` (v0.1.108 — ReasoningDelta null-text fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -566,6 +566,13 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.110 (2026-08-18) — New session creation fixed
+- **Bug** — tapping "New session" did nothing (or hung for 10s then failed silently). Root cause: `fetchWsTicket()` did not call `login()` before fetching the WebSocket ticket. If session cookies were expired/missing, the server returned 401, the `DashboardAuthenticator` interceptor re-logged in but the ticket fetch didn't wait for the new cookies to be set before opening the WS — the ticket fetch failed, the reconnect loop started, `waitForConnection()` timed out after 10s, and `onDone(null)` was called (UI does nothing on null). **Fix:** `fetchWsTicket()` now calls `login(dashboardUsername, dashboardPassword)` before the HTTP call when `isConfigured` is true. (`DashboardApiClient.kt`)
+- **Also:** tok/s rendered fallback verified working.
+
+### DONE in v0.1.111 (2026-08-18) — New session 4007 fix
+- **Bug** — new sessions worked (created + opened), but `prompt.submit` got 4001 (session reaped) → `session.resume` got 4007 (session not found) → message failed. Root cause: `submitWithSelfHeal()` called `session.resume` and assumed success; when the server returned 4007 (fresh/deleted session), the exception propagated as `prompt.submit` failure. **Fix:** `submitWithSelfHeal()` now catches 4007 from `session.resume` and falls through to `prompt.submit` directly — the server creates the DB row on first turn for deferred sessions. (`DashboardChatViewModel.kt`)
 
 ### DONE in v0.1.109 (2026-08-18) — tok/s readout actually updates
 - **Bug** — the LiveActivityPanel tok/s readout stayed at `≈0.0 tok/s` during streaming. Root cause: `JsonRpcClient` parsed `message.delta` from `params.payload.text`, but the server sends `text` as an empty string and the actual delta text in `rendered`. The tok/s meter measured `(len - lastLen) / dtSec / 4f` where `len` never grew → always 0. (`JsonRpcClient.kt` — `message.delta` now falls back to `payload.rendered` when `text` is empty.)
