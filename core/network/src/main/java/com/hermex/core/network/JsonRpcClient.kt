@@ -251,7 +251,8 @@ class JsonRpcClient(
 
             "message.delta" -> {
                 val payload = params["payload"]?.jsonObject
-                val text = payload?.get("text")?.jsonPrimitive?.content ?: ""
+                val text = payload?.get("text")?.jsonPrimitive?.content
+                    ?: payload?.get("rendered")?.jsonPrimitive?.content ?: ""
                 RpcNotification.MessageDelta(sessionId ?: "", text)
             }
 
