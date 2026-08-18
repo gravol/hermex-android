@@ -148,20 +148,27 @@ fun ChatScreen(
     // v0.1.104: always visible while streaming — dimmed at 0 (e.g. during the
     // first-token / context-ingestion wait on a local model) so it's obviously
     // live instead of looking missing; EMA-smoothed for a steady readout.
+    // v0.1.107: separate THINKING speed (from thinkingText deltas) shown beside
+    // the "Live activity" label while reasoning flows.
     var streamTokPerSec by remember { mutableStateOf(0f) }
+    var streamThinkingTokPerSec by remember { mutableStateOf(0f) }
     LaunchedEffect(state.isStreaming) {
         if (!state.isStreaming) {
             streamTokPerSec = 0f
+            streamThinkingTokPerSec = 0f
             return@LaunchedEffect
         }
         var lastLen = state.messages.lastOrNull { it.isStreaming }?.content?.length ?: 0
+        var lastThinkLen = state.messages.lastOrNull { it.isStreaming }?.thinkingText?.length ?: 0
         var lastTime = System.currentTimeMillis()
         var firstSample = true
+        var firstThinkSample = true
         while (true) {
             delay(1000)
             val streamingMsg = state.messages.lastOrNull { it.isStreaming } ?: break
             val now = System.currentTimeMillis()
             val len = streamingMsg.content.length
+            val thinkLen = streamingMsg.thinkingText?.length ?: 0
             val dtSec = (now - lastTime) / 1000f
             if (dtSec > 0f) {
                 val sample = ((len - lastLen) / dtSec) / 4f
@@ -171,8 +178,16 @@ fun ChatScreen(
                     streamTokPerSec * 0.6f + sample * 0.4f  // EMA smoothing
                 }
                 firstSample = false
+                val thinkSample = ((thinkLen - lastThinkLen) / dtSec) / 4f
+                streamThinkingTokPerSec = if (firstThinkSample) {
+                    thinkSample
+                } else {
+                    streamThinkingTokPerSec * 0.6f + thinkSample * 0.4f
+                }
+                firstThinkSample = false
             }
             lastLen = len
+            lastThinkLen = thinkLen
             lastTime = now
         }
     }
@@ -1084,6 +1099,7 @@ fun ChatScreen(
                     showTools = showToolCalls,
                     showThinking = showThinking,
                     tokPerSec = streamTokPerSec,
+                    thinkingTokPerSec = streamThinkingTokPerSec,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 )
             }
@@ -1998,6 +2014,7 @@ private fun LiveActivityPanel(
     showTools: Boolean = true,
     showThinking: Boolean = true,
     tokPerSec: Float = 0f,
+    thinkingTokPerSec: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
     val now by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -2033,16 +2050,18 @@ private fun LiveActivityPanel(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                Spacer(Modifier.weight(1f))
-                // Tool counter only when tools are visible (v0.1.96)
-                if (toolsVisible) {
+                // v0.1.107: thinking speed beside the label while reasoning
+                // flows (fades out via EMA once thinking stops).
+                if (thinkingTokPerSec > 0f) {
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "${toolCalls.count { !it.completed }} working · ${toolCalls.size} tools",
+                        text = "thinking ${String.format("%.1f", thinkingTokPerSec)} tok/s",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        maxLines = 1,
                     )
-                    Spacer(Modifier.width(6.dp))
                 }
+                Spacer(Modifier.weight(1f))
                 // v0.1.106: live streaming speed in the panel header — primary
                 // while text flows, dimmed at 0 during the first-token wait.
                 Text(
@@ -2102,8 +2121,12 @@ private fun LiveActivityPanel(
                                     .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                // v0.1.107: working count folded in here (was a
+                                // header counter; moved to make room for speeds).
+                                val working = toolCalls.count { !it.completed }
                                 Text(
-                                    text = "TOOLS · ${toolCalls.size}",
+                                    text = "TOOLS · ${toolCalls.size}" +
+                                        if (working > 0) " · $working working" else "",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,

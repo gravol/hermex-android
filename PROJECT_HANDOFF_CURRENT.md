@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-17 (v0.1.106 — tok/s readout moved into the live activity panel)
-**Current version:** v0.1.106 (versionCode 106)
-**HEAD commit:** see `git log` (v0.1.106 — tok/s readout in live activity panel)
+**Last updated:** 2026-08-17 (v0.1.107 — thinking tok/s beside Live activity)
+**Current version:** v0.1.107 (versionCode 107)
+**HEAD commit:** see `git log` (v0.1.107 — thinking tok/s beside Live activity)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -566,6 +566,10 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.107 (2026-08-17) — Thinking tok/s beside "Live activity"
+- **Feature** — the LiveActivityPanel header now shows a separate **thinking speed** while reasoning flows: `● Live activity  thinking 8.1 tok/s    ≈12.3 tok/s` (thinking in tertiary, generation in primary, gen dimmed at 0 during the wait). Computed from `thinkingText` deltas with the same chars/4 estimate + EMA; fades out a few seconds after thinking stops.
+- **Header cleanup** — the "N working · N tools" counter moved from the panel header into the TOOLS section header (`TOOLS · 3 · 1 working`) to make room for both speeds. (`ChatScreen.kt` — ticker now tracks thinking length; `LiveActivityPanel(thinkingTokPerSec=…)`.)
 
 ### DONE in v0.1.106 (2026-08-17) — tok/s readout moved into the live activity panel
 - **User preference** — after the v0.1.105 top-bar fix, the readout moved to the docked **LiveActivityPanel** header instead: `● Live activity  [N working · N tools]  ≈12.3 tok/s`.
