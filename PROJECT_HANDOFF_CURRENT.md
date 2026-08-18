@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-17 (v0.1.101 — session-open bottom scroll settle fix)
-**Current version:** v0.1.101 (versionCode 101)
-**HEAD commit:** see `git log` (v0.1.101 — session-open bottom scroll settle fix)
+**Last updated:** 2026-08-17 (v0.1.102 — live tokens/sec readout)
+**Current version:** v0.1.102 (versionCode 102)
+**HEAD commit:** see `git log` (v0.1.102 — live tokens/sec readout)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -550,6 +550,14 @@ dashboard-setup (if not configured) → home (dashboard) → chat/{sessionId}/{t
 1. **Optional cleanup** — `composeOptions.kotlinCompilerExtensionVersion = "1.5.5"` is dead under the Kotlin 2.1.20 Compose plugin; `minSdk 34` (Android 14+) excludes older devices; v0.1.41 tag has no release (superseded by v0.1.42 — backfill or ignore)
 2. **Upstream the server fix** — DB-key fallback in `_sess_nowait` should become a hermes-agent PR so it survives `hermes update`.
 
+### Reported (2026-08-17) — Notification bugs from field device QA
+
+1. **Approval notification click kills the in-flight response** — when an approval-request notification is tapped to open the app, the agent's streaming response stops mid-stream. Suspected: the tap-through path re-attaches/resumes the session or re-enters MainActivity in a way that disrupts the live WS stream / VM streaming state (same bug class as the v0.1.85 reconnect half-open). Needs root-cause from code; reproduced by Jeff in the field.
+2. **Regular notifications don't fire — cron check-ins + turn-finished** — the 9am/12pm/2pm quick-check crons (agent jobs, `deliver=local`) and turn-finished pings never pop. The 7am weather report DID arrive, so the alarm path isn't uniformly dead — check-ins specifically missing. A one-shot `no_agent` cron test (2026-08-16 21:06 PDT) also produced no phone notification; server side verified clean (`last_status: ok`, no delivery error, output saved to `~/.hermes/cron/output/`). Follow-up to the v0.1.100 fixes (exact alarm, re-check clobber, login storm): device QA shows check-ins still missing. Check notification channels (cron channel suppressed by scheduled DND?), whether agent-run vs `no_agent` delivery differs, and CronWatcher arm/sync for these jobs specifically.
+3. **Turn-finished pings missing** (paired with #2) — expected a ping when a Hermes turn finishes; not arriving. v0.1.98's lock-screen Reply rides on `postTurnFinished` — if those don't surface, that path is dead too.
+
+**Status:** device-QA notes only, not yet reproduced from code. Investigate at next desk session.
+
 ### Pinned (2026-08-15) — Theme/color versatility
 Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95** (see below); 1–5 remain:
 1. **Custom color picker** — hex input + hue/sat wheel per part (removes the ~11-swatch ceiling).
@@ -558,6 +566,11 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.102 (2026-08-17) — Live tokens/sec readout
+- **Live streaming speed** — while a turn streams, the chat top bar (next to the context gauge) shows `≈N tok/s`, ticked every second. OpenAI-compatible APIs (DeepSeek) don't stream per-delta token counts (verified: gateway `message.delta` payload is `{text, rendered}` only), so the live rate is estimated client-side: chars/sec ÷ ~4 chars/token, labeled `≈`. Works identically for cloud and local models — both arrive as plain `message.delta` text, no server change. (`ChatScreen.kt` — `LaunchedEffect(state.isStreaming)` 1s ticker + top-bar Text.)
+- **Exact turn average in the footer** — completed messages now show `N tokens · ≈X tok/s`: real token count (from the usage the app already parses — for the local Ollama Qwen path that's Ollama's exact eval counts, `session_completion_tokens` server-side) over the stream duration (message.timestamp = placeholder creation). Frozen via `remember` so it doesn't drift on recomposition. (`ChatScreen.kt` MessageBubble usage footer.)
+- **Notes** — speed dips to ≈0 during tool-call gaps (honest); the ÷4 heuristic is English-oriented (code/other languages skew). If you later want exact live tok/s, it would need a server-side tokenizer patch (heavy) — not worth it for a live gauge.
 
 ### DONE in v0.1.101 (2026-08-17) — Session-open bottom scroll settle fix
 - **Bug** — when a conversation loads, the last message's bottom outline sits ~1px short of the true bottom, its bottom border just hidden behind the composer ("99% there, splitting hairs").

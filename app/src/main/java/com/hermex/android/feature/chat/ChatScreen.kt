@@ -139,6 +139,36 @@ fun ChatScreen(
     // v0.1.97: thinking visibility toggle — same pattern (tools + response stay).
     val showThinking by settingsRepo.showThinking.collectAsState(initial = true)
 
+    // v0.1.102: live tokens/sec readout while streaming. OpenAI-compatible APIs
+    // don't stream per-delta token counts, so this estimates from text flow:
+    // chars/sec ÷ ~4 chars/token. Works for cloud (DeepSeek) AND local models
+    // (Ollama Qwen) — both arrive as plain message.delta text. The exact turn
+    // average (real token counts, incl. Ollama eval stats) renders in the
+    // message footer at completion.
+    var streamTokPerSec by remember { mutableStateOf(0f) }
+    LaunchedEffect(state.isStreaming) {
+        if (!state.isStreaming) {
+            streamTokPerSec = 0f
+            return@LaunchedEffect
+        }
+        var lastLen = state.messages.lastOrNull { it.isStreaming }?.content?.length ?: 0
+        var lastTime = System.currentTimeMillis()
+        while (true) {
+            delay(1000)
+            val streamingMsg = state.messages.lastOrNull { it.isStreaming } ?: break
+            val now = System.currentTimeMillis()
+            val len = streamingMsg.content.length
+            val dtSec = (now - lastTime) / 1000f
+            if (dtSec > 0f) {
+                val charsPerSec = (len - lastLen) / dtSec
+                // ~4 chars/token is a decent English heuristic; label stays ≈
+                streamTokPerSec = charsPerSec / 4f
+            }
+            lastLen = len
+            lastTime = now
+        }
+    }
+
     // ── Photo attach state ──
     var pendingImageB64 by remember { mutableStateOf<String?>(null) }
     var pendingImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -582,6 +612,14 @@ fun ChatScreen(
                                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                                 },
                             )
+                            // v0.1.102: live streaming speed (chars/4 estimate)
+                            if (state.isStreaming && streamTokPerSec > 0f) {
+                                Text(
+                                    text = "≈${String.format("%.1f", streamTokPerSec)} tok/s",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
                     }
                 },
@@ -1480,9 +1518,19 @@ private fun MessageBubble(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 message.usage?.let { usage ->
+                    // v0.1.102: exact turn-average speed — real token count
+                    // (Ollama eval stats for local models included) over the
+                    // stream duration (message.timestamp = placeholder creation).
+                    // Frozen via remember so it doesn't drift on recomposition.
+                    val avgTokPerSec = remember(usage.totalTokens, message.timestamp) {
+                        val secs = ((System.currentTimeMillis() - message.timestamp) / 1000f)
+                            .coerceAtLeast(1f)
+                        usage.totalTokens / secs
+                    }
                     Text(
                         text = buildString {
                             append("${usage.totalTokens} tokens")
+                            append(" · ≈${String.format("%.1f", avgTokPerSec)} tok/s")
                             usage.estimatedCostUsd?.let { append(" · \$${String.format("%.4f", it)}") }
                         },
                         style = MaterialTheme.typography.labelSmall,
