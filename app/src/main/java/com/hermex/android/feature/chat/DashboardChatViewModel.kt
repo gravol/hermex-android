@@ -243,6 +243,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
      * signal — the next prompt.submit then fails with JSON-RPC 4001
      * "session not found". On 4001 we re-register via session.resume
      * (which re-materializes the session from the DB) and retry once.
+     * If session.resume also 4007 (fresh/deleted session), just send
+     * prompt.submit directly — the server creates the DB row on first turn.
      * Any other error, or a second failure, propagates to the caller.
      */
     private suspend fun submitWithSelfHeal(text: String) {
@@ -252,13 +254,29 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             if (e.code != 4001) throw e
             DebugLog.log("STATE", "SessionID",
                 "prompt.submit 4001 (session reaped) — re-registering via session.resume: dbKey=$sessionId")
-            val result = rpcClient.sessionResume(sessionId)
-            resumeCount++
-            liveSid = result.session_id                    // debug only — never write into sessionId
-            resumedSessionId = result.resumed ?: sessionId
-            DebugLog.log("STATE", "SessionID",
-                "self-heal resume(#$resumeCount): dbKey=$sessionId liveSid=$liveSid — retrying submit")
-            rpcClient.promptSubmit(sessionId, text)
+            val result = try {
+                rpcClient.sessionResume(sessionId)
+            } catch (resume4007: JsonRpcException) {
+                // v0.1.111 — fresh/deleted session: resume 4007, just send
+                if (resume4007.code == 4007) {
+                    DebugLog.log("STATE", "SessionID",
+                        "self-heal resume 4007 (fresh/deleted) — sending prompt.submit directly: dbKey=$sessionId")
+                    null
+                } else {
+                    throw resume4007
+                }
+            }
+            if (result != null) {
+                resumeCount++
+                liveSid = result.session_id                    // debug only — never write into sessionId
+                resumedSessionId = result.resumed ?: sessionId
+                DebugLog.log("STATE", "SessionID",
+                    "self-heal resume(#$resumeCount): dbKey=$sessionId liveSid=$liveSid — retrying submit")
+                rpcClient.promptSubmit(sessionId, text)
+            } else {
+                // Fresh session — server will create the DB row on first turn
+                rpcClient.promptSubmit(sessionId, text)
+            }
         }
     }
 
