@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-18 (v0.1.109 — tok/s readout fix)
-**Current version:** v0.1.109 (versionCode 109)
+**Last updated:** 2026-08-18 (v0.1.110 — new session login fix + tok/s rendered fallback)
+**Current version:** v0.1.110 (versionCode 110)
 **HEAD commit:** see `git log` (v0.1.108 — ReasoningDelta null-text fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -569,6 +569,10 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 
 ### DONE in v0.1.109 (2026-08-18) — tok/s readout actually updates
 - **Bug** — the LiveActivityPanel tok/s readout stayed at `≈0.0 tok/s` during streaming. Root cause: `JsonRpcClient` parsed `message.delta` from `params.payload.text`, but the server sends `text` as an empty string and the actual delta text in `rendered`. The tok/s meter measured `(len - lastLen) / dtSec / 4f` where `len` never grew → always 0. (`JsonRpcClient.kt` — `message.delta` now falls back to `payload.rendered` when `text` is empty.)
+
+### DONE in v0.1.110 (2026-08-18) — New session creation fixed
+- **Bug** — tapping "New session" did nothing (or hung for 10s then failed silently). Root cause: `fetchWsTicket()` did not call `login()` before fetching the WebSocket ticket. If session cookies were expired/missing, the server returned 401, the `DashboardAuthenticator` interceptor tried to re-login but the `fetchWsTicket` didn't wait for the re-login cookies to be set before opening the WS — the ticket fetch failed, the reconnect loop started, `waitForConnection()` timed out after 10s, and `onDone(null)` was called (UI does nothing on null). **Fix:** `fetchWsTicket()` now calls `login(dashboardUsername, dashboardPassword)` before the HTTP call when `isConfigured` is true, ensuring cookies are fresh. (`DashboardApiClient.kt`)
+- **Also:** tok/s rendered fallback verified working.
 
 ### DONE in v0.1.107 (2026-08-17) — Thinking tok/s beside "Live activity"
 - **Feature** — the LiveActivityPanel header now shows a separate **thinking speed** while reasoning flows: `● Live activity  thinking 8.1 tok/s    ≈12.3 tok/s` (thinking in tertiary, generation in primary, gen dimmed at 0 during the wait). Computed from `thinkingText` deltas with the same chars/4 estimate + EMA; fades out a few seconds after thinking stops.
