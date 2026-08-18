@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-18 (v0.1.108 — ReasoningDelta null-text fix)
-**Current version:** v0.1.108 (versionCode 108)
+**Last updated:** 2026-08-18 (v0.1.109 — tok/s readout fix)
+**Current version:** v0.1.109 (versionCode 109)
 **HEAD commit:** see `git log` (v0.1.108 — ReasoningDelta null-text fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -566,6 +566,9 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.109 (2026-08-18) — tok/s readout actually updates
+- **Bug** — the LiveActivityPanel tok/s readout stayed at `≈0.0 tok/s` during streaming. Root cause: `JsonRpcClient` parsed `message.delta` from `params.payload.text`, but the server sends `text` as an empty string and the actual delta text in `rendered`. The tok/s meter measured `(len - lastLen) / dtSec / 4f` where `len` never grew → always 0. (`JsonRpcClient.kt` — `message.delta` now falls back to `payload.rendered` when `text` is empty.)
 
 ### DONE in v0.1.107 (2026-08-17) — Thinking tok/s beside "Live activity"
 - **Feature** — the LiveActivityPanel header now shows a separate **thinking speed** while reasoning flows: `● Live activity  thinking 8.1 tok/s    ≈12.3 tok/s` (thinking in tertiary, generation in primary, gen dimmed at 0 during the wait). Computed from `thinkingText` deltas with the same chars/4 estimate + EMA; fades out a few seconds after thinking stops.
