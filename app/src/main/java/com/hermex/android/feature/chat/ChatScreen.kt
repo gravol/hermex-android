@@ -145,6 +145,9 @@ fun ChatScreen(
     // (Ollama Qwen) — both arrive as plain message.delta text. The exact turn
     // average (real token counts, incl. Ollama eval stats) renders in the
     // message footer at completion.
+    // v0.1.104: always visible while streaming — dimmed at 0 (e.g. during the
+    // first-token / context-ingestion wait on a local model) so it's obviously
+    // live instead of looking missing; EMA-smoothed for a steady readout.
     var streamTokPerSec by remember { mutableStateOf(0f) }
     LaunchedEffect(state.isStreaming) {
         if (!state.isStreaming) {
@@ -153,6 +156,7 @@ fun ChatScreen(
         }
         var lastLen = state.messages.lastOrNull { it.isStreaming }?.content?.length ?: 0
         var lastTime = System.currentTimeMillis()
+        var firstSample = true
         while (true) {
             delay(1000)
             val streamingMsg = state.messages.lastOrNull { it.isStreaming } ?: break
@@ -160,9 +164,13 @@ fun ChatScreen(
             val len = streamingMsg.content.length
             val dtSec = (now - lastTime) / 1000f
             if (dtSec > 0f) {
-                val charsPerSec = (len - lastLen) / dtSec
-                // ~4 chars/token is a decent English heuristic; label stays ≈
-                streamTokPerSec = charsPerSec / 4f
+                val sample = ((len - lastLen) / dtSec) / 4f
+                streamTokPerSec = if (firstSample) {
+                    sample
+                } else {
+                    streamTokPerSec * 0.6f + sample * 0.4f  // EMA smoothing
+                }
+                firstSample = false
             }
             lastLen = len
             lastTime = now
@@ -612,12 +620,18 @@ fun ChatScreen(
                                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                                 },
                             )
-                            // v0.1.102: live streaming speed (chars/4 estimate)
-                            if (state.isStreaming && streamTokPerSec > 0f) {
+                            // v0.1.102: live streaming speed (chars/4 estimate).
+                            // v0.1.104: always shown while streaming — dimmed at 0
+                            // (first-token / context-ingestion wait on local models).
+                            if (state.isStreaming) {
                                 Text(
                                     text = "≈${String.format("%.1f", streamTokPerSec)} tok/s",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = if (streamTokPerSec > 0f) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    },
                                 )
                             }
                         }

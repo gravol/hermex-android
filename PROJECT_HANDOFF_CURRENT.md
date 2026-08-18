@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-17 (v0.1.103 — notification tap fix: no activity recreate, deep links per tap, per-session ids)
-**Current version:** v0.1.103 (versionCode 103)
-**HEAD commit:** see `git log` (v0.1.103 — notification tap fix)
+**Last updated:** 2026-08-17 (v0.1.104 — tok/s readout always visible while streaming)
+**Current version:** v0.1.104 (versionCode 104)
+**HEAD commit:** see `git log` (v0.1.104 — tok/s readout always visible while streaming)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -566,6 +566,11 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.104 (2026-08-17) — tok/s readout always visible while streaming
+- **Reported** — tok/s didn't appear when opening a session (local Qwen) and sending the first message; the user suspected the 76k-context load (16GB GPU) was slow and wondered if it would pick up after the first message.
+- **Explanation** — the readout only rendered when speed > 0, so during the long first-token / prompt-ingestion phase (which produces no output text) it was hidden entirely. The meter measures GENERATION flow, not prompt processing — first message ingests the full 76k context (slow, ≈0 tok/s); subsequent turns in the session reuse Ollama's prompt cache so generation starts quickly.
+- **Fix** — the readout now shows **whenever a turn is streaming**, dimmed at `≈0.0 tok/s` during the wait and colored primary once text flows; the estimate is EMA-smoothed (0.6/0.4) for a steady number instead of 1s spikes. (`ChatScreen.kt`.)
 
 ### DONE in v0.1.103 (2026-08-17) — Notification tap fix (turns no longer die; deep links per tap; per-session ids)
 - **Bug (reported)** — notifications "don't work", and tapping the approval notification opened Hermex but instantly killed the turn (approval banner gone, agent dead).
