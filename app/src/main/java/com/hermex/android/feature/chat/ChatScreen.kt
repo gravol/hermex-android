@@ -587,7 +587,11 @@ fun ChatScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    // v0.1.105: cap the chip so a long model name
+                                    // can't push the gauge row off the top bar.
                                     modifier = Modifier
+                                        .widthIn(max = 120.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .clickable { showModelPicker = true }
                                         .padding(horizontal = 4.dp, vertical = 1.dp),
@@ -620,20 +624,24 @@ fun ChatScreen(
                                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                                 },
                             )
-                            // v0.1.102: live streaming speed (chars/4 estimate).
-                            // v0.1.104: always shown while streaming — dimmed at 0
-                            // (first-token / context-ingestion wait on local models).
-                            if (state.isStreaming) {
-                                Text(
-                                    text = "≈${String.format("%.1f", streamTokPerSec)} tok/s",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (streamTokPerSec > 0f) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    },
-                                )
-                            }
+                        }
+                        // v0.1.102: live streaming speed (chars/4 estimate).
+                        // v0.1.104: always shown while streaming — dimmed at 0
+                        // (first-token / context-ingestion wait on local models).
+                        // v0.1.105: on its OWN line under the gauge — the gauge
+                        // row (chip + bar + context text + two action icons)
+                        // overflowed the top-bar title width, clipping the
+                        // readout off the right edge.
+                        if (state.isStreaming) {
+                            Text(
+                                text = "≈${String.format("%.1f", streamTokPerSec)} tok/s",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (streamTokPerSec > 0f) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                },
+                            )
                         }
                     }
                 },
