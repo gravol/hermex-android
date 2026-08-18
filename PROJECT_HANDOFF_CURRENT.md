@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-17 (v0.1.107 — thinking tok/s beside Live activity)
-**Current version:** v0.1.107 (versionCode 107)
-**HEAD commit:** see `git log` (v0.1.107 — thinking tok/s beside Live activity)
+**Last updated:** 2026-08-18 (v0.1.108 — ReasoningDelta null-text fix)
+**Current version:** v0.1.108 (versionCode 108)
+**HEAD commit:** see `git log` (v0.1.108 — ReasoningDelta null-text fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)

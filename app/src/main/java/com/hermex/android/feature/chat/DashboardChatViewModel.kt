@@ -801,7 +801,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             is RpcNotification.ReasoningAvailable -> {
                 val idx = ensureStreamingPlaceholder(msgs)
                 val cur = msgs[idx]
-                msgs[idx] = cur.copy(thinkingHasContent = true)
+                val existing = cur.thinkingText ?: ""
+                msgs[idx] = cur.copy(
+                    thinkingHasContent = true,
+                    thinkingText = existing,
+                )
             }
 
             is RpcNotification.MessageDelta -> {
@@ -829,8 +833,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 val idx = ensureStreamingPlaceholder(msgs)
                 val cur = msgs[idx]
                 val existing = cur.thinkingText ?: ""
+                val text = n.text ?: ""
                 msgs[idx] = cur.copy(
-                    thinkingText = existing + n.text,
+                    thinkingText = existing + text,
                     isWaitingForFirstEvent = false,
                 )
             }
