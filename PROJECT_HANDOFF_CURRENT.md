@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-17 (v0.1.105 — tok/s readout moved to its own line, was clipped)
-**Current version:** v0.1.105 (versionCode 105)
-**HEAD commit:** see `git log` (v0.1.105 — tok/s readout moved to its own line, was clipped)
+**Last updated:** 2026-08-17 (v0.1.106 — tok/s readout moved into the live activity panel)
+**Current version:** v0.1.106 (versionCode 106)
+**HEAD commit:** see `git log` (v0.1.106 — tok/s readout in live activity panel)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -566,6 +566,10 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 4. **Named savable presets** — replace the 3 hardcoded chips with a stored list (save/rename/delete, DataStore-backed).
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
+
+### DONE in v0.1.106 (2026-08-17) — tok/s readout moved into the live activity panel
+- **User preference** — after the v0.1.105 top-bar fix, the readout moved to the docked **LiveActivityPanel** header instead: `● Live activity  [N working · N tools]  ≈12.3 tok/s`.
+- **Panel always visible while streaming** — previously the docked panel only appeared when thinking or tools were present; now it docks above the composer for every streaming turn (it hosts the speed readout). Thinking/tools sections inside still respect the show/hide toggles. Speed text is primary while text flows, dimmed at `≈0.0 tok/s` during the first-token wait. Removed from the top bar (model-chip 120dp cap kept). (`ChatScreen.kt` — `LiveActivityPanel(tokPerSec=…)`.)
 
 ### DONE in v0.1.105 (2026-08-17) — tok/s readout placement fix (was clipped)
 - **Reported** — user couldn't find the tok/s readout. It WAS rendering, but as the last element of the top-bar gauge row (model chip + 64dp bar + `85.1k/1.0M` + two action icons ≈144dp of icons), it was pushed past the title width and clipped off the right edge on a phone.

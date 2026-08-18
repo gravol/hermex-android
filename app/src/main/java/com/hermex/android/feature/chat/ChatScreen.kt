@@ -625,24 +625,6 @@ fun ChatScreen(
                                 },
                             )
                         }
-                        // v0.1.102: live streaming speed (chars/4 estimate).
-                        // v0.1.104: always shown while streaming — dimmed at 0
-                        // (first-token / context-ingestion wait on local models).
-                        // v0.1.105: on its OWN line under the gauge — the gauge
-                        // row (chip + bar + context text + two action icons)
-                        // overflowed the top-bar title width, clipping the
-                        // readout off the right edge.
-                        if (state.isStreaming) {
-                            Text(
-                                text = "≈${String.format("%.1f", streamTokPerSec)} tok/s",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (streamTokPerSec > 0f) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                },
-                            )
-                        }
                     }
                 },
                 navigationIcon = {
@@ -1091,15 +1073,17 @@ fun ChatScreen(
             // composer. On completion the panel vanishes and the finished
             // message shows tools + thinking above the final answer instead.
             val liveMsg = state.messages.lastOrNull { it.isStreaming }
-            val livePanelVisible = state.isStreaming && liveMsg != null &&
-                ((showThinking && liveMsg.thinkingText?.isNotBlank() == true) ||
-                    (showToolCalls && liveMsg.toolCalls.isNotEmpty()))
+            // v0.1.106: panel is now always visible while streaming — it hosts
+            // the tok/s readout; the thinking/tools sections inside still
+            // respect the visibility toggles.
+            val livePanelVisible = state.isStreaming && liveMsg != null
             if (livePanelVisible) {
                 LiveActivityPanel(
                     thinking = if (showThinking) liveMsg!!.thinkingText.orEmpty() else "",
                     toolCalls = if (showToolCalls) liveMsg.toolCalls else emptyList(),
                     showTools = showToolCalls,
                     showThinking = showThinking,
+                    tokPerSec = streamTokPerSec,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 )
             }
@@ -2013,6 +1997,7 @@ private fun LiveActivityPanel(
     toolCalls: List<UiToolCall>,
     showTools: Boolean = true,
     showThinking: Boolean = true,
+    tokPerSec: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
     val now by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -2056,7 +2041,19 @@ private fun LiveActivityPanel(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Spacer(Modifier.width(6.dp))
                 }
+                // v0.1.106: live streaming speed in the panel header — primary
+                // while text flows, dimmed at 0 during the first-token wait.
+                Text(
+                    text = "≈${String.format("%.1f", tokPerSec)} tok/s",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (tokPerSec > 0f) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    },
+                )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
             val listState = rememberLazyListState()
