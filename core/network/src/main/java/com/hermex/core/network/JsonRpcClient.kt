@@ -386,11 +386,13 @@ class JsonRpcClient(
         val message_count: Int? = null,
         val messages: List<MessageData>? = null,
         val info: JsonObject? = null,
+        val session: JsonObject? = null,
     )
 
     @Serializable
     data class DeleteSessionResult(
-        val session_id: String? = null,
+        val ok: Boolean = false,
+        val session: JsonObject? = null,
     )
 
     @Serializable
@@ -426,6 +428,7 @@ class JsonRpcClient(
         val message_count: Int? = null,
         val messages: List<MessageData>? = null,
         val info: JsonObject? = null,
+        val session: JsonObject? = null,
     )
 
     @Serializable
@@ -595,8 +598,7 @@ class JsonRpcClient(
             "session.delete",
             mapOf("session_id" to sessionId),
         )
-        return result.session_id
-            ?: throw JsonRpcException(-1, "session.delete returned no session_id")
+        return result.session?.get("session_id")?.jsonPrimitive?.content ?: sessionId
     }
 
     /**

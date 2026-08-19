@@ -1001,13 +1001,28 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             is RpcNotification.ApprovalRequest -> {
                 val toolName = n.toolName ?: "unknown"
                 val argsStr = n.args?.toString() ?: ""
-                // Build a human-readable description from the args
+                // Build a human-readable description from the args.
+                // For "bash" tool, extract the actual command line for clarity.
                 val desc = buildString {
                     append("Runs ")
                     append(toolName)
                     if (argsStr.isNotBlank()) {
-                        append(" with: ")
-                        append(argsStr.take(300))
+                        // Try to extract a "cmd" field from JSON args for bash tool
+                        val trimmed = argsStr.trim()
+                        if (toolName == "bash" && trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                            val cmdRegex = Regex("\"cmd\"\\s*:\\s*\"([^\"]+)\"")
+                            val cmdMatch = cmdRegex.find(trimmed)
+                            if (cmdMatch != null) {
+                                append("\n")
+                                append(cmdMatch.groupValues[1])
+                            } else {
+                                append(" with: ")
+                                append(argsStr.take(300))
+                            }
+                        } else {
+                            append(" with: ")
+                            append(argsStr.take(300))
+                        }
                     }
                 }
                 DebugLog.log("RPC", "DashboardChat", "approval request received: $toolName")

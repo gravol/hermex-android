@@ -1176,7 +1176,7 @@ fun ChatScreen(
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        text = "Approve Tool?",
+                        text = "Approve Command?",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -1197,12 +1197,14 @@ fun ChatScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
+                    // ── Human-readable command description ──
                     if (pendingApproval.description.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
                         Text(
                             text = pendingApproval.description,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontFamily = FontFamily.Monospace,
                         )
                     }
                     if (pendingApproval.toolArgs.isNotEmpty()) {
