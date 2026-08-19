@@ -81,10 +81,15 @@ data class ChatUiState(
 
 /**
  * A tool call waiting for user approval.
+ * @property toolName Name of the tool being called.
+ * @property toolArgs Formatted arguments/params for the tool.
+ * @property description Human-readable description of what the command will do.
+ * @property requestId Server-side request ID for correlation.
  */
 data class PendingApproval(
     val toolName: String,
     val toolArgs: String = "",
+    val description: String = "",
     val requestId: String = "",
 )
 

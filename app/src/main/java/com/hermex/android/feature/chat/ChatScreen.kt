@@ -1167,7 +1167,7 @@ fun ChatScreen(
         Dialog(onDismissRequest = { /* must approve or deny */ }) {
             Card(
                 modifier = Modifier
-                    .widthIn(min = 280.dp, max = 400.dp)
+                    .widthIn(min = 300.dp, max = 420.dp)
                     .padding(8.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
@@ -1181,6 +1181,7 @@ fun ChatScreen(
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.height(12.dp))
+                    // ── What will happen ──
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.Lock,
@@ -1196,8 +1197,23 @@ fun ChatScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
+                    if (pendingApproval.description.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = pendingApproval.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     if (pendingApproval.toolArgs.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Arguments",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        )
+                        Spacer(Modifier.height(4.dp))
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,

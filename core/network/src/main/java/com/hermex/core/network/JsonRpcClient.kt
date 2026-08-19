@@ -389,6 +389,11 @@ class JsonRpcClient(
     )
 
     @Serializable
+    data class DeleteSessionResult(
+        val session_id: String? = null,
+    )
+
+    @Serializable
     data class SlashCompletionResult(val items: List<SlashItem> = emptyList())
 
     /** One slash-command completion from complete.slash. */
@@ -583,6 +588,16 @@ class JsonRpcClient(
 
     suspend fun sessionInterrupt(sessionId: String): JsonObject =
         request("session.interrupt", mapOf("session_id" to sessionId))
+
+    /** Delete a session server-side. Returns the deleted session id. */
+    suspend fun sessionDelete(sessionId: String): String {
+        val result: DeleteSessionResult = request(
+            "session.delete",
+            mapOf("session_id" to sessionId),
+        )
+        return result.session_id
+            ?: throw JsonRpcException(-1, "session.delete returned no session_id")
+    }
 
     /**
      * Respond to a tool approval request.

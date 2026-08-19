@@ -999,12 +999,23 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ApprovalRequest -> {
-                DebugLog.log("RPC", "DashboardChat", "approval request received: ${n.toolName}")
+                val toolName = n.toolName ?: "unknown"
                 val argsStr = n.args?.toString() ?: ""
+                // Build a human-readable description from the args
+                val desc = buildString {
+                    append("Runs ")
+                    append(toolName)
+                    if (argsStr.isNotBlank()) {
+                        append(" with: ")
+                        append(argsStr.take(300))
+                    }
+                }
+                DebugLog.log("RPC", "DashboardChat", "approval request received: $toolName")
                 uiState = uiState.copy(
                     pendingApproval = PendingApproval(
-                        toolName = n.toolName ?: "unknown",
+                        toolName = toolName,
                         toolArgs = argsStr,
+                        description = desc,
                     )
                 )
                 // v0.1.84: ping when the user isn't watching this chat —

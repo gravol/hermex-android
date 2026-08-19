@@ -1,15 +1,18 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-18 (v0.1.111 — new session 4007 fix; local LLM took over at v0.1.108)
-**Current version:** v0.1.111 (versionCode 111)
-**HEAD commit:** see `git log` (v0.1.108 — ReasoningDelta null-text fix)
+**Last updated:** 2026-08-18 (v0.1.113 — session delete; approval dialog enhanced)
+**Current version:** v0.1.113 (versionCode 113)
+**HEAD commit:** see `git log` (v0.1.111 — new session 4007 fix)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
 
 ---
 
-## Verified Project Root
+### PENDING / NEXT (unstarted)
+- **Notification bugs from field device QA** — approval notification click kills in-flight response (#1), cron check-ins missing (#2), turn-finished pings missing (#3). Status: device-QA notes only, not yet reproduced from code. Investigate at next desk session.
+
+### Verified Project Root
 
 | Field | Value |
 |---|---|
@@ -573,6 +576,10 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 
 ### DONE in v0.1.111 (2026-08-18) — New session 4007 fix
 - **Bug** — new sessions worked (created + opened), but `prompt.submit` got 4001 (session reaped) → `session.resume` got 4007 (session not found) → message failed. Root cause: `submitWithSelfHeal()` called `session.resume` and assumed success; when the server returned 4007 (fresh/deleted session), the exception propagated as `prompt.submit` failure. **Fix:** `submitWithSelfHeal()` now catches 4007 from `session.resume` and falls through to `prompt.submit` directly — the server creates the DB row on first turn for deferred sessions. (`DashboardChatViewModel.kt`)
+
+### DONE in v0.1.113 (2026-08-18) — Session delete; approval dialog enhanced
+- **Session delete** — each session row (main list, drawer, and "all sessions" expanded) now shows a trash icon. Tapping it opens a confirmation dialog showing the session title and a "Delete"/"Cancel" choice. On confirm, the app calls `session.delete` RPC, reloads the session list, and the deleted session disappears. (`JsonRpcClient.kt` — `sessionDelete()` + `DeleteSessionResult`; `SessionsViewModel.kt` — `deleteSession()` + `deleting` state; `SessionsScreen.kt` — trash icon + `AlertDialog`.)
+- **Approval dialog enhanced** — the "Approve Tool?" dialog now shows: the tool name (even when server returns null, defaults to "unknown"), a "What will happen" description built from the tool name and args, and a labeled "Arguments" section with monospace formatting. Previously it only showed the tool name and raw args without labels. (`ChatScreen.kt` — dialog layout; `DashboardChatViewModel.kt` — builds `description` from tool name + args; `UiModels.kt` — `PendingApproval` now has `description` field.)
 
 ### DONE in v0.1.109 (2026-08-18) — tok/s readout actually updates
 - **Bug** — the LiveActivityPanel tok/s readout stayed at `≈0.0 tok/s` during streaming. Root cause: `JsonRpcClient` parsed `message.delta` from `params.payload.text`, but the server sends `text` as an empty string and the actual delta text in `rendered`. The tok/s meter measured `(len - lastLen) / dtSec / 4f` where `len` never grew → always 0. (`JsonRpcClient.kt` — `message.delta` now falls back to `payload.rendered` when `text` is empty.)

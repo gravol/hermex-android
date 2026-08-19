@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Menu
@@ -82,10 +83,18 @@ fun SessionsScreen(
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var showAllSessions by rememberSaveable { mutableStateOf(false) }
+    var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
+    var deleteTarget by rememberSaveable { mutableStateOf<SessionSummary?>(null) }
 
     fun openSession(session: SessionSummary) {
         scope.launch { drawerState.close() }
         onSessionTap(session)
+    }
+
+    fun onDeleteSession(session: SessionSummary) {
+        scope.launch { drawerState.close() }
+        deleteTarget = session
+        showDeleteConfirm = true
     }
 
     // Client-side search over the loaded list (mirrors desktop local filtering).
@@ -197,6 +206,7 @@ fun SessionsScreen(
                                         pinned = true,
                                         onClick = { openSession(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                        onDeleted = { onDeleteSession(session) },
                                     isActive = activeMap[session.id] == true,
                                     )
                                 }
@@ -209,6 +219,7 @@ fun SessionsScreen(
                                         pinned = false,
                                         onClick = { openSession(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                        onDeleted = { onDeleteSession(session) },
                                     isActive = activeMap[session.id] == true,
                                     )
                                 }
@@ -224,6 +235,7 @@ fun SessionsScreen(
                                     pinned = true,
                                     onClick = { openSession(session) },
                                     onTogglePin = { viewModel.togglePin(session.id) },
+                                    onDeleted = { onDeleteSession(session) },
                                     isActive = activeMap[session.id] == true,
                                 )
                             }
@@ -238,6 +250,7 @@ fun SessionsScreen(
                                     pinned = false,
                                     onClick = { openSession(session) },
                                     onTogglePin = { viewModel.togglePin(session.id) },
+                                    onDeleted = { onDeleteSession(session) },
                                     isActive = activeMap[session.id] == true,
                                 )
                             }
@@ -263,6 +276,7 @@ fun SessionsScreen(
                                         pinned = false,
                                         onClick = { openSession(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                        onDeleted = { onDeleteSession(session) },
                                     isActive = activeMap[session.id] == true,
                                     )
                                 }
@@ -400,6 +414,7 @@ fun SessionsScreen(
                                         pinned = true,
                                         onClick = { onSessionTap(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                        onDeleted = { onDeleteSession(session) },
                                     isActive = activeMap[session.id] == true,
                                     )
                                 }
@@ -412,6 +427,7 @@ fun SessionsScreen(
                                         pinned = false,
                                         onClick = { onSessionTap(session) },
                                         onTogglePin = { viewModel.togglePin(session.id) },
+                                        onDeleted = { onDeleteSession(session) },
                                     isActive = activeMap[session.id] == true,
                                     )
                                 }
@@ -434,6 +450,48 @@ fun SessionsScreen(
             }
         }
     }
+
+    // ── Delete confirmation dialog ──
+    if (showDeleteConfirm && deleteTarget != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete session?") },
+            text = {
+                Text(
+                    "Delete \"${deleteTarget!!.title ?: deleteTarget!!.id.take(16)}\"? " +
+                    "This cannot be undone.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val target = deleteTarget!!
+                        showDeleteConfirm = false
+                        viewModel.deleteSession(target.id) {
+                            // list will reload automatically
+                        }
+                    },
+                    enabled = !state.deleting,
+                ) {
+                    if (state.deleting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 1.5.dp,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Deleting…")
+                    } else {
+                        Text("Delete")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -453,6 +511,7 @@ private fun SessionRow(
     pinned: Boolean,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
+    onDeleted: () -> Unit,
     isActive: Boolean = false,
 ) {
     Card(
@@ -559,6 +618,13 @@ private fun SessionRow(
                     },
                 )
             }
+            IconButton(onClick = onDeleted) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                )
+            }
         }
     }
 }
@@ -569,6 +635,7 @@ private fun DrawerSessionRow(
     pinned: Boolean,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
+    onDeleted: () -> Unit,
     isActive: Boolean = false,
 ) {
     Row(
@@ -621,6 +688,13 @@ private fun DrawerSessionRow(
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
+            )
+        }
+        IconButton(onClick = onDeleted) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Delete",
+                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
             )
         }
     }

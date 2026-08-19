@@ -25,6 +25,7 @@ data class SessionsUiState(
     val isLoading: Boolean = false,
     val isCreating: Boolean = false,
     val error: String? = null,
+    val deleting: Boolean = false,
 )
 
 class SessionsViewModel(application: Application) : AndroidViewModel(application) {
@@ -83,6 +84,34 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
             } finally {
                 wsConnection.disconnect()
                 _uiState.value = _uiState.value.copy(isCreating = false)
+            }
+        }
+    }
+
+    /** Delete a session server-side, then reload the session list. */
+    fun deleteSession(sessionId: String, onDone: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(deleting = true, error = null)
+            val wsConnection = WsConnectionManager(viewModelScope)
+            try {
+                wsConnection.connect()
+                val rpcClient = JsonRpcClient(wsConnection, viewModelScope)
+                rpcClient.start()
+                rpcClient.sessionDelete(sessionId)
+                DebugLog.log("INFO", "SessionsVM", "session.delete → $sessionId")
+                _uiState.value = _uiState.value.copy(deleting = false)
+                loadSessions()
+                onDone()
+            } catch (e: Exception) {
+                Log.e("Hermex", "SessionsViewModel: deleteSession failed", e)
+                DebugLog.log("ERROR", "SessionsVM", "session.delete failed: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    deleting = false,
+                    error = e.message ?: "Failed to delete session",
+                )
+                onDone()
+            } finally {
+                wsConnection.disconnect()
             }
         }
     }
