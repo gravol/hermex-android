@@ -2062,8 +2062,7 @@ private fun LiveActivityPanel(
     isServerReported: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    var now by remember { mutableStateOf(System.currentTimeMillis()) } +
-        (rememberUpdatedState(0L))
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(1000)

@@ -1006,25 +1006,24 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 var commandLine = ""
                 if (trimmedArgs.startsWith("{") && trimmedArgs.endsWith("}")) {
                     try {
-                        val json = com.google.gson.Gson().fromJson(trimmedArgs, com.google.gson.JsonElement::class.java)
-                        if (json.isJsonObject) {
-                            val obj = json.asJsonObject
+                        val json = Json.parseToJsonElement(trimmedArgs)
+                        if (json is JsonObject) {
                             for (field in listOf("cmd", "command", "arguments", "arg", "query", "text", "content", "path", "file_path")) {
-                                if (obj.has(field)) {
-                                    val valEl = obj.get(field)
-                                    if (valEl.isJsonPrimitive) {
-                                        commandLine = valEl.asString
+                                if (field in json) {
+                                    val valEl = json[field]!!
+                                    if (valEl.jsonPrimitive != null) {
+                                        commandLine = valEl.jsonPrimitive.contentOrNull ?: ""
                                         break
-                                    } else if (valEl.isJsonArray) {
-                                        commandLine = valEl.asJsonArray.joinToString(" ") { it.toString() }
+                                    } else if (valEl.jsonArray.isNotEmpty()) {
+                                        commandLine = valEl.jsonArray.joinToString(" ") { it.toString() }
                                         break
                                     }
                                 }
                             }
-                            if (rawToolName == null && obj.has("tool")) {
-                                val toolEl = obj.get("tool")
-                                if (toolEl.isJsonPrimitive) {
-                                    toolName = toolEl.asString
+                            if (rawToolName == null && "tool" in json) {
+                                val toolEl = json["tool"]
+                                if (toolEl?.jsonPrimitive != null) {
+                                    toolName = toolEl.jsonPrimitive.contentOrNull ?: "command"
                                 }
                             }
                         }
