@@ -1,4 +1,3 @@
-// File: app/build.gradle.kts
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -14,8 +13,8 @@ android {
         applicationId = "com.hermex.android"
         minSdk = 34
         targetSdk = 34
-        versionCode = 115
-        versionName = "0.1.115"
+        versionCode = 116
+        versionName = "0.1.116"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
