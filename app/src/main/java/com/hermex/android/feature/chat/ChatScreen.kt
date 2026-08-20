@@ -2062,12 +2062,35 @@ private fun LiveActivityPanel(
     isServerReported: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var now by remember { mutableStateOf(System.currentTimeMillis()) } +
+        (rememberUpdatedState(0L))
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            now = System.currentTimeMillis()
+        }
+    }
     // v0.1.96: tools are their own labeled section, and disappear entirely
     // when the tool-call toggle is off.
     val toolsVisible = showTools && toolCalls.isNotEmpty()
     // v0.1.97: thinking section disappears when the thinking toggle is off.
     val thinkingVisible = showThinking && thinking.isNotBlank()
+    // v0.1.115: track how long the model has been thinking.
+    var thinkingStartedAt by remember { mutableStateOf<Long?>(null) }
+    if (thinkingVisible) {
+        if (thinkingStartedAt == null) thinkingStartedAt = System.currentTimeMillis()
+    } else {
+        thinkingStartedAt = null
+    }
+    val thinkingElapsedMs = remember(now, thinkingStartedAt) {
+        if (thinkingStartedAt != null) now - thinkingStartedAt!! else 0L
+    }
+    fun formatElapsed(ms: Long): String {
+        val s = ms / 1000
+        val m = s / 60
+        val sec = s % 60
+        return if (m > 0) "${m}m ${sec}s" else "${sec}s"
+    }
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
@@ -2104,6 +2127,15 @@ private fun LiveActivityPanel(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary,
                         maxLines = 1,
+                    )
+                }
+                // v0.1.115: show how long the model has been thinking.
+                if (thinkingVisible && thinkingElapsedMs > 0) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = formatElapsed(thinkingElapsedMs),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     )
                 }
                 Spacer(Modifier.weight(1f))

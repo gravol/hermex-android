@@ -618,11 +618,14 @@ private fun SessionRow(
                     },
                 )
             }
-            IconButton(onClick = onDeleted) {
+            IconButton(
+                onClick = onDeleted,
+                enabled = !isActive,
+            ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                    contentDescription = if (isActive) "Cannot delete active session" else "Delete",
+                    tint = if (isActive) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f) else MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
                 )
             }
         }
@@ -690,11 +693,14 @@ private fun DrawerSessionRow(
                 },
             )
         }
-        IconButton(onClick = onDeleted) {
+        IconButton(
+            onClick = onDeleted,
+            enabled = !isActive,
+        ) {
             Icon(
                 imageVector = Icons.Default.Delete,
-                contentDescription = "Delete",
-                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                contentDescription = if (isActive) "Cannot delete active session" else "Delete",
+                tint = if (isActive) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f) else MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
             )
         }
     }
