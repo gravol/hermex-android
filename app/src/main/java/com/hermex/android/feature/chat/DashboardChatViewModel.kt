@@ -976,6 +976,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     // user is NOT watching this chat: navigated away (screen
                     // not visible) OR the app is backgrounded.
                     if (!screenVisible || com.hermex.android.AppState.isBackgrounded) {
+                        DebugLog.log("RPC", "DashboardChat", "turn-finished → postTurnFinished fired (screenVisible=$screenVisible, backgrounded=${com.hermex.android.AppState.isBackgrounded})")
                         val title = uiState.sessionTitle.ifBlank { sessionId }
                         NotificationHelper.postTurnFinished(
                             getApplication(), sessionId, title, finalContent,

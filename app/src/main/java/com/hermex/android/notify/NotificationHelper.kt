@@ -136,7 +136,13 @@ object NotificationHelper {
             .setContentIntent(openSessionIntent(context, sessionKey, title))
             .addAction(replyAction(context, sessionKey, title))
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(turnNotificationId(sessionKey), notification) }
+        // v0.1.116-diag: capture delivery result. notify() returns true when the
+        // system accepted the notification, false when it dropped it (permission
+        // revoked, channel suppressed by DND/battery, or notification disabled).
+        val delivered = runCatching {
+            NotificationManagerCompat.from(context).notify(turnNotificationId(sessionKey), notification)
+        }.getOrElse { "threw:${it.javaClass.simpleName}:${it.message}" }
+        DebugLog.log("RPC", "DashboardChat", "postTurnFinished delivered=$delivered id=${turnNotificationId(sessionKey)} session=$sessionKey")
     }
 
     /** Foreground notification while NotificationReplyService submits a reply (v0.1.98). */
