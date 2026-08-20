@@ -2594,16 +2594,27 @@ private fun shortModelName(model: String): String {
     return last.removePrefix("deepseek-").removePrefix("deepseek").take(24)
 }
 
-/** Reasoning effort label (v0.1.88). */
+/** Reasoning effort label (v0.1.88; v0.1.116: off/minimal/xhigh added). */
 private fun effortShort(effort: String): String = when (effort.lowercase()) {
+    "off" -> "off"
+    "minimal", "min" -> "min"
     "ultra" -> "ultra"
+    "xhigh", "extreme" -> "xhigh"
     "high" -> "high"
     "medium", "med" -> "med"
     "low" -> "low"
     else -> effort.take(8)
 }
 
-private val EFFORT_OPTIONS = listOf("low", "medium", "high")
+/** All effort levels the picker offers, ordered quiet → loud. "off" disables thinking. */
+private val EFFORT_OPTIONS = listOf("off", "minimal", "low", "medium", "high", "xhigh")
+
+/** True when this effort string means "don't reason at all". */
+internal fun effortIsOff(effort: String?): Boolean =
+    effort?.lowercase() == "off"
+
+/** Lowest non-off effort (used as the "thinking on" default). */
+internal val DEFAULT_EFFORT = "low"
 
 /**
  * Model + reasoning picker (v0.1.88). Reads model.options from the server,
@@ -2623,7 +2634,9 @@ private fun ModelPickerSheet(
     var selectedModel by remember { mutableStateOf("") }
     // Start from the session's current effort so "Apply to this chat" doesn't
     // silently reset reasoning to medium when the user only meant to switch model.
-    var selectedEffort by remember { mutableStateOf(viewModel.uiState.currentReasoning ?: "medium") }
+    var selectedEffort by remember { mutableStateOf(viewModel.uiState.currentReasoning ?: DEFAULT_EFFORT) }
+    // Thinking on/off is driven by whether effort is "off" (off) vs any real level (on).
+    var selectedThinkingOn by remember { mutableStateOf(!effortIsOff(viewModel.uiState.currentReasoning)) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -2633,6 +2646,7 @@ private fun ModelPickerSheet(
             options = opts
             selectedModel = opts.model ?: ""
             selectedEffort = viewModel.uiState.currentReasoning ?: selectedEffort
+            selectedThinkingOn = selectedEffort.isBlank() || !effortIsOff(selectedEffort)
         } catch (e: Exception) {
             error = e.message ?: "Failed to load models"
         }
@@ -2700,15 +2714,53 @@ private fun ModelPickerSheet(
                 }
 
                 Spacer(Modifier.height(12.dp))
-                Text("Reasoning effort", style = MaterialTheme.typography.labelMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                    EFFORT_OPTIONS.forEach { effort ->
-                        FilterChip(
-                            selected = selectedEffort == effort,
-                            onClick = { selectedEffort = effort },
-                            label = { Text(effort.replaceFirstChar { it.uppercase() }) },
-                        )
+
+                // v0.1.116: Thinking on/off toggle — effort "off" disables reasoning;
+                // any real level turns it on. Effort selector is disabled while off.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Thinking",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = selectedThinkingOn,
+                        onCheckedChange = { on ->
+                            selectedThinkingOn = on
+                            // Pick a sensible effort when flipping on; keep the current
+                            // level when flipping off (we just mark it off).
+                            if (on && selectedEffort.isBlank()) selectedEffort = DEFAULT_EFFORT
+                        },
+                    )
+                }
+
+                if (selectedThinkingOn) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Effort", style = MaterialTheme.typography.labelMedium)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 6.dp),
+                    ) {
+                        EFFORT_OPTIONS.filterNot { it == "off" }.forEach { effort ->
+                            FilterChip(
+                                selected = selectedEffort == effort,
+                                onClick = { if (!effortIsOff(effort)) selectedEffort = effort },
+                                label = { Text(effort.replaceFirstChar { it.uppercase() }) },
+                            )
+                        }
                     }
+                } else {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Thinking is off — the model won't reason before answering.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -2717,7 +2769,7 @@ private fun ModelPickerSheet(
                     onClick = {
                         scope.launch {
                             saving = true
-                            viewModel.applyModelToSession(selectedModel, selectedEffort)
+                            viewModel.applyModelToSession(selectedModel, selectedEffort, selectedThinkingOn)
                             saving = false
                             Toast.makeText(context, "Applied to this chat", Toast.LENGTH_SHORT).show()
                             onDismiss()
@@ -2734,7 +2786,7 @@ private fun ModelPickerSheet(
                     onClick = {
                         scope.launch {
                             saving = true
-                            viewModel.saveModelPick(selectedModel, selectedEffort)
+                            viewModel.saveModelPick(selectedModel, selectedEffort, selectedThinkingOn)
                             saving = false
                             Toast.makeText(context, "Saved — applies to new chats", Toast.LENGTH_SHORT).show()
                             onDismiss()

@@ -1121,13 +1121,19 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     /** Model options for the picker sheet. */
     override suspend fun loadModelOptions(): JsonRpcClient.ModelOptionsResult = rpcClient.modelOptions()
 
-    /** Persist the user's model/effort pick (applies to NEW sessions) + reflect it. */
-    override fun saveModelPick(model: String, reasoning: String) {
+    /**
+     * Persist the user's model + thinking/effort pick (applies to NEW sessions) +
+     * reflect it. [thinkingOn] flips reasoning "off" when false — persisted as the
+     * "off" effort level so new sessions don't reason. [reasoning] is the chosen
+     * non-off level (ignored when [thinkingOn] is false).
+     */
+    override fun saveModelPick(model: String, reasoning: String, thinkingOn: Boolean) {
+        val effort = if (thinkingOn) reasoning.ifBlank { DEFAULT_EFFORT } else "off"
         viewModelScope.launch {
             val settingsRepo = SettingsRepository(getApplication())
             settingsRepo.setModelPick(model)
-            settingsRepo.setReasoningPick(reasoning)
-            uiState = uiState.copy(currentReasoning = reasoning.ifBlank { null })
+            settingsRepo.setReasoningPick(effort)
+            uiState = uiState.copy(currentReasoning = effort.ifBlank { null })
         }
     }
 
@@ -1144,7 +1150,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
      * by LIVE SID only, so send the resolved live sid (fall back to sessionId,
      * which IS the live sid for a just-created session).
      */
-    override fun applyModelToSession(model: String, reasoning: String) {
+    override fun applyModelToSession(model: String, reasoning: String, thinkingOn: Boolean) {
         viewModelScope.launch {
             try {
                 val sid = liveSid.ifBlank { sessionId }
@@ -1154,14 +1160,16 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     DebugLog.log("RPC", "DashboardChat",
                         "config.set model=$model → applied=$applied")
                 }
-                if (reasoning.isNotBlank()) {
-                    rpcClient.configSet(sid, "reasoning", reasoning)
-                    DebugLog.log("RPC", "DashboardChat",
-                        "config.set reasoning=$reasoning")
-                }
+                // v0.1.116: thinking on/off drives the effort level. "off" turns
+                // reasoning off; any real level turns it on. Empty reasoning while
+                // on falls back to the default (non-off) level.
+                val effort = if (thinkingOn) reasoning.ifBlank { DEFAULT_EFFORT } else "off"
+                rpcClient.configSet(sid, "reasoning", effort)
+                DebugLog.log("RPC", "DashboardChat",
+                    "config.set reasoning=$effort (thinkingOn=$thinkingOn)")
                 uiState = uiState.copy(
                     currentModel = model.ifBlank { uiState.currentModel },
-                    currentReasoning = reasoning.ifBlank { uiState.currentReasoning },
+                    currentReasoning = effort.ifBlank { uiState.currentReasoning },
                 )
                 // The server emits session.info with the new model/reasoning; a
                 // lightweight resume also refreshes the gauge + chip immediately.
