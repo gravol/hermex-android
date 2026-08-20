@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-18 (v0.1.113 — session delete; approval dialog enhanced)
-**Current version:** v0.1.113 (versionCode 113)
-**HEAD commit:** see `git log` (v0.1.111 — new session 4007 fix)
+**Last updated:** 2026-08-19 (v0.1.115 — improved command approval dialog with explicit labels and JSON args parsing)
+**Current version:** v0.1.115 (versionCode 115)
+**HEAD commit:** `03b4189` (v0.1.114 — improve command approval dialog)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -19,11 +19,11 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `b21505c` (v0.1.76 — CI-race version bump) |
+| Latest commit | `03b4189` (v0.1.114 — improve command approval dialog) |
 | Build command | `./gradlew assembleRelease --no-configuration-cache` |
 | APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.76 (versionCode 76) |
-| Completed phase | **v0.1.74–76 — notifications** (turn-finished + scheduled-alarm cron watcher) |
+| Version | v0.1.115 (versionCode 115) |
+| Completed phase | **v0.1.115 — improved command approval dialog** (explicit "Command"/"Arguments" labels, JSON args parsing for any tool type, fallback from "unknown" to "command") |
 | Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) — **DONE v0.1.80** ② custom colors for everything (refine text color/text size controls) — **DONE v0.1.49–58/79/95** ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response — **DONE v0.1.66–79** ④ re-verify Obtainium update flow after CI races — **DONE v0.1.76** ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking) — **DONE v0.1.98**. Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -797,6 +797,12 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 
 ### DONE in v0.1.58 (2026-08-13)
 - **Terminal preset: monospace + mint text** — the "all black" complaint was missing green entirely. Now the preset also sets: **text override `#A5D6A7`** (soft green-white onSurface/onBackground; onSurfaceVariant = 72% alpha → muted mint labels/timestamps/icons like the desktop) and **monospace font everywhere** (`MonoTypography` in Type.kt, `HermexTheme(monospace=)` param). New Appearance controls work with any theme: Text color swatch row + Monospace switch. `UiColorOverrides.text`, `SettingsRepository.uiTextHex`/`uiMonospace` + `applyAppearance` 5-arg, MainActivity wiring. Terminal preset now: accent `#00FF41`, bg `#0A0C0A`, user `#1E3D24`, assistant `#0A0C0A`, text `#A5D6A7`, mono on.
+
+### DONE in v0.1.115 (2026-08-19)
+- **Improved command approval dialog** — title now shows the actual tool name (e.g., "Approve: bash") instead of generic "Approve Command?"; added explicit "Command" and "Arguments" section headers so each piece of info is labeled; ViewModel now parses JSON args with Gson for any tool type (not just bash regex), extracting from common fields (`cmd`, `command`, `arguments`, `arg`, `query`, `text`, `content`, `path`, `file_path`); falls back to "command" when `toolName` is null instead of the confusing "unknown"); if a "tool" field exists in JSON, uses it as the tool name. (`DashboardChatViewModel.kt`, `ChatScreen.kt`)
+
+### DONE in v0.1.114 (2026-08-19)
+- **Improve command approval dialog** — shows extracted command line for bash tool calls in monospace, title changed to "Approve Command?".
 
 ### DONE in v0.1.57 (2026-08-13)
 - **Terminal preset: flat desktop look** — preset now sets ALL four keys: accent `#00FF41`, bg `#0A0C0A`, **user bubble `#1E3D24`** (muted green box), **assistant bubble `#0A0C0A`** (same as bg → invisible → flat text-on-charcoal like the desktop). Previously only bg+accent were set so the assistant bubble stayed green-tinted — looked nothing like the desktop. (`SettingsScreen.kt` preset + selected check.)

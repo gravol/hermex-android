@@ -999,30 +999,46 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ApprovalRequest -> {
-                val toolName = n.toolName ?: "unknown"
+                val rawToolName = n.toolName
                 val argsStr = n.args?.toString() ?: ""
-                // Build a human-readable description from the args.
-                // For "bash" tool, extract the actual command line for clarity.
+                val trimmedArgs = argsStr.trim()
+                var toolName = rawToolName ?: "command"
+                var commandLine = ""
+                if (trimmedArgs.startsWith("{") && trimmedArgs.endsWith("}")) {
+                    try {
+                        val json = com.google.gson.Gson().fromJson(trimmedArgs, com.google.gson.JsonElement::class.java)
+                        if (json.isJsonObject) {
+                            val obj = json.asJsonObject
+                            for (field in listOf("cmd", "command", "arguments", "arg", "query", "text", "content", "path", "file_path")) {
+                                if (obj.has(field)) {
+                                    val valEl = obj.get(field)
+                                    if (valEl.isJsonPrimitive) {
+                                        commandLine = valEl.asString
+                                        break
+                                    } else if (valEl.isJsonArray) {
+                                        commandLine = valEl.asJsonArray.joinToString(" ") { it.toString() }
+                                        break
+                                    }
+                                }
+                            }
+                            if (rawToolName == null && obj.has("tool")) {
+                                val toolEl = obj.get("tool")
+                                if (toolEl.isJsonPrimitive) {
+                                    toolName = toolEl.asString
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
                 val desc = buildString {
                     append("Runs ")
                     append(toolName)
-                    if (argsStr.isNotBlank()) {
-                        // Try to extract a "cmd" field from JSON args for bash tool
-                        val trimmed = argsStr.trim()
-                        if (toolName == "bash" && trimmed.startsWith("{") && trimmed.endsWith("}")) {
-                            val cmdRegex = Regex("\"cmd\"\\s*:\\s*\"([^\"]+)\"")
-                            val cmdMatch = cmdRegex.find(trimmed)
-                            if (cmdMatch != null) {
-                                append("\n")
-                                append(cmdMatch.groupValues[1])
-                            } else {
-                                append(" with: ")
-                                append(argsStr.take(300))
-                            }
-                        } else {
-                            append(" with: ")
-                            append(argsStr.take(300))
-                        }
+                    if (commandLine.isNotBlank()) {
+                        append("\n")
+                        append(commandLine.take(500))
+                    } else if (trimmedArgs.isNotBlank()) {
+                        append(" with: ")
+                        append(trimmedArgs.take(300))
                     }
                 }
                 DebugLog.log("RPC", "DashboardChat", "approval request received: $toolName")

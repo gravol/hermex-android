@@ -1167,7 +1167,7 @@ fun ChatScreen(
         Dialog(onDismissRequest = { /* must approve or deny */ }) {
             Card(
                 modifier = Modifier
-                    .widthIn(min = 300.dp, max = 420.dp)
+                    .widthIn(min = 300.dp, max = 460.dp)
                     .padding(8.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
@@ -1175,40 +1175,52 @@ fun ChatScreen(
                 ),
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "Approve Command?",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    // ── What will happen ──
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // ── Title with tool name ──
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Icon(
                             Icons.Default.Lock,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.tertiary,
                         )
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            text = pendingApproval.toolName,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            fontWeight = FontWeight.SemiBold,
+                            text = "Approve: ${pendingApproval.toolName}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
                         )
                     }
-                    // ── Human-readable command description ──
+
+                    // ── Command description (what will happen) ──
                     if (pendingApproval.description.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(12.dp))
                         Text(
-                            text = pendingApproval.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontFamily = FontFamily.Monospace,
+                            text = "Command",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         )
+                        Spacer(Modifier.height(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                        ) {
+                            Text(
+                                text = pendingApproval.description,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(12.dp),
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
+
+                    // ── Raw arguments (full detail) ──
                     if (pendingApproval.toolArgs.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(12.dp))
                         Text(
                             text = "Arguments",
                             style = MaterialTheme.typography.labelSmall,
@@ -1218,17 +1230,21 @@ fun ChatScreen(
                         Spacer(Modifier.height(4.dp))
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
                         ) {
                             Text(
                                 text = pendingApproval.toolArgs,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(12.dp),
                                 fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                             )
                         }
                     }
+
                     Spacer(Modifier.height(16.dp))
+
+                    // ── Action buttons ──
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
