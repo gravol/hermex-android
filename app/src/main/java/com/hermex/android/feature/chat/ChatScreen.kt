@@ -1346,7 +1346,17 @@ private fun ThinkingScrollBox(text: String) {
     // long the model spent reasoning, displayed at the bottom of the box.
     var startedAt by remember { mutableStateOf<Long?>(null) }
     if (startedAt == null) startedAt = System.currentTimeMillis()
-    val now by remember { mutableStateOf(System.currentTimeMillis()) }
+    // v0.1.121: a one-shot ticker that flips `now` once per second while the box
+    // is visible, so the elapsed readout actually advances instead of freezing
+    // at 0s. Without this the remember{} snapshot captured "now" once and never
+    // updated — hence "Thought for 0s".
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            now = System.currentTimeMillis()
+        }
+    }
     val elapsedMs = now - (startedAt ?: now)
     fun formatElapsed(ms: Long): String {
         val s = ms / 1000
