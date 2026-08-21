@@ -1342,6 +1342,18 @@ fun ChatScreen(
  */
 @Composable
 private fun ThinkingScrollBox(text: String) {
+    // v0.1.120: track when the thinking box first appeared so we can show how
+    // long the model spent reasoning, displayed at the bottom of the box.
+    var startedAt by remember { mutableStateOf<Long?>(null) }
+    if (startedAt == null) startedAt = System.currentTimeMillis()
+    val now by remember { mutableStateOf(System.currentTimeMillis()) }
+    val elapsedMs = now - (startedAt ?: now)
+    fun formatElapsed(ms: Long): String {
+        val s = ms / 1000
+        val m = s / 60
+        val sec = s % 60
+        return if (m > 0) "${m}m ${sec}s" else "${sec}s"
+    }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1378,6 +1390,22 @@ private fun ThinkingScrollBox(text: String) {
                         lineHeight = 15.sp,
                     ),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+            }
+            // v0.1.120: elapsed reasoning time at the bottom of the box.
+            Spacer(Modifier.height(4.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Thought for ${formatElapsed(elapsedMs)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                 )
             }
         }
@@ -1558,9 +1586,26 @@ private fun MessageBubble(
                     )
                 }
             } else if (message.isStreaming && message.thinkingText == null) {
-                // No content yet — show typing dots while waiting, cursor otherwise
+                // No content yet — show typing dots while waiting, cursor otherwise.
+                // v0.1.120: add a small "waiting for model" label so the state is
+                // obvious when reasoning is OFF and the model emits no thinking
+                // deltas (e.g. Ornith with effort=off) — otherwise just dots can
+                // look stuck during the long first-token wait on a local model.
                 if (message.isWaitingForFirstEvent) {
-                    TypingDots()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 6.dp),
+                    ) {
+                        TypingDots()
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "waiting for model…",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontStyle = FontStyle.Italic,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        )
+                    }
                 } else {
                     Text(
                         text = "▌",
@@ -2276,8 +2321,13 @@ private fun ToolActivityRow(toolCall: UiToolCall, now: Long) {
  */
 @Composable
 private fun ToolScrollBox(toolCalls: List<UiToolCall>) {
+    // v0.1.120: each tool gets its own collapsible box — collapsed shows just the
+    // one-line row (icon · name · elapsed · status), tap to expand for full
+    // args/diff/result. A "show all" toggle at the bottom expands/collapses them
+    // together so a long turn doesn't blow past the fold.
     val now by remember { mutableStateOf(System.currentTimeMillis()) }
     var detail by remember { mutableStateOf<UiToolCall?>(null) }
+    var expandAll by remember { mutableStateOf(false) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -2299,20 +2349,44 @@ private fun ToolScrollBox(toolCalls: List<UiToolCall>) {
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 140.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                toolCalls.forEach { tc ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { detail = tc },
-                    ) {
-                        ToolActivityRow(toolCall = tc, now = now)
+            Column {
+                toolCalls.forEachIndexed { index, tc ->
+                    ToolCallCard(
+                        toolCall = tc,
+                        now = now,
+                        expanded = expandAll,
+                        onToggleDetail = { detail = tc },
+                    )
+                    // Divider between cards (not after the last one).
+                    if (index < toolCalls.size - 1) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        )
                     }
+                }
+            }
+            // v0.1.120: expand/collapse-all toggle at the bottom.
+            if (toolCalls.size > 1) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .clickable { expandAll = !expandAll },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (expandAll) "Hide all" else "Show all",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (expandAll) "▲" else "▼",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
                 }
             }
         }
@@ -2366,6 +2440,154 @@ private fun ToolScrollBox(toolCalls: List<UiToolCall>) {
                 TextButton(onClick = { detail = null }) { Text("Close") }
             },
         )
+    }
+}
+
+/**
+ * One collapsible tool card (v0.1.120): a one-line header row that taps to
+ * expand/collapse. Expanded view reveals full Arguments / inline diff / Result,
+ * matching the old ToolCallCard detail layout. [expanded] is an external toggle
+ * so "show all" can open every card at once; individual taps still flip this one.
+ */
+@Composable
+private fun ToolCallCard(
+    toolCall: UiToolCall,
+    now: Long,
+    expanded: Boolean = false,
+    onToggleDetail: () -> Unit,
+) {
+    var localExpanded by remember { mutableStateOf(false) }
+    val isOpen = expanded || localExpanded
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                if (!isOpen) onToggleDetail() else localExpanded = !localExpanded
+            },
+    ) {
+        // Collapsed: one-line header row (icon · name · elapsed · status).
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = toolIcon(toolCall.toolName),
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = toolCall.toolName,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = formatElapsed(toolCall.startedAt, now, toolCall.completed),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
+            Spacer(Modifier.width(6.dp))
+            if (toolCall.completed) {
+                Text(
+                    text = "✓",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF4CAF50),
+                )
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = if (isOpen) "▲" else "▼",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
+        }
+
+        // Expanded: full detail section (args / diff / result).
+        AnimatedVisibility(visible = isOpen) {
+            Column {
+                if (!toolCall.args.isNullOrBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Arguments",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Surface(
+                        color = LocalUiSurfaces.current.toolCard,
+                        shape = RoundedCornerShape(4.dp),
+                    ) {
+                        Text(
+                            text = toolCall.args,
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(6.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+
+                if (toolCall.preview?.isNotBlank() == true && toolCall.args.isNullOrBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Call",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = toolCall.preview!!,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+
+                if (toolCall.inlineDiff != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Diff",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    DiffView(diffText = toolCall.inlineDiff!!)
+                } else if (toolCall.completed && !toolCall.result.isNullOrBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Result",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Surface(
+                        color = LocalUiSurfaces.current.toolCard,
+                        shape = RoundedCornerShape(4.dp),
+                    ) {
+                        Text(
+                            text = toolCall.result!!.take(500),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(6.dp),
+                            maxLines = 10,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
     }
 }
 
