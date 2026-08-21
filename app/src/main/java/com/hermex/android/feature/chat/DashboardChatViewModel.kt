@@ -243,9 +243,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
      * signal — the next prompt.submit then fails with JSON-RPC 4001
      * "session not found". On 4001 we re-register via session.resume
      * (which re-materializes the session from the DB) and retry once.
-     * If session.resume also 4007 (fresh/deleted session), just send
-     * prompt.submit directly — the server creates the DB row on first turn.
-     * Any other error, or a second failure, propagates to the caller.
+     * If session.resume also 4007 (fresh/deleted session), fall back to a
+     * short backoff + one extra resume attempt before sending directly.
+     * A just-reaped session can return 4007 for a moment while the server's
+     * DB row is mid-flush; waiting ~1.5s and retrying the resume recovers it
+     * instead of failing. Only after both attempts fail do we send directly
+     * (the genuinely-fresh-session path, where the server creates the row on
+     * first turn). Any other error, or a second failure, propagates to caller.
      */
     private suspend fun submitWithSelfHeal(text: String) {
         try {
@@ -257,11 +261,28 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             val result = try {
                 rpcClient.sessionResume(sessionId)
             } catch (resume4007: JsonRpcException) {
-                // v0.1.111 — fresh/deleted session: resume 4007, just send
                 if (resume4007.code == 4007) {
+                    // v0.1.111 — a genuinely fresh/deleted session: resume can't
+                    // find it, so send directly and the server creates the row.
+                    // BUT a just-reaped session also returns 4007 while its DB row
+                    // is mid-flush (the ws_orphan_reap window). Give it one more
+                    // chance after a short backoff before giving up — a second
+                    // resume usually succeeds once the flush completes.
                     DebugLog.log("STATE", "SessionID",
-                        "self-heal resume 4007 (fresh/deleted) — sending prompt.submit directly: dbKey=$sessionId")
-                    null
+                        "self-heal resume 4007 (fresh/reaped) — backing off then retrying: dbKey=$sessionId")
+                    var recovered: JsonRpcClient.SessionResumeResult? = null
+                    repeat(2) { attempt ->
+                        try {
+                            delay(1500L * (attempt + 1))
+                            recovered = rpcClient.sessionResume(sessionId)
+                            if (recovered != null) return@repeat
+                        } catch (retry4007: JsonRpcException) {
+                            if (retry4007.code != 4007) throw retry4007
+                            DebugLog.log("STATE", "SessionID",
+                                "self-heal resume retry #$attempt still 4007 — dbKey=$sessionId")
+                        }
+                    }
+                    recovered
                 } else {
                     throw resume4007
                 }
@@ -275,6 +296,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 rpcClient.promptSubmit(sessionId, text)
             } else {
                 // Fresh session — server will create the DB row on first turn
+                DebugLog.log("STATE", "SessionID",
+                    "self-heal resume exhausted 4007 after backoff — sending prompt.submit directly: dbKey=$sessionId")
                 rpcClient.promptSubmit(sessionId, text)
             }
         }
@@ -976,7 +999,6 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     // user is NOT watching this chat: navigated away (screen
                     // not visible) OR the app is backgrounded.
                     if (!screenVisible || com.hermex.android.AppState.isBackgrounded) {
-                        DebugLog.log("RPC", "DashboardChat", "turn-finished → postTurnFinished fired (screenVisible=$screenVisible, backgrounded=${com.hermex.android.AppState.isBackgrounded})")
                         val title = uiState.sessionTitle.ifBlank { sessionId }
                         NotificationHelper.postTurnFinished(
                             getApplication(), sessionId, title, finalContent,
