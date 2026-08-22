@@ -57,7 +57,6 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Psychology
@@ -229,6 +228,10 @@ fun ChatScreen(
     var recordingSeconds by remember { mutableStateOf(0) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
+    // v0.1.125: recorded voice staged for the user to Delete or Send instead of
+    // auto-transcribing straight into the composer.
+    var pendingVoiceB64 by remember { mutableStateOf<String?>(null) }
+    var pendingVoiceDurSec by remember { mutableIntStateOf(0) }
 
     fun startRecording() {
         try {
@@ -251,7 +254,7 @@ fun ChatScreen(
         }
     }
 
-    fun stopAndTranscribe() {
+    fun stopRecording() {
         val rec = recorder ?: return
         val file = recordingFile ?: return
         try {
@@ -262,14 +265,28 @@ fun ChatScreen(
         recordingFile = null
         isRecording = false
         scope.launch {
-            isTranscribing = true
             try {
                 val bytes = file.readBytes()
                 if (bytes.isEmpty()) {
                     Toast.makeText(context, "No audio recorded", Toast.LENGTH_SHORT).show()
                     return@launch
                 }
-                val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                // Stage the recording — the user picks Delete or Send.
+                pendingVoiceB64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                pendingVoiceDurSec = recordingSeconds
+            } catch (e: Exception) {
+                Toast.makeText(context, "Failed to capture recording: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                file.delete()
+            }
+        }
+    }
+
+    fun sendPendingVoice() {
+        val b64 = pendingVoiceB64 ?: return
+        scope.launch {
+            isTranscribing = true
+            try {
                 val dataUrl = "data:audio/webm;base64,$b64"
                 when (val r = DashboardApiClient.transcribeAudio(dataUrl, "audio/webm")) {
                     is NetworkResult.Success -> {
@@ -277,8 +294,9 @@ fun ChatScreen(
                         if (transcript.isBlank()) {
                             Toast.makeText(context, "No speech detected", Toast.LENGTH_SHORT).show()
                         } else {
-                            composerText = if (composerText.isBlank()) transcript
-                            else "$composerText $transcript"
+                            pendingVoiceB64 = null
+                            pendingVoiceDurSec = 0
+                            viewModel.sendMessage(transcript)
                         }
                     }
                     is NetworkResult.HttpError -> {
@@ -300,7 +318,6 @@ fun ChatScreen(
                 Toast.makeText(context, "Transcription failed: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 isTranscribing = false
-                file.delete()
             }
         }
     }
@@ -770,6 +787,43 @@ fun ChatScreen(
                             )
                         }
                     }
+                    // Pending voice message — recorded, awaiting Delete or Send (v0.1.125)
+                    val pendingVoice = pendingVoiceB64
+                    if (pendingVoice != null) {
+                        val voiceLabel = "%d:%02d".format(pendingVoiceDurSec / 60, pendingVoiceDurSec % 60)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, top = 8.dp, end = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Mic,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Voice message ($voiceLabel)",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (isTranscribing) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                IconButton(onClick = {
+                                    pendingVoiceB64 = null
+                                    pendingVoiceDurSec = 0
+                                }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Delete recording")
+                                }
+                                IconButton(onClick = { sendPendingVoice() }) {
+                                    Icon(Icons.Default.Send, contentDescription = "Send voice message")
+                                }
+                            }
+                        }
+                    }
                     // Slash-command completions — pop up above the composer.
                     // Capture to a local: LazyColumn DEFERS its content lambda
                     // (runs later inside intervalContentState derivedStateOf),
@@ -881,7 +935,7 @@ fun ChatScreen(
                                 IconButton(
                                     onClick = {
                                         if (isRecording) {
-                                            stopAndTranscribe()
+                                            stopRecording()
                                         } else {
                                             val granted = ContextCompat.checkSelfPermission(
                                                 context, Manifest.permission.RECORD_AUDIO,
@@ -890,20 +944,12 @@ fun ChatScreen(
                                             else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                         }
                                     },
-                                    enabled = !isTranscribing,
+                                    enabled = !isTranscribing && pendingVoiceB64 == null,
                                 ) {
                                     Icon(
                                         imageVector = if (isRecording) Icons.Filled.Mic else Icons.Outlined.Mic,
                                         contentDescription = if (isRecording) "Stop recording" else "Voice message",
                                         tint = if (isRecording) Color(0xFFFF3B30) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                // Profile chip (accent tint, WebUI-style)
-                                IconButton(onClick = {}) {
-                                    Icon(
-                                        Icons.Outlined.Person,
-                                        contentDescription = "Profile",
-                                        tint = MaterialTheme.colorScheme.primary,
                                     )
                                 }
                                 // Workspace chip
