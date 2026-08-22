@@ -329,6 +329,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             handleSteer(trimmed.removePrefix("/steer").trim())
             return
         }
+        // /queue — native prompt.submit (server auto-queues when busy) with ack (v0.1.131).
+        if (trimmed.startsWith("/queue ") || trimmed == "/queue") {
+            handleQueue(trimmed.removePrefix("/queue").trim())
+            return
+        }
         // /new and /reset — native fresh session via session.create (v0.1.130);
         // bypasses slash.exec entirely (the slash-worker 5030 flakiness).
         if (trimmed.equals("/new", ignoreCase = true) || trimmed.equals("/reset", ignoreCase = true) ||
@@ -581,6 +586,24 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 resetTargetSession = newSid
             } catch (e: Exception) {
                 addCommandAck("⚠️ New session failed: ${e.message}")
+            }
+        }
+    }
+
+    /** /queue <text> — send it so it runs after the current turn, with an ack. */
+    private fun handleQueue(text: String) {
+        if (text.isBlank()) {
+            addCommandAck("⚠️ /queue needs some text to queue.")
+            return
+        }
+        addCommandAck("⏳ Queuing for next turn…")
+        viewModelScope.launch {
+            try {
+                wsConnection.connect()
+                rpcClient.promptSubmit(sessionId, text)
+                addCommandAck(if (uiState.isStreaming) "✓ Queued for next turn: $text" else "✓ Sent: $text")
+            } catch (e: Exception) {
+                addCommandAck("⚠️ Command failed: ${e.message}")
             }
         }
     }
