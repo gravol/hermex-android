@@ -139,6 +139,12 @@ sealed class RpcNotification {
         val sessionKey: String,
         val toolName: String? = null,
         val args: JsonElement? = null,
+        /** The actual command string the server sent at params.command (redacted). */
+        val command: String? = null,
+        /** Human-readable description of what the tool call will do. */
+        val description: String? = null,
+        /** Approval choices offered by the server, e.g. ["once","session","always","deny"]. */
+        val choices: List<String>? = null,
     ) : RpcNotification()
 
     /**

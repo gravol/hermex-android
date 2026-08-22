@@ -1025,45 +1025,61 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 val rawToolName = n.toolName
                 val argsStr = n.args?.toString() ?: ""
                 val trimmedArgs = argsStr.trim()
-                var toolName = rawToolName ?: "command"
-                var commandLine = ""
-                if (trimmedArgs.startsWith("{") && trimmedArgs.endsWith("}")) {
-                    try {
-                        val json = Json.parseToJsonElement(trimmedArgs)
-                        if (json is JsonObject) {
-                            for (field in listOf("cmd", "command", "arguments", "arg", "query", "text", "content", "path", "file_path")) {
-                                if (field in json) {
-                                    val valEl = json[field]!!
-                                    if (valEl.jsonPrimitive != null) {
-                                        commandLine = valEl.jsonPrimitive.contentOrNull ?: ""
-                                        break
-                                    } else if (valEl.jsonArray.isNotEmpty()) {
-                                        commandLine = valEl.jsonArray.joinToString(" ") { it.toString() }
-                                        break
+
+                // Primary source: the server sends the real (redacted) command at
+                // params.command and a human-readable description. Use those directly.
+                var commandLine = n.command?.trim().orEmpty()
+                val serverDescription = n.description?.trim().orEmpty()
+                var toolName = rawToolName.orEmpty().ifBlank { "command" }
+
+                // Fallback for older servers that don't send params.command: still
+                // try to pull a command out of the nested args blob.
+                if (commandLine.isBlank()) {
+                    if (trimmedArgs.startsWith("{") && trimmedArgs.endsWith("}")) {
+                        try {
+                            val json = Json.parseToJsonElement(trimmedArgs)
+                            if (json is JsonObject) {
+                                for (field in listOf("cmd", "command", "arguments", "arg", "query", "text", "content", "path", "file_path")) {
+                                    if (field in json) {
+                                        val valEl = json[field]!!
+                                        if (valEl.jsonPrimitive != null) {
+                                            commandLine = valEl.jsonPrimitive.contentOrNull ?: ""
+                                            break
+                                        } else if (valEl.jsonArray.isNotEmpty()) {
+                                            commandLine = valEl.jsonArray.joinToString(" ") { it.toString() }
+                                            break
+                                        }
+                                    }
+                                }
+                                if (toolName == "command" && "tool" in json) {
+                                    val toolEl = json["tool"]
+                                    if (toolEl?.jsonPrimitive != null) {
+                                        toolName = toolEl.jsonPrimitive.contentOrNull ?: "command"
                                     }
                                 }
                             }
-                            if (rawToolName == null && "tool" in json) {
-                                val toolEl = json["tool"]
-                                if (toolEl?.jsonPrimitive != null) {
-                                    toolName = toolEl.jsonPrimitive.contentOrNull ?: "command"
-                                }
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-                val desc = buildString {
-                    append("Runs ")
-                    append(toolName)
-                    if (commandLine.isNotBlank()) {
-                        append("\n")
-                        append(commandLine.take(500))
-                    } else if (trimmedArgs.isNotBlank()) {
-                        append(" with: ")
-                        append(trimmedArgs.take(300))
+                        } catch (_: Exception) {}
                     }
                 }
-                DebugLog.log("RPC", "DashboardChat", "approval request received: $toolName")
+
+                // Prefer the server's own description; fall back to a built one.
+                val desc = if (serverDescription.isNotBlank()) {
+                    serverDescription.take(1000)
+                } else {
+                    buildString {
+                        append("Runs ")
+                        append(toolName)
+                        if (commandLine.isNotBlank()) {
+                            append("\n")
+                            append(commandLine.take(500))
+                        } else if (trimmedArgs.isNotBlank()) {
+                            append(" with: ")
+                            append(trimmedArgs.take(300))
+                        }
+                    }
+                }
+                DebugLog.log("RPC", "DashboardChat",
+                    "approval request received: tool=$toolName command=${commandLine.ifBlank { "<none>" }}")
                 uiState = uiState.copy(
                     pendingApproval = PendingApproval(
                         toolName = toolName,
@@ -1077,8 +1093,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     NotificationHelper.postApproval(
                         getApplication(),
                         sessionId,
-                        n.toolName ?: "unknown",
-                        argsStr.take(200),
+                        toolName,
+                        commandLine.ifBlank { argsStr }.take(200),
                     )
                 }
             }

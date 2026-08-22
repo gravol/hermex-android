@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -335,12 +336,22 @@ class JsonRpcClient(
                 )
             }
 
-            "approval.request" -> RpcNotification.ApprovalRequest(
-                sessionId = sessionId ?: "",
-                sessionKey = params["session_key"]?.jsonPrimitive?.content ?: "",
-                toolName = params["tool_name"]?.jsonPrimitive?.content,
-                args = params["args"],
-            )
+            "approval.request" -> {
+                // Server wraps approval fields under params["payload"] (dashboard WS
+                // convention) — NOT at params top level. See references/approval-protocol.md.
+                val ap = params["payload"]?.jsonObject
+                val choicesArr = ap?.get("choices") as? JsonArray
+                RpcNotification.ApprovalRequest(
+                    sessionId = sessionId ?: "",
+                    sessionKey = params["session_key"]?.jsonPrimitive?.content ?: "",
+                    toolName = ap?.get("command")?.jsonPrimitive?.content,
+                    args = ap?.get("args"),
+                    command = ap?.get("command")?.jsonPrimitive?.content,
+                    description = ap?.get("description")?.jsonPrimitive?.content,
+                    choices = choicesArr?.mapNotNull { (it as? JsonPrimitive)?.content }
+                        ?.filter { it.isNotBlank() },
+                )
+            }
 
             "clarify.request" -> RpcNotification.ClarifyRequest(
                 sessionId = sessionId ?: "",
