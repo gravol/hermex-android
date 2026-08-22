@@ -12,7 +12,7 @@
 ### PENDING / NEXT (unstarted)
 - **Notification bugs from field device QA** — approval notification click kills in-flight response (#1), cron check-ins missing (#2), turn-finished pings missing (#3). Status: partially addressed by the team since the handoff was written:
   - **#2 cron-check-in-missing & #3 turn-finished-pings-missing → fixed v0.1.118–v0.1.119.** v0.1.118 added diagnostics logging turn-finished delivery results; v0.1.119 fixed the root cause — a just-reaped session returns 4007 while its DB row is mid-flush (`ws_orphan_reap` window), so `submitWithSelfHeal` now backs off (~1.5s) and retries `session.resume` before falling back to direct send (see `docs/WS_ORPHAN_REAP_BUG.md`). v0.1.120 added a waiting-for-model label so reasoning-OFF turns don't look stuck; v0.1.121 fixed the THINKING box elapsed-time readout freezing at 0s. **Re-verify on the field device** — these were device-QA notes, and the fixes are code-only (not yet confirmed live).
-  - **#1 approval notification click kills in-flight response → still unconfirmed.** Not obviously touched by 116–121. Investigate at next desk session.
+  - **#1 approval notification click kills in-flight response → RESOLVED (re-verified 2026-08-22).** No longer reproduces on-device; was likely a transient session-reap/reconnect race (v0.1.119's `ws_orphan_reap` backoff covers that class). Field-tested the approval flow same day: dangerous command gated by Clerk (`approvals.mode: manual`), Hermex dialog rendered the actual command text — display path confirmed working.
 
 ### Verified Project Root
 
