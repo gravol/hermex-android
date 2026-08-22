@@ -11,6 +11,7 @@ data class UiMessage(
     val content: String = "",
     val isStreaming: Boolean = false,
     val isWaitingForFirstEvent: Boolean = false,  // true from send until first SSE event
+    val isCommandAck: Boolean = false,  // system-ish acknowledgement line (e.g. /steer) — rendered distinctly
     val thinkingText: String? = null,
     val thinkingExpanded: Boolean = true,
     val thinkingHasContent: Boolean = false,  // true once first assistant.delta arrives

@@ -62,6 +62,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     // WebSocket + JSON-RPC infrastructure
     private val wsConnection = WsConnectionManager(viewModelScope)
     private val rpcClient = JsonRpcClient(wsConnection, viewModelScope)
+    /** Set by /new or /reset — ChatScreen observes it and navigates to the fresh session. */
+    override var resetTargetSession: String? by mutableStateOf(null)
     private var notificationCollectorJob: Job? = null
 
     // ── v0.1.123 stuck-spinner watchdog ──
@@ -322,9 +324,22 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             return
         }
 
+        // /steer — native session.steer with an in-chat ack (v0.1.130).
+        if (trimmed.startsWith("/steer ") || trimmed == "/steer") {
+            handleSteer(trimmed.removePrefix("/steer").trim())
+            return
+        }
+        // /new and /reset — native fresh session via session.create (v0.1.130);
+        // bypasses slash.exec entirely (the slash-worker 5030 flakiness).
+        if (trimmed.equals("/new", ignoreCase = true) || trimmed.equals("/reset", ignoreCase = true) ||
+            trimmed.startsWith("/new ") || trimmed.startsWith("/reset ")
+        ) {
+            handleNewSession()
+            return
+        }
         // Slash commands (v0.1.67): messages starting with "/" route to
         // slash.exec (same path as desktop/TUI) instead of the agent. The
-        // output lands as an assistant message. /steer and /queue work mid-turn.
+        // output lands as an assistant message.
         if (trimmed.startsWith("/") && trimmed.length > 1 && !trimmed.startsWith("//")) {
             sendSlashCommand(trimmed)
             return
@@ -524,6 +539,64 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 )
             )
         }
+        uiState = uiState.copy(messages = msgs)
+    }
+
+    /** /steer <text> — inject into the next tool call via session.steer. */
+    private fun handleSteer(text: String) {
+        if (text.isBlank()) {
+            addCommandAck("⚠️ /steer needs some text to steer with.")
+            return
+        }
+        addCommandAck("⏳ Steering for next tool call…")
+        viewModelScope.launch {
+            try {
+                wsConnection.connect()
+                val r = rpcClient.sessionSteer(sessionId, text)
+                val status = r["status"]?.jsonPrimitive?.contentOrNull ?: "queued"
+                if (status == "queued") {
+                    addCommandAck("✓ Steered for next tool call: $text")
+                } else {
+                    addCommandAck("⚠️ Steer rejected: $text")
+                }
+            } catch (e: JsonRpcException) {
+                if (e.code == 4010) {
+                    addCommandAck("Steer queued — no active turn; it'll apply on your next message: $text")
+                } else {
+                    addCommandAck("⚠️ Command failed: ${e.message}")
+                }
+            } catch (e: Exception) {
+                addCommandAck("⚠️ Command failed: ${e.message}")
+            }
+        }
+    }
+
+    /** /new or /reset — create a fresh session and navigate to it. */
+    private fun handleNewSession() {
+        viewModelScope.launch {
+            try {
+                wsConnection.connect()
+                val newSid = rpcClient.createSession()
+                DebugLog.log("RPC", "DashboardChat", "/new → session.create sid=$newSid")
+                resetTargetSession = newSid
+            } catch (e: Exception) {
+                addCommandAck("⚠️ New session failed: ${e.message}")
+            }
+        }
+    }
+
+    /** Append a lightweight, non-streaming acknowledgement line to the chat. */
+    private fun addCommandAck(text: String) {
+        val msgs = uiState.messages.toMutableList()
+        msgs.add(
+            UiMessage(
+                id = "ack_${tempIdCounter.incrementAndGet()}",
+                role = "assistant",
+                content = text,
+                isCommandAck = true,
+                timestamp = System.currentTimeMillis(),
+            )
+        )
         uiState = uiState.copy(messages = msgs)
     }
 

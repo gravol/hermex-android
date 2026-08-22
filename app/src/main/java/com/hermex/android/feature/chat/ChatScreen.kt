@@ -144,6 +144,12 @@ fun ChatScreen(
 
     val state = viewModel.uiState
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    // /new /reset — navigate to the freshly created session (v0.1.130).
+    LaunchedEffect(viewModel.resetTargetSession) {
+        val sid = viewModel.resetTargetSession ?: return@LaunchedEffect
+        viewModel.resetTargetSession = null
+        onOpenSession(SessionSummary(id = sid, title = "New session"))
+    }
     val listState = rememberLazyListState()
     var composerText by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
@@ -1252,7 +1258,9 @@ fun ChatScreen(
                             // Skip the empty bubble for tool-only assistant rows
                             // from history (content blank, not streaming) — the
                             // thinking + tools boxes above already tell the story.
-                            if (msg.content.isNotBlank() || msg.isStreaming) {
+                            if (msg.isCommandAck) {
+                                CommandAckLine(text = msg.content)
+                            } else if (msg.content.isNotBlank() || msg.isStreaming) {
                                 MessageBubble(
                                     message = msg,
                                     sameSender = sameSender,
@@ -3225,6 +3233,29 @@ private fun AttachOption(icon: ImageVector, label: String, onClick: () -> Unit) 
         Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(16.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun CommandAckLine(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
     }
 }
 

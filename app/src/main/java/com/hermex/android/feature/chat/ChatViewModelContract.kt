@@ -1,6 +1,9 @@
 package com.hermex.android.feature.chat
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import com.hermex.core.network.JsonRpcClient
 
@@ -11,6 +14,8 @@ import com.hermex.core.network.JsonRpcClient
  */
 abstract class ChatViewModelContract(application: Application) : AndroidViewModel(application) {
     abstract var uiState: ChatUiState
+    /** Set by /new or /reset — ChatScreen observes and navigates to the fresh session. */
+    open var resetTargetSession: String? by mutableStateOf(null)
     abstract fun init(sessionId: String, title: String?)
     abstract fun loadMessages()
     abstract fun sendMessage(text: String)

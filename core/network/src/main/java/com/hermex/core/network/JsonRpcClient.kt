@@ -603,6 +603,10 @@ class JsonRpcClient(
     suspend fun profileConfigure(name: String, soul: String): JsonObject =
         request("profiles.configure", mapOf("name" to name, "soul" to soul))
 
+    /** Steer the next tool call of the live turn (non-interrupting). */
+    suspend fun sessionSteer(sessionId: String, text: String): JsonObject =
+        request("session.steer", mapOf("session_id" to sessionId, "text" to text))
+
     suspend fun sessionResume(sessionId: String, omitMessages: Boolean = false): SessionResumeResult {
         DebugLog.log("STATE", "SessionID",
             "sessionResume called with sessionId=$sessionId omitMessages=$omitMessages")
