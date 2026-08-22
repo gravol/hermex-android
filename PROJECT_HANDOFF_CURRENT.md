@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-22 — realigned with GitHub (was documenting v0.1.115; current is v0.1.121)
-**Current version:** v0.1.121 (versionCode 121)
-**HEAD commit:** `1cb293d` (v0.1.121 — fix thinking duration readout freezing at 0s)
+**Last updated:** 2026-08-22 — realigned with GitHub (was documenting v0.1.115; current is v0.1.131)
+**Current version:** v0.1.131 (versionCode 131)
+**HEAD commit:** `21108c6` (v0.1.131 — /queue command ack + native prompt.submit)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -13,6 +13,22 @@
 - **Notification bugs from field device QA** — approval notification click kills in-flight response (#1), cron check-ins missing (#2), turn-finished pings missing (#3). Status: partially addressed by the team since the handoff was written:
   - **#2 cron-check-in-missing & #3 turn-finished-pings-missing → fixed v0.1.118–v0.1.119.** v0.1.118 added diagnostics logging turn-finished delivery results; v0.1.119 fixed the root cause — a just-reaped session returns 4007 while its DB row is mid-flush (`ws_orphan_reap` window), so `submitWithSelfHeal` now backs off (~1.5s) and retries `session.resume` before falling back to direct send (see `docs/WS_ORPHAN_REAP_BUG.md`). v0.1.120 added a waiting-for-model label so reasoning-OFF turns don't look stuck; v0.1.121 fixed the THINKING box elapsed-time readout freezing at 0s. **Re-verify on the field device** — these were device-QA notes, and the fixes are code-only (not yet confirmed live).
   - **#1 approval notification click kills in-flight response → RESOLVED (re-verified 2026-08-22).** No longer reproduces on-device; was likely a transient session-reap/reconnect race (v0.1.119's `ws_orphan_reap` backoff covers that class). Field-tested the approval flow same day: dangerous command gated by Clerk (`approvals.mode: manual`), Hermex dialog rendered the actual command text — display path confirmed working.
+
+### Slash worker 5030 self-heal (2026-08-22)
+- **Symptom:** `/reset` (alias for `/new`) in Hermex returns `⚠️ Command failed: JSON-RPC error 5030: slash worker exited`. Intermittent — only when the session's `_SlashWorker` subprocess has died but is still referenced.
+- **Root cause (server-side, `tui_gateway/methods_tools.py`):** `/reset` routes through `slash.exec`. When the worker subprocess exits (`proc.poll() is not None`, line 491 of server.py), `worker.run()` throws `RuntimeError("slash worker exited")`. The handler closed it and set `session["slash_worker"] = None` but **never re-spawned** — so every subsequent slash command (including `/reset`) hit the dead worker and hard-failed with 5030.
+- **Why intermittent:** the worker dies under memory pressure, long-running sessions (184k context), or the MCP children cleanup race (`_kill_orphaned_mcp_children`). Next-turn commands would normally spawn fresh — but `/reset` itself fails on the dead worker first.
+- **Fix (server-side):** added a self-heal in the `slash.exec` except block — on `"slash worker exited"`, close the dead worker, re-spawn a fresh `_SlashWorker` once (serialized via `_slash_spawn_lock`, same pattern as the on-demand spawn path), and retry. If re-spawn also fails, surface 5030. Mirrors the existing 4001 resume+retry self-heal. Verified with unit tests: dead worker → heals and returns output; failing spawn → still returns 5030 (no false success).
+- **Note:** this is a server-side fix in `~/.hermes/hermes-agent/tui_gateway/methods_tools.py`, not a Hermex client change. Clerk runs Hermes via the Desktop app (embedded gateway, no separate 9119 port) — restart the Desktop app to load the new code.
+
+### Reset-failsafe: session snapshot to Neo4j (2026-08-22)
+- **Use case:** Before `/reset` on a long session (e.g. 184k context), persist durable progress so nothing is lost when context wipes. The graph does NOT auto-prune — unbounded snapshots would clutter, so retention is enforced by design.
+- **Implementation (`~/.hermes/plugins/neo4j-memory/mcp_server.py`):** new tool `store_session_snapshot(session_id, summary, next_steps?, open_threads?, focus?, project_links?, retention_limit=5)`:
+  - Keyed by **unique hashed node name** (`snapshot_<sha1[:10]>`) so repeated saves for the same session OVERWRITE instead of piling up (dedup on `session_id`).
+  - Enforces **retention across all sessions** — keeps only the most recent `retention_limit` snapshots, prunes oldest first. Verified: store 8 with limit 5 → graph holds exactly 5.
+  - Structured fields stored as compact JSON strings (flat Neo4j property model, remains greppable).
+- **Verified end-to-end** against live graph: store ✅, overwrite-on-replay ✅ (`snapshots_now: 1`), retention pruning ✅.
+- **Workflow:** agent calls `store_session_snapshot` with the session's durable essence (summary + next_steps + open_threads + project_links) → user runs `/reset` → post-reset agent reads it back via `get_entity`/`query_graph`. Retention keeps the graph clean automatically.
 
 ### Known issue — stuck "thinking" spinner after long turns (v0.1.122)
 - **Symptom:** After longer assistant replies (mine especially — more content + tool calls), the chat freezes showing the thinking/typing-dot spinner indefinitely; a hard app close + refresh makes it look normal again, and the reply content was correct all along.
@@ -33,11 +49,11 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-|| Latest commit | `1cb293d` (v0.1.121 — fix thinking duration readout freezing at 0s) |
+||| Latest commit | `21108c6` (v0.1.131 — /queue command ack + native prompt.submit) ||
 || Build command | `./gradlew assembleRelease --no-configuration-cache` |
 || APK output | `app/build/outputs/apk/release/app-release.apk` |
-|| Version | v0.1.121 (versionCode 121) |
-|| Completed phase | **v0.1.121 — thinking duration readout fix** (1s ticker so the THINKING box elapsed-time footer advances while visible; was frozen at 0s via a stale `remember{}` snapshot). See below for v0.1.116–v0.1.121 additions. |
+||| Version | v0.1.131 (versionCode 131) ||
+|| Completed phase | **v0.1.131 — /queue ack + native command routing** (`/new` `/reset` via `session.create`, `/steer` via `session.steer`, `/queue` via `prompt.submit`, all with in-chat ack pills). See below for v0.1.116–v0.1.131 additions. |
 | Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) — **DONE v0.1.80** ② custom colors for everything (refine text color/text size controls) — **DONE v0.1.49–58/79/95** ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response — **DONE v0.1.66–79** ④ re-verify Obtainium update flow after CI races — **DONE v0.1.76** ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking) — **DONE v0.1.98**. Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -115,6 +131,19 @@ The handoff was written at v0.1.115; these shipped since and are documented here
 - **v0.1.119** — **turn-finished / cron-check-in fix + `ws_orphan_reap` self-heal backoff.** A just-reaped session returns JSON-RPC 4007 while its DB row is mid-flush (`ws_orphan_reap` window); `submitWithSelfHeal` now backs off (~1.5s) and retries `session.resume` once before falling back to direct send — recovers a reaped session that would otherwise fail. Root-cause writeup in `docs/WS_ORPHAN_REAP_BUG.md`.
 - **v0.1.120** — finished THINKING box shows reasoning duration ("Thought for Xm Ys"); collapsible tool cards (per-tool collapse + Show all / Hide all); waiting-for-model label alongside typing dots so reasoning-OFF turns don't look stuck.
 - **v0.1.121** — fixed the THINKING box elapsed-time readout freezing at 0s (a stale `remember{}` snapshot captured once; replaced with a 1s ticker that advances while the box is visible).
+
+### Recent versions — v0.1.122 → v0.1.131 (WebUI parity sprint, 2026-08-22)
+A push toward full WebUI/CLI parity: WebUI-style UI (composer capsule, menu drawer), native command handling (`/new` `/reset` `/steer` `/queue` — no more `slash.exec` flakiness), Agent Soul editing, and file attachments.
+- **v0.1.122** — approval dialog shows the **actual (redacted) command** and the server's human-readable description. `approval.request` now parses the command from `params.payload` (dashboard WS convention — the server sends the real command at `params.command` + a `description`, not the nested args blob). New `RpcNotification.ApprovalRequest` fields (`command`, `description`); the args-`JSON` fallback remains for older servers; background approval notification also shows the real command. (`DashboardChatViewModel.kt`, `JsonRpcClient.kt`, `RpcNotification.kt`.)
+- **v0.1.123** — stuck-spinner safety net: if any streaming event (delta / tool event) arrives when there is **no** live streaming assistant message, that's a red flag the completion was lost — re-establish + clear `isStreaming` instead of silently dropping. (See the "Known issue" write-up above.) (`DashboardChatViewModel.kt`.)
+- **v0.1.124** — **WebUI-style composer capsule**: chips (microphone / attach / camera), a token-context ring around the circular send button, WebUI-style rounded capsule field. (`ChatScreen.kt`.)
+- **v0.1.125** — voice messages are now **staged** (delete-or-send) instead of auto-submitting; removed the profile chip from the composer. (`ChatScreen.kt`.)
+- **v0.1.126** — **WebUI-style menu drawer** (icon rail + panels) opened from the chat hamburger — new `feature/menu/WebuiMenuDrawer.kt` (456 lines). (`ChatScreen.kt`, `MainActivity.kt`.)
+- **v0.1.127** — **attach chooser** (camera / gallery / file). Non-image files staged via `file.attach` (`data_url` + name → `ref_text` appended to the prompt), on top of the existing image path. Also fixed the WebUI-menu text-size issue and removed the folder chip. (`JsonRpcClient.attachFile`, `DashboardChatViewModel.sendMessageWithFile`, `ChatViewModelContract`, `ChatScreen.kt`, `WebuiMenuDrawer.kt`.)
+- **v0.1.128** — **Agent Soul editor**: SOUL.md read/edit via `profiles.describe` / `profiles.configure`. New `feature/soul/SoulScreen.kt` (169 lines) + routes in `MainActivity`; `JsonRpcClient.profileDescribe` / `profileConfigure`. (`SoulScreen.kt`, `JsonRpcClient.kt`, `MainActivity.kt`, `WebuiMenuDrawer.kt`.)
+- **v0.1.129** — fix Soul editor loading: establish the WebSocket connection **before** the `profiles` RPC so the editor actually loads content. (`SoulScreen.kt`.)
+- **v0.1.130** — **native `/new` & `/reset`** via `session.create` (bypasses `slash.exec` entirely — kills the 5030 slash-worker flakiness); **native `/steer`** via `session.steer` with an in-chat ack (including the 4010 "no active turn, applies next message" case). New `resetTargetSession` on the contract + `ChatScreen` observes it and navigates to the fresh session; lightweight non-streaming ack messages (`isCommandAck`). (`DashboardChatViewModel.handleNewSession/handleSteer/addCommandAck`, `ChatViewModelContract`, `ChatScreen.kt`, `UiModels.kt`, `JsonRpcClient.sessionSteer`.)
+- **v0.1.131** — **native `/queue`** via `prompt.submit` (server auto-queues when busy) with an in-chat ack ("✓ Queued for next turn" vs "✓ Sent"). Completes the native command set: `/new` `/reset` `/steer` `/queue` all bypass `slash.exec` and give in-chat ack pills. (`DashboardChatViewModel.handleQueue`.)
 
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)

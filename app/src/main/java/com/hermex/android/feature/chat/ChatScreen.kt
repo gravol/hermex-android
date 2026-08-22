@@ -1455,11 +1455,16 @@ fun ChatScreen(
     // ── Clarify Dialog ──
     val pendingClarify = state.pendingClarify
     if (pendingClarify != null) {
-        var clarifyAnswer by remember { mutableStateOf("") }
+        // Numbered quick-choices + an "Other…" fallback. The server accepts any
+        // string as the answer, so these are just preset values we send back.
+        // No free-text box shown by default — a blank text field with no idea
+        // what to type is unusable; pick a number, or tap "Other…" to type one.
+        var otherAnswer by remember { mutableStateOf("") }
+        var showOther by remember { mutableStateOf(false) }
         Dialog(onDismissRequest = { /* must answer */ }) {
             Card(
                 modifier = Modifier
-                    .widthIn(min = 280.dp, max = 400.dp)
+                    .widthIn(min = 280.dp, max = 420.dp)
                     .padding(8.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
@@ -1481,14 +1486,64 @@ fun ChatScreen(
                         )
                     }
                     Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = clarifyAnswer,
-                        onValueChange = { clarifyAnswer = it },
-                        placeholder = { Text("Type your answer...") },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 4,
-                        shape = RoundedCornerShape(8.dp),
-                    )
+                    // Quick-choice grid (2x2): four preset buttons + an
+                    // "Other…" row that reveals a text field. The server
+                    // accepts any string as the answer, so these are just
+                    // preset values sent back. No blank text box up front —
+                    // pick a number, or tap "Other…" to type one.
+                    val choices = listOf("Yes", "No", "Use default", "Ask again")
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Build a true 2-column grid with two Rows of two.
+                        for (r in 0 until 2) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = if (r == 0) 0.dp else 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                val i1 = r * 2
+                                val i2 = i1 + 1
+                                Button(
+                                    onClick = { viewModel.respondToClarify(choices[i1]) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                ) {
+                                    Text("#${i1 + 1} ${choices[i1]}")
+                                }
+                                if (i2 < choices.size) {
+                                    Button(
+                                        onClick = { viewModel.respondToClarify(choices[i2]) },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                    ) {
+                                        Text("#${i2 + 1} ${choices[i2]}")
+                                    }
+                                } else {
+                                    Spacer(Modifier.width(0.dp))
+                                }
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = { showOther = !showOther },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Other…")
+                        }
+                    }
+                    if (showOther) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = otherAnswer,
+                            onValueChange = { otherAnswer = it },
+                            placeholder = { Text("Type your answer…") },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3,
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                    }
                     Spacer(Modifier.height(16.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1502,13 +1557,6 @@ fun ChatScreen(
                             modifier = Modifier.weight(1f),
                         ) {
                             Text("Cancel")
-                        }
-                        Button(
-                            onClick = { viewModel.respondToClarify(clarifyAnswer) },
-                            modifier = Modifier.weight(1f),
-                            enabled = clarifyAnswer.isNotBlank(),
-                        ) {
-                            Text("Send")
                         }
                     }
                 }
