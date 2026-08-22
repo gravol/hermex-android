@@ -251,6 +251,11 @@ fun HermexNavGraph(chatVmsHolder: ChatVmsHolder) {
                 sessionTitle = title,
                 onBack = { navController.popBackStack() },
                 viewModel = chatViewModel,
+                onNavigate = { route -> navController.navigate(route) },
+                onOpenSession = { session ->
+                    val encTitle = URLEncoder.encode(session.title ?: session.id, "UTF-8")
+                    navController.navigate("chat/${session.id}/$encTitle") { launchSingleTop = true }
+                },
             )
         }
     }

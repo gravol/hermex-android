@@ -44,6 +44,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -99,11 +100,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.hermex.android.feature.settings.SettingsRepository
+import com.hermex.android.feature.menu.WebuiMenuDrawer
 import com.hermex.android.ui.theme.LocalUiSurfaces
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.DebugLog
 import com.hermex.core.network.JsonRpcClient
 import com.hermex.core.network.NetworkResult
+import com.hermex.core.network.SessionSummary
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.Instant
@@ -121,6 +124,8 @@ fun ChatScreen(
     sessionTitle: String?,
     onBack: () -> Unit,
     viewModel: ChatViewModelContract,
+    onNavigate: (String) -> Unit = {},
+    onOpenSession: (SessionSummary) -> Unit = {},
 ) {
     LaunchedEffect(sessionId) {
         viewModel.init(sessionId, sessionTitle)
@@ -134,6 +139,7 @@ fun ChatScreen(
     }
 
     val state = viewModel.uiState
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val listState = rememberLazyListState()
     var composerText by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
@@ -589,6 +595,11 @@ fun ChatScreen(
 
     // Track composer focus separately (for other uses if needed)
 
+    WebuiMenuDrawer(
+        drawerState = drawerState,
+        onNavigate = onNavigate,
+        onOpenSession = onOpenSession,
+    ) {
     Scaffold(
         modifier = Modifier.imePadding(),
         topBar = {
@@ -681,6 +692,11 @@ fun ChatScreen(
                 // v0.1.96: quick tool-call visibility toggle — wrench icon,
                 // tinted when shown, dimmed when hidden.
                 actions = {
+                    IconButton(
+                        onClick = { scope.launch { drawerState.open() } },
+                    ) {
+                        Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                    }
                     IconButton(
                         onClick = { scope.launch { settingsRepo.setShowToolCalls(!showToolCalls) } },
                     ) {
@@ -1435,6 +1451,7 @@ fun ChatScreen(
                 }
             }
         }
+    }
     }
 }
 
