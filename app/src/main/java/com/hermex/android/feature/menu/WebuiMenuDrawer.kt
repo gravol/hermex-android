@@ -412,6 +412,9 @@ private fun SettingsPanel(onNavigate: (String) -> Unit) {
             )
         }
         HorizontalDivider(color = Color(0xFF2A2A45))
+        SettingItem("Agent Soul", "Edit SOUL.md — the agent's identity") {
+            onNavigate("soul")
+        }
         SettingItem("Appearance & chat", "Theme, colors, text size, tool/thinking toggles") {
             onNavigate("settings")
         }

@@ -33,6 +33,7 @@ import com.hermex.android.feature.onboarding.DashboardSetupScreen
 import com.hermex.android.feature.sessions.SessionsScreen
 import com.hermex.android.feature.settings.SettingsRepository
 import com.hermex.android.feature.settings.SettingsScreen
+import com.hermex.android.feature.soul.SoulScreen
 import com.hermex.android.feature.system.ConfigScreen
 import com.hermex.android.feature.system.CronScreen
 import com.hermex.android.feature.system.SkillDetailScreen
@@ -197,6 +198,11 @@ fun HermexNavGraph(chatVmsHolder: ChatVmsHolder) {
         }
         composable("settings") {
             SettingsScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable("soul") {
+            SoulScreen(
                 onBack = { navController.popBackStack() },
             )
         }

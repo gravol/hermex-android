@@ -595,6 +595,14 @@ class JsonRpcClient(
         return request("file.attach", params)
     }
 
+    /** Read a profile's SOUL.md (Agent Soul) content. */
+    suspend fun profileDescribe(name: String): JsonObject =
+        request("profiles.describe", mapOf("name" to name))
+
+    /** Save a full SOUL.md replacement for a profile via `profiles.configure`. */
+    suspend fun profileConfigure(name: String, soul: String): JsonObject =
+        request("profiles.configure", mapOf("name" to name, "soul" to soul))
+
     suspend fun sessionResume(sessionId: String, omitMessages: Boolean = false): SessionResumeResult {
         DebugLog.log("STATE", "SessionID",
             "sessionResume called with sessionId=$sessionId omitMessages=$omitMessages")
