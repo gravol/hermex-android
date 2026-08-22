@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-19 (v0.1.115 — improved command approval dialog with explicit labels and JSON args parsing)
-**Current version:** v0.1.115 (versionCode 115)
-**HEAD commit:** `03b4189` (v0.1.114 — improve command approval dialog)
+**Last updated:** 2026-08-22 — realigned with GitHub (was documenting v0.1.115; current is v0.1.121)
+**Current version:** v0.1.121 (versionCode 121)
+**HEAD commit:** `1cb293d` (v0.1.121 — fix thinking duration readout freezing at 0s)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -10,7 +10,9 @@
 ---
 
 ### PENDING / NEXT (unstarted)
-- **Notification bugs from field device QA** — approval notification click kills in-flight response (#1), cron check-ins missing (#2), turn-finished pings missing (#3). Status: device-QA notes only, not yet reproduced from code. Investigate at next desk session.
+- **Notification bugs from field device QA** — approval notification click kills in-flight response (#1), cron check-ins missing (#2), turn-finished pings missing (#3). Status: partially addressed by the team since the handoff was written:
+  - **#2 cron-check-in-missing & #3 turn-finished-pings-missing → fixed v0.1.118–v0.1.119.** v0.1.118 added diagnostics logging turn-finished delivery results; v0.1.119 fixed the root cause — a just-reaped session returns 4007 while its DB row is mid-flush (`ws_orphan_reap` window), so `submitWithSelfHeal` now backs off (~1.5s) and retries `session.resume` before falling back to direct send (see `docs/WS_ORPHAN_REAP_BUG.md`). v0.1.120 added a waiting-for-model label so reasoning-OFF turns don't look stuck; v0.1.121 fixed the THINKING box elapsed-time readout freezing at 0s. **Re-verify on the field device** — these were device-QA notes, and the fixes are code-only (not yet confirmed live).
+  - **#1 approval notification click kills in-flight response → still unconfirmed.** Not obviously touched by 116–121. Investigate at next desk session.
 
 ### Verified Project Root
 
@@ -19,11 +21,11 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-| Latest commit | `03b4189` (v0.1.114 — improve command approval dialog) |
-| Build command | `./gradlew assembleRelease --no-configuration-cache` |
-| APK output | `app/build/outputs/apk/release/app-release.apk` |
-| Version | v0.1.115 (versionCode 115) |
-| Completed phase | **v0.1.115 — improved command approval dialog** (explicit "Command"/"Arguments" labels, JSON args parsing for any tool type, fallback from "unknown" to "command") |
+|| Latest commit | `1cb293d` (v0.1.121 — fix thinking duration readout freezing at 0s) |
+|| Build command | `./gradlew assembleRelease --no-configuration-cache` |
+|| APK output | `app/build/outputs/apk/release/app-release.apk` |
+|| Version | v0.1.121 (versionCode 121) |
+|| Completed phase | **v0.1.121 — thinking duration readout fix** (1s ticker so the THINKING box elapsed-time footer advances while visible; was frozen at 0s via a stale `remember{}` snapshot). See below for v0.1.116–v0.1.121 additions. |
 | Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) — **DONE v0.1.80** ② custom colors for everything (refine text color/text size controls) — **DONE v0.1.49–58/79/95** ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response — **DONE v0.1.66–79** ④ re-verify Obtainium update flow after CI races — **DONE v0.1.76** ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking) — **DONE v0.1.98**. Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -92,6 +94,16 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Lock-screen notification Reply (v0.1.98)** — turn-finished notifications carry an inline "Reply" action (RemoteInput). Typing a reply from the lock screen or shade → `NotificationReplyReceiver` → `NotificationReplyService` (foreground, dataSync) → fresh WS + `session.resume` + `prompt.submit` → the assistant's reply arrives as a new turn-finished notification (which carries the Reply action again — full notification chat loop without unlocking). Pinned 2026-08-14 plan item ⑤ done.
 - **Slash commands fixed (v0.1.99)** — verified live against the gateway (WS RPC probe): completion, exec, worker, and DB-key paths all work server-side. Root-caused the failure: **skill commands** (`/hermes-agent`, `/hermexandroid`, … — a large share of the completion menu) are rejected by `slash.exec` with 4018 *"use command.dispatch"*, which the app never implemented → "⚠️ Command failed". Now: 4018 → `command.dispatch` (live SID only, like `config.set`); 4001 → self-heal resume + retry (same as `prompt.submit`); `{"type":"skill"|"send","message":...}` → submitted as a real prompt. Slash completions also work mid-turn now.
 - **Cron notification reliability (v0.1.100)** — the 7am weather ping was missed this morning. Server side verified clean (run completed 2026-08-16 14:05:33 UTC); the phone's alarm path failed. Root causes fixed: exact alarms (`setExactAndAllowWhileIdle`, manifest already had `SCHEDULE_EXACT_ALARM`+`USE_EXACT_ALARM`) so Doze can't defer the 7am alarm 10+ min; re-check alarms use a **distinct request code** so a concurrent `sync()` (from `cron.changed` or app start) can no longer clobber a pending re-check (v0.1.77 bug class reintroduced via the WS path); login cooldown (30 min) stops the ~25-30 password-logins/hour storm caused by the server broadcasting `cron.changed` every scheduler tick → `sync()` → unconditional `login()`; catch-up scans bounded to once/10 min. (`CronWatcher.kt`.)
+
+### Recent versions — v0.1.116 → v0.1.121 (post-handoff additions)
+The handoff was written at v0.1.115; these shipped since and are documented here:
+- **v0.1.116** — Thinking on/off toggle + expanded effort levels in the Model picker (off/minimal/low/medium/high/xhigh).
+- **v0.1.117** — version bump only.
+- **v0.1.118** — turn-finished notification diagnostics: log the delivery result so missing pings can be traced (`NotificationHelper.postTurnFinished`).
+- **v0.1.119** — **turn-finished / cron-check-in fix + `ws_orphan_reap` self-heal backoff.** A just-reaped session returns JSON-RPC 4007 while its DB row is mid-flush (`ws_orphan_reap` window); `submitWithSelfHeal` now backs off (~1.5s) and retries `session.resume` once before falling back to direct send — recovers a reaped session that would otherwise fail. Root-cause writeup in `docs/WS_ORPHAN_REAP_BUG.md`.
+- **v0.1.120** — finished THINKING box shows reasoning duration ("Thought for Xm Ys"); collapsible tool cards (per-tool collapse + Show all / Hide all); waiting-for-model label alongside typing dots so reasoning-OFF turns don't look stuck.
+- **v0.1.121** — fixed the THINKING box elapsed-time readout freezing at 0s (a stale `remember{}` snapshot captured once; replaced with a 1s ticker that advances while the box is visible).
+
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)
 `ApiClient`, `DTOs`, `SseParser`, `SetupScreen`/`SetupViewModel`, legacy `ChatViewModel`, and `HermesForegroundService` were fully deleted in v0.1.42. The app is dashboard JSON-RPC/WebSocket only.
@@ -467,26 +479,24 @@ Hermex/
 
 | File | Lines | Purpose |
 |---|---|---|
-| `app/.../MainActivity.kt` | 121 | NavGraph, route definitions, dashboard vs legacy routing |
-| `app/.../HermexApplication.kt` | 54 | Startup: DashboardApiClient.init (legacy ApiClient init removed v0.1.42) |
-| `app/.../DashboardChatViewModel.kt` | 587 | Dashboard WS chat: connect, resume, send, notification handler, approve/deny/clarify, stop generation |
-| `app/.../ChatScreen.kt` | 1094 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval/clarify dialogs, retry button, enhanced tool cards, markdown rendering |
-| `app/.../ChatViewModelContract.kt` | 24 | Abstract contract for both legacy and dashboard VMs |
+| `app/.../MainActivity.kt` | 257 | NavGraph, route definitions, dashboard vs legacy routing |
+| `app/.../HermexApplication.kt` | 38 | Startup: DashboardApiClient.init (legacy ApiClient init removed v0.1.42) |
+| `app/.../DashboardChatViewModel.kt` | 1373 | Dashboard WS chat: connect, resume, send, notification handler, approve/deny/clarify, stop generation, self-heal (submitWithSelfHeal) |
+| `app/.../ChatScreen.kt` | 3035 | Compose UI: LazyColumn, bubbles, typing dots, thinking, auto-scroll, approval/clarify dialogs, retry button, collapsible tool cards, markdown rendering |
+| `app/.../ChatViewModelContract.kt` | 46 | Abstract contract for both legacy and dashboard VMs |
 | ~~`ChatViewModel.kt`~~ | — | Legacy SSE ViewModel — DELETED in v0.1.42; `DashboardChatViewModel` is the only chat VM |
-| `app/.../DashboardSetupScreen.kt` | 150 | URL + password entry screen |
-| `app/.../DashboardSetupViewModel.kt` | 119 | status() → login() flow for dashboard setup |
-| `app/.../SessionsScreen.kt` | 165 | Session list UI |
-| `app/.../SessionsViewModel.kt` | 153 | Session list loading (dashboard via RPC) |
+| `app/.../DashboardSetupScreen.kt` (onboarding/) | 150 | URL + password entry screen |
+| `app/.../DashboardSetupViewModel.kt` (onboarding/) | 120 | status() → login() flow for dashboard setup |
+| `app/.../SessionsScreen.kt` | 707 | Session list UI |
+| `app/.../SessionsViewModel.kt` | 193 | Session list loading (dashboard via RPC) |
 | ~~`SetupScreen.kt` / `SetupViewModel.kt`~~ | — | Legacy setup — DELETED in v0.1.42 |
-| `core/network/DashboardApiClient.kt` | 253 | REST client: login, ws-ticket, status, 401 auto-relogin |
-| `core/network/WsConnectionManager.kt` | 215 | WebSocket lifecycle, reconnect, Frame Channel |
-| `core/network/JsonRpcClient.kt` | 470 | JSON-RPC 2.0: request/response, notifications, approvalRespond, clarifyRespond |
-| `core/network/RpcNotification.kt` | 156 | Sealed class for 18 event types, including ApprovalRequest, ClarifyRequest |
-| `core/network/DebugLog.kt` | — | Ring buffer logger (1000 entries) |
-| `core/network/DebugLoggingInterceptor.kt` | — | HTTP/SSE debug logging |
-| `core/data/KeychainStore.kt` | — | EncryptedSharedPreferences for secrets |
+| `core/network/DashboardApiClient.kt` | 583 | REST client: login, ws-ticket, status, 401 auto-relogin |
+| `core/network/WsConnectionManager.kt` | 215 | WebSocket lifecycle, reconnect, keepalive ping |
+| `core/network/JsonRpcClient.kt` | 633 | JSON-RPC 2.0: request/response, notifications, approvalRespond, clarifyRespond, self-heal resume |
+| `core/network/RpcNotification.kt` | 168 | Sealed class for event types (message/thinking/reasoning.delta, tool.*, approval.request, clarify.request, gateway.ready, etc.) |
+| `core/data/KeychainStore.kt` (auth/) | 81 | EncryptedSharedPreferences for secrets |
 
-| `app/.../service/WsKeepaliveService.kt` | 104 | Foreground service — keeps process alive during chat WS connection |
+| `app/.../service/WsKeepaliveService.kt` | — | Foreground service — keeps process alive during chat WS connection |
 
 ### Routes
 ```
