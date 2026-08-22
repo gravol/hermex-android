@@ -584,6 +584,17 @@ class JsonRpcClient(
         return request("image.attach_bytes", params)
     }
 
+    /** Stage a non-image file into the session workspace via `file.attach`. */
+    suspend fun attachFile(sessionId: String, dataUrl: String, name: String? = null): JsonObject {
+        DebugLog.log("RPC", "JsonRpc", "file.attach (${dataUrl.length} chars)")
+        val params = mutableMapOf<String, Any>(
+            "session_id" to sessionId,
+            "data_url" to dataUrl,
+        )
+        if (!name.isNullOrBlank()) params["name"] = name
+        return request("file.attach", params)
+    }
+
     suspend fun sessionResume(sessionId: String, omitMessages: Boolean = false): SessionResumeResult {
         DebugLog.log("STATE", "SessionID",
             "sessionResume called with sessionId=$sessionId omitMessages=$omitMessages")

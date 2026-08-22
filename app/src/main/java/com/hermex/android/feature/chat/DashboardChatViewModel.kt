@@ -554,6 +554,34 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         }
     }
 
+    override fun sendMessageWithFile(text: String, fileBase64: String, mimeType: String, filename: String?) {
+        if (sessionId.isEmpty()) return
+        if (fileBase64.isBlank()) {
+            if (text.isNotBlank()) sendMessage(text)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                DebugLog.log("RPC", "DashboardChat", "file.attach → staging (${fileBase64.length} b64 chars)")
+                val dataUrl = "data:$mimeType;base64,$fileBase64"
+                val attach = rpcClient.attachFile(sessionId, dataUrl, filename)
+                val refText = attach["ref_text"]?.jsonPrimitive?.contentOrNull
+                val finalText = buildString {
+                    if (text.isNotBlank()) append(text).append('\n')
+                    append(refText ?: "[User attached file]")
+                }
+                sendMessage(finalText)
+            } catch (e: Exception) {
+                Log.e("Hermex", "DashboardChatViewModel: attachFile failed", e)
+                DebugLog.log("ERROR", "DashboardChat", "file.attach failed: ${e.message}")
+                uiState = uiState.copy(
+                    error = e.message ?: "File attach failed",
+                    isStreaming = false,
+                )
+            }
+        }
+    }
+
     override fun stopStreaming() {
         viewModelScope.launch {
             try {

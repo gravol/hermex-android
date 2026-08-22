@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hermex.android.feature.sessions.SessionsUiState
 import com.hermex.android.feature.sessions.SessionsViewModel
@@ -222,7 +223,13 @@ private fun ChatPanel(
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            placeholder = { Text("Filter conversations...", color = Color(0xFF888888)) },
+            placeholder = {
+                Text(
+                    "Filter conversations...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF888888),
+                )
+            },
             singleLine = true,
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Color(0xFF888888)) },
             modifier = Modifier
@@ -246,13 +253,18 @@ private fun ChatPanel(
             FilterChip(
                 selected = sourceFilter == null,
                 onClick = { onSourceFilter(null) },
-                label = { Text("All") },
+                label = { Text("All", style = MaterialTheme.typography.labelSmall) },
             )
             listOf("WEBUI", "CLI").forEach { src ->
                 FilterChip(
                     selected = sourceFilter == src,
                     onClick = { onSourceFilter(src) },
-                    label = { Text("$src (${sourceCounts[src] ?: 0})") },
+                    label = {
+                        Text(
+                            "$src (${sourceCounts[src] ?: 0})",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    },
                 )
             }
         }
@@ -321,8 +333,13 @@ private fun ChatSessionRow(session: SessionSummary, onClick: () -> Unit) {
             if (src.isNotBlank()) {
                 Text(
                     text = src.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0x1FA0A0A0))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
                 )
             }
         }

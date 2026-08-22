@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaRecorder
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -59,6 +60,7 @@ import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -80,6 +82,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -97,6 +100,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.hermex.android.feature.settings.SettingsRepository
@@ -224,6 +228,48 @@ fun ChatScreen(
                 pendingImageUri = uri
             } else {
                 Toast.makeText(context, "Couldn't read image", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // ── Attach chooser (v0.1.127): camera / gallery / file ──
+    var showAttachSheet by remember { mutableStateOf(false) }
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { ok ->
+        if (ok) {
+            val uri = pendingCameraUri
+            if (uri != null) {
+                val encoded = downscaleAndEncode(context, uri)
+                if (encoded != null) {
+                    pendingImageB64 = encoded.first
+                    pendingImageUri = uri
+                } else {
+                    Toast.makeText(context, "Couldn't read photo", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        pendingCameraUri = null
+    }
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    if (bytes == null || bytes.isEmpty()) {
+                        Toast.makeText(context, "Couldn't read file", Toast.LENGTH_LONG).show()
+                        return@launch
+                    }
+                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    val name = queryFileName(context, uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "file"
+                    val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                    viewModel.sendMessageWithFile("", b64, mime, name)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "File attach failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -600,6 +646,27 @@ fun ChatScreen(
         onNavigate = onNavigate,
         onOpenSession = onOpenSession,
     ) {
+    if (showAttachSheet) {
+        ModalBottomSheet(onDismissRequest = { showAttachSheet = false }) {
+            Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                AttachOption(Icons.Outlined.PhotoCamera, "Take photo") {
+                    showAttachSheet = false
+                    pendingCameraUri = createCameraUri(context)
+                    pendingCameraUri?.let { cameraPicker.launch(it) }
+                }
+                AttachOption(Icons.Outlined.PhotoLibrary, "Choose photo") {
+                    showAttachSheet = false
+                    imagePicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                }
+                AttachOption(Icons.Outlined.Folder, "Choose file") {
+                    showAttachSheet = false
+                    filePicker.launch(arrayOf("*/*"))
+                }
+            }
+        }
+    }
     Scaffold(
         modifier = Modifier.imePadding(),
         topBar = {
@@ -934,11 +1001,7 @@ fun ChatScreen(
                             ) {
                                 // Attach (paperclip — photo picker)
                                 IconButton(
-                                    onClick = {
-                                        imagePicker.launch(
-                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                        )
-                                    },
+                                    onClick = { showAttachSheet = true },
                                     enabled = !isRecording && !isTranscribing,
                                 ) {
                                     Icon(
@@ -966,14 +1029,6 @@ fun ChatScreen(
                                         imageVector = if (isRecording) Icons.Filled.Mic else Icons.Outlined.Mic,
                                         contentDescription = if (isRecording) "Stop recording" else "Voice message",
                                         tint = if (isRecording) Color(0xFFFF3B30) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                // Workspace chip
-                                IconButton(onClick = {}) {
-                                    Icon(
-                                        Icons.Outlined.Folder,
-                                        contentDescription = "Workspace",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                                 // Text field — transparent inside the capsule
@@ -3155,6 +3210,37 @@ private fun ModelPickerSheet(
             }
         }
     }
+}
+
+// ── ATTACH CHOOSER HELPERS (v0.1.127) ──
+@Composable
+private fun AttachOption(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+private fun createCameraUri(context: Context): Uri {
+    val dir = File(context.cacheDir, "cam").apply { mkdirs() }
+    val file = File(dir, "cam_${System.currentTimeMillis()}.jpg")
+    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+}
+
+private fun queryFileName(context: Context, uri: Uri): String? = try {
+    context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+        val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
+    }
+} catch (_: Exception) {
+    null
 }
 
 // ── WEBUI-STYLE CONTEXT RING (v0.1.124) ──
