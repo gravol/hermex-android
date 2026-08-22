@@ -26,6 +26,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -42,6 +43,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -53,6 +55,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.Handyman
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Psychology
@@ -73,7 +78,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -105,6 +113,7 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -682,6 +691,11 @@ fun ChatScreen(
                             },
                         )
                     }
+                    if (!state.isStreaming && state.messages.any { it.role == "assistant" }) {
+                        IconButton(onClick = { viewModel.retry() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Retry")
+                        }
+                    }
                 },
             )
         },
@@ -837,78 +851,124 @@ fun ChatScreen(
                             .padding(horizontal = 8.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Photo attach
-                        IconButton(
-                            onClick = {
-                                imagePicker.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                )
-                            },
-                            enabled = !isRecording && !isTranscribing,
+                        // WebUI-style composer capsule (v0.1.124)
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(28.dp),
+                            color = Color(0xFF1A1A1A),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
                         ) {
-                            Icon(
-                                Icons.Outlined.PhotoCamera,
-                                contentDescription = "Attach photo",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        // Voice message
-                        IconButton(
-                            onClick = {
-                                if (isRecording) {
-                                    stopAndTranscribe()
-                                } else {
-                                    val granted = ContextCompat.checkSelfPermission(
-                                        context, Manifest.permission.RECORD_AUDIO,
-                                    ) == PackageManager.PERMISSION_GRANTED
-                                    if (granted) startRecording()
-                                    else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
-                            enabled = !isTranscribing,
-                        ) {
-                            Icon(
-                                imageVector = if (isRecording) Icons.Filled.Mic else Icons.Outlined.Mic,
-                                contentDescription = if (isRecording) "Stop recording" else "Voice message",
-                                tint = if (isRecording) Color(0xFFFF3B30) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        OutlinedTextField(
-                            value = composerText,
-                            onValueChange = { composerText = it },
-                            placeholder = { Text("Message Hermes...") },
-                            modifier = Modifier
-                                .weight(1f)
-                                .focusRequester(focusRequester)
-                                .onFocusChanged { composerFocused = it.isFocused },
-                            maxLines = 4,
-                            enabled = true,
-                            shape = RoundedCornerShape(24.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent,
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            ),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            IconButton(
-                                onClick = { sendComposer() },
-                                enabled = (composerText.isNotBlank() || pendingImageB64 != null) &&
-                                    !isTranscribing,
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(Icons.Default.Send, contentDescription = "Send")
-                            }
-                            // Retry button — visible when not streaming and last msg is assistant
-                            if (!state.isStreaming && state.messages.any { it.role == "assistant" }) {
-                                IconButton(onClick = { viewModel.retry() }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Retry")
+                                // Attach (paperclip — photo picker)
+                                IconButton(
+                                    onClick = {
+                                        imagePicker.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                        )
+                                    },
+                                    enabled = !isRecording && !isTranscribing,
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.AttachFile,
+                                        contentDescription = "Attach photo",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
+                                // Voice message
+                                IconButton(
+                                    onClick = {
+                                        if (isRecording) {
+                                            stopAndTranscribe()
+                                        } else {
+                                            val granted = ContextCompat.checkSelfPermission(
+                                                context, Manifest.permission.RECORD_AUDIO,
+                                            ) == PackageManager.PERMISSION_GRANTED
+                                            if (granted) startRecording()
+                                            else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
+                                    enabled = !isTranscribing,
+                                ) {
+                                    Icon(
+                                        imageVector = if (isRecording) Icons.Filled.Mic else Icons.Outlined.Mic,
+                                        contentDescription = if (isRecording) "Stop recording" else "Voice message",
+                                        tint = if (isRecording) Color(0xFFFF3B30) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                // Profile chip (accent tint, WebUI-style)
+                                IconButton(onClick = {}) {
+                                    Icon(
+                                        Icons.Outlined.Person,
+                                        contentDescription = "Profile",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                                // Workspace chip
+                                IconButton(onClick = {}) {
+                                    Icon(
+                                        Icons.Outlined.Folder,
+                                        contentDescription = "Workspace",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                // Text field — transparent inside the capsule
+                                OutlinedTextField(
+                                    value = composerText,
+                                    onValueChange = { composerText = it },
+                                    placeholder = {
+                                        Text(
+                                            "Message Hermes...",
+                                            fontStyle = FontStyle.Italic,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .focusRequester(focusRequester)
+                                        .onFocusChanged { composerFocused = it.isFocused },
+                                    maxLines = 4,
+                                    enabled = true,
+                                    shape = RoundedCornerShape(28.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color.Transparent,
+                                        unfocusedBorderColor = Color.Transparent,
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                    ),
+                                )
+                                // Context ring (WebUI-style token gauge)
+                                ContextRing(
+                                    used = state.contextUsed,
+                                    max = state.contextMax,
+                                    modifier = Modifier.padding(horizontal = 4.dp),
+                                )
                             }
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        // Send — accent circle with up arrow (WebUI-style)
+                        val canSend = (composerText.isNotBlank() || pendingImageB64 != null) && !isTranscribing
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (canSend) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                                    },
+                                )
+                                .clickable(enabled = canSend) { sendComposer() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.ArrowUpward,
+                                contentDescription = "Send",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                            )
                         }
                     }
                 }
@@ -3031,5 +3091,60 @@ private fun ModelPickerSheet(
                 }
             }
         }
+    }
+}
+
+// ── WEBUI-STYLE CONTEXT RING (v0.1.124) ──
+/** Circular token-usage gauge matching the WebUI composer. */
+@Composable
+private fun ContextRing(used: Long?, max: Long?, modifier: Modifier = Modifier) {
+    val fraction = if (max != null && max > 0 && used != null) {
+        (used.toFloat() / max.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val pct = (fraction * 100f).roundToInt()
+    val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val textColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val arcColor = when {
+        fraction > 0.75f -> Color(0xFFEF5350)
+        fraction > 0.5f -> Color(0xFFFFA726)
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Box(
+        modifier = modifier.size(34.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val stroke = 3.dp.toPx()
+            val inset = stroke / 2f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            drawArc(
+                color = trackColor,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+            )
+            if (fraction > 0f) {
+                drawArc(
+                    color = arcColor,
+                    startAngle = -90f,
+                    sweepAngle = 360f * fraction,
+                    useCenter = false,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                    topLeft = Offset(inset, inset),
+                    size = arcSize,
+                )
+            }
+        }
+        Text(
+            text = if (max != null && max > 0) "$pct" else "·",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
