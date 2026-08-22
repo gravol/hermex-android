@@ -142,6 +142,7 @@ class SoulViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             uiState = uiState.copy(loading = true, error = null, saved = false)
             try {
+                wsConnection.connect()
                 val r = rpcClient.profileDescribe("default")
                 val soul = r["soul"]?.jsonPrimitive?.contentOrNull ?: ""
                 uiState = State(soul = soul, loading = false)
@@ -157,6 +158,7 @@ class SoulViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             uiState = uiState.copy(saving = true, saved = false, error = null)
             try {
+                wsConnection.connect()
                 rpcClient.profileConfigure("default", soul)
                 uiState = uiState.copy(saving = false, saved = true)
                 DebugLog.log("RPC", "Soul", "soul saved")
@@ -165,5 +167,10 @@ class SoulViewModel(application: Application) : AndroidViewModel(application) {
                 uiState = uiState.copy(saving = false, error = e.message ?: "Failed to save soul")
             }
         }
+    }
+
+    override fun onCleared() {
+        wsConnection.disconnect()
+        super.onCleared()
     }
 }
