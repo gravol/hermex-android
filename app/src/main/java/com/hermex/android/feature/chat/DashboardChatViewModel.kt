@@ -64,6 +64,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     private val rpcClient = JsonRpcClient(wsConnection, viewModelScope)
     private var notificationCollectorJob: Job? = null
 
+    // ── v0.1.123 stuck-spinner watchdog ──
+    // If a streaming assistant message is still marked isStreaming after this
+    // many ms with no new event, the completion signal was lost → clear it so
+    // the UI doesn't spin forever. Re-armed on every incoming event.
+    private var staleStreamTimeoutJob: Job? = null
+    private val STALE_STREAM_GRACE_MS = 45_000L
+
     // ─── Debug: timing & state tracking ───
     private var connectStartTime = 0L
     private var sessionLoadStartTime = 0L
@@ -677,7 +684,42 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
      */
     fun dispose() {
         notificationCollectorJob?.cancel()
+        staleStreamTimeoutJob?.cancel()
         wsConnection.disconnect()
+    }
+
+    // ── v0.1.123 stuck-spinner watchdog ──
+
+    /**
+     * Re-arm the stale-stream guard: cancel any pending timeout and start a new
+     * one. Called on every incoming notification so a healthy stream never trips
+     * it. If no event lands within the grace window while an assistant message is
+     * still `isStreaming`, clear that flag so the UI doesn't spin forever.
+     */
+    private fun armStaleStreamGuard() {
+        staleStreamTimeoutJob?.cancel()
+        staleStreamTimeoutJob = viewModelScope.launch {
+            delay(STALE_STREAM_GRACE_MS)
+            val stillStreaming = uiState.messages.any {
+                it.role == "assistant" && it.isStreaming
+            }
+            if (stillStreaming) {
+                DebugLog.log("RPC", "DashboardChat",
+                    "v0.1.123: stale-stream watchdog fired after ${STALE_STREAM_GRACE_MS}ms — " +
+                    "assistant message still marked isStreaming; completion signal was lost, clearing")
+                val msgs = uiState.messages.toMutableList()
+                var cleared = 0
+                for (i in msgs.indices) {
+                    if (msgs[i].role == "assistant" && msgs[i].isStreaming) {
+                        msgs[i] = msgs[i].copy(isStreaming = false, isWaitingForFirstEvent = false)
+                        cleared++
+                    }
+                }
+                if (cleared > 0) {
+                    uiState = uiState.copy(messages = msgs, scrollGeneration = uiState.scrollGeneration + 1)
+                }
+            }
+        }
     }
 
     // ── WebSocket lifecycle ──
@@ -794,6 +836,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     }
 
     private fun handleNotification(n: RpcNotification) {
+        armStaleStreamGuard()
         // Filter: only process events for our session
         val nSid = n.sessionId
         if (nSid != null && nSid.isNotEmpty() && nSid != sessionId && nSid != liveSid) {
@@ -810,6 +853,29 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         }
 
         val msgs = uiState.messages.toMutableList()
+
+        // v0.1.123 safety net — stuck-spinner guard. If a streaming content event
+        // (delta / tool event) arrives but there is NO live streaming assistant
+        // message, the completion event that was supposed to clear `isStreaming`
+        // was dropped/late/out-of-order and we'd otherwise strand a spinner
+        // forever (the "frozen thinking after a long reply" bug). Re-establish a
+        // placeholder so the late content has somewhere to land and finalize on
+        // the next completed event, instead of leaving the UI stuck.
+        if (n is RpcNotification.MessageDelta ||
+            n is RpcNotification.ThinkingDelta ||
+            n is RpcNotification.ReasoningDelta ||
+            n is RpcNotification.ToolGenerating ||
+            n is RpcNotification.ToolStart ||
+            n is RpcNotification.ToolComplete
+        ) {
+            val hasLiveStream = msgs.any { it.role == "assistant" && it.isStreaming }
+            if (!hasLiveStream) {
+                DebugLog.log("RPC", "DashboardChat",
+                    "v0.1.123: ${n::class.simpleName} arrived with no live stream — " +
+                    "completion was lost, re-establishing placeholder to avoid stuck spinner")
+                ensureStreamingPlaceholder(msgs)
+            }
+        }
 
         when (n) {
             is RpcNotification.GatewayReady -> {

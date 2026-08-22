@@ -14,6 +14,18 @@
   - **#2 cron-check-in-missing & #3 turn-finished-pings-missing → fixed v0.1.118–v0.1.119.** v0.1.118 added diagnostics logging turn-finished delivery results; v0.1.119 fixed the root cause — a just-reaped session returns 4007 while its DB row is mid-flush (`ws_orphan_reap` window), so `submitWithSelfHeal` now backs off (~1.5s) and retries `session.resume` before falling back to direct send (see `docs/WS_ORPHAN_REAP_BUG.md`). v0.1.120 added a waiting-for-model label so reasoning-OFF turns don't look stuck; v0.1.121 fixed the THINKING box elapsed-time readout freezing at 0s. **Re-verify on the field device** — these were device-QA notes, and the fixes are code-only (not yet confirmed live).
   - **#1 approval notification click kills in-flight response → RESOLVED (re-verified 2026-08-22).** No longer reproduces on-device; was likely a transient session-reap/reconnect race (v0.1.119's `ws_orphan_reap` backoff covers that class). Field-tested the approval flow same day: dangerous command gated by Clerk (`approvals.mode: manual`), Hermex dialog rendered the actual command text — display path confirmed working.
 
+### Known issue — stuck "thinking" spinner after long turns (v0.1.122)
+- **Symptom:** After longer assistant replies (mine especially — more content + tool calls), the chat freezes showing the thinking/typing-dot spinner indefinitely; a hard app close + refresh makes it look normal again, and the reply content was correct all along.
+- **Diagnosis (2026-08-22):** Not a server failure and not a content-loss bug. The server completes the turn fine (full correct reply is stored); the client just **fails to clear `isStreaming`** on the assistant message when the final `message.completed`/`run.completed` event is dropped, arrives out of order, or lands after a late delta. A hard refresh reloads clean history → renders normally, which is why it "looks perfect" post-refresh and left us perplexed.
+- **Root cause candidates (client-side finalization race):**
+  1. Completion event (`message.completed` line 960 / `run.completed` line 1018) dropped or late in the WS stream — most likely on longer, tool-heavy turns with more events in flight.
+  2. Out-of-order late delta arriving after finalize and getting filtered out (all delta handlers filter by `isStreaming`).
+  3. Reconnect mid-turn (line 701-744) doesn't explicitly reset `isStreaming` on the placeholder.
+  4. `todo` tool.complete special-casing (`if n.toolName == "todo" return`) can skip the normal finalize under some paths.
+- **Fix (v0.1.123):** Safety-net guard — if any streaming event (delta / tool event) arrives when there is **no** live streaming assistant message, that's a red flag the completion was lost; re-establish + clear `isStreaming` instead of silently dropping the event. Defensive: no change to normal behavior, closes the exact race causing frozen spinners.
+- **To confirm root cause precisely:** export the in-app debug log (Settings → Debug) from a frozen turn — shows exactly which events fired and in what order. Still open to grab if it recurs.
+
+
 ### Verified Project Root
 
 | Field | Value |
