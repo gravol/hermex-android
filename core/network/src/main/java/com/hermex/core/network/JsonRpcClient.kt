@@ -469,6 +469,8 @@ class JsonRpcClient(
         val resumed: String? = null,       // original DB session key returned by server
         val session_key: String? = null,    // stable lookup key returned by server
         val message_count: Int? = null,
+        val running: Boolean? = null,       // true if a turn is actively streaming server-side
+        val turn_started_at: Double? = null,
         val messages: List<MessageData>? = null,
         val info: JsonObject? = null,
         val session: JsonObject? = null,

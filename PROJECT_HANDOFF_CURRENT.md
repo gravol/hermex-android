@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-23 — realigned with GitHub (was documenting v0.1.133; current is v0.1.134)
-**Current version:** v0.1.134 (versionCode 134)
-**HEAD commit:** `pending` (v0.1.134 — clarify renders INLINE above composer, not a modal popup)
+**Last updated:** 2026-08-23 — realigned with GitHub (was documenting v0.1.134; current is v0.1.135)
+**Current version:** v0.1.135 (versionCode 135)
+**HEAD commit:** `pending` (v0.1.135 — reconnect reconciles a turn that finished while disconnected, so no more "seems crashed" forced reopen)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -49,11 +49,11 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-||| Latest commit | `pending` (v0.1.134 — clarify renders INLINE above composer, not a modal popup) ||
+||| Latest commit | `pending` (v0.1.135 — reconnect reconciles a turn that finished while disconnected, so no more "seems crashed" forced reopen) ||
 || Build command | `./gradlew assembleRelease --no-configuration-cache` |
 || APK output | `app/build/outputs/apk/release/app-release.apk` |
-||| Version | v0.1.134 (versionCode 134) ||
-|| Completed phase | **v0.1.134 — clarify renders INLINE above the composer** (dsh-style card, not a modal popup), with server-provided answer choices as chips + free-text fallback. See below for v0.1.116–v0.1.134 additions. |
+||| Version | v0.1.135 (versionCode 135) ||
+|| Completed phase | **v0.1.135 — reconnect reconciles a turn that finished while disconnected** (no more "seems crashed, hard-close to see response"). See below for v0.1.116–v0.1.135 additions. |
 | Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) — **DONE v0.1.80** ② custom colors for everything (refine text color/text size controls) — **DONE v0.1.49–58/79/95** ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response — **DONE v0.1.66–79** ④ re-verify Obtainium update flow after CI races — **DONE v0.1.76** ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking) — **DONE v0.1.98**. Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -155,6 +155,11 @@ A push toward full WebUI/CLI parity: WebUI-style UI (composer capsule, menu draw
   2. **Real answer choices honored:** the server sends an optional `choices` array; the client had hardcoded `Yes/No/Use default/Ask again`. Now the server's choices render as selectable chips, falling back to free text when none are sent. Added `choices` to `RpcNotification.ClarifyRequest` + `PendingClarify`, and batch `questions` support (`RpcNotification.ClarifyQuestion`). (`RpcNotification.kt`, `UiModels.kt`, `DashboardChatViewModel.kt`.)
   3. **No more modal Dialog popup:** replaced the `Dialog` with an `InlineClarifyCard` composable rendered **above the composer row** in the `bottomBar`, so the question is always on-screen and chips are tappable without a modal overlay. (`ChatScreen.kt`.)
   - Server contract reference: `_clarify_block` in `tui_gateway/server.py` emits `{request_id, question, choices?, multi_select?}` (single) or `{request_id, questions:[{qid, question, choices, multi_select}]}` (batch). `clarify.respond` matches on `request_id`.
+
+### Recent versions — v0.1.135 (reconnect reconcile / "seems crashed" fix, 2026-08-23)
+- **v0.1.135** — **Reconnect now reconciles a turn that finished while the socket was down.** Fixes the "app seems crashed, but hard-close + reopen shows the response" bug.
+  - **Root cause:** the server routes a session's streaming events to ONE transport (`session["transport"]`, re-bound on `prompt.submit`/`resume`; `server.py write_json` + `methods_prompt.py:344`). When the phone's WS drops mid-turn (lock, Doze, network blip, OS backgrounding), the server keeps generating but deltas stop reaching the client. On reconnect the client's lightweight re-attach (`sessionResume(omitMessages=true)`) re-registers the session but **skips message content** — so if the turn already finished during the disconnect, the client never gets the `message.completed` and keeps a placeholder still marked `isStreaming` → frozen/blank UI. Reopening the app does a full `loadMessages()` which is why it "showed up after reopen."
+  - **Fix:** added `running` (+`turn_started_at`) to `SessionResumeResult` (`JsonRpcClient.kt`). On reconnect (`state==CONNECTED`), if the resume reports `running == false` but the local UI still has an `isStreaming` assistant message, do a **full `loadMessages()`** to pull the completed turn — self-heals without a forced reopen. (`DashboardChatViewModel.kt` reconnect handler.) `running` is nullable, so a server that omits it won't trigger a spurious reload.
 
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)

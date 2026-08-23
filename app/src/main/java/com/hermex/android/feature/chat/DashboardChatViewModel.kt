@@ -893,6 +893,26 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                             contextMax = ctx.second ?: uiState.contextMax,
                                         )
                                     }
+                                    // v0.1.135: reconcile a turn that finished while the
+                                    // socket was down. The lightweight re-attach above uses
+                                    // omitMessages=true, so if the turn COMPLETED during the
+                                    // disconnect the client never receives the completed
+                                    // message — it's left with a stale placeholder still
+                                    // marked isStreaming (UI looks "crashed" / frozen). The
+                                    // server's resume payload tells us the turn is no longer
+                                    // running; if we still think it is, do a FULL history
+                                    // reload so the final answer appears without a hard
+                                    // close + reopen.
+                                    val turnDoneServerSide = result.running == false
+                                    val localThinksStreaming = uiState.messages.any {
+                                        it.role == "assistant" && it.isStreaming
+                                    }
+                                    if (turnDoneServerSide && localThinksStreaming) {
+                                        DebugLog.log("STATE", "SessionID",
+                                            "reconnect: turn finished while disconnected (server running=false, " +
+                                            "local still streaming=true) — reloading history to reconcile")
+                                        loadMessages()
+                                    }
                                 } catch (e: Exception) {
                                     Log.e("Hermex", "DashboardChat: reconnect resume failed", e)
                                     DebugLog.log("ERROR", "DashboardChat",
