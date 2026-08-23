@@ -1455,16 +1455,15 @@ fun ChatScreen(
     // ── Clarify Dialog ──
     val pendingClarify = state.pendingClarify
     if (pendingClarify != null) {
-        // Numbered quick-choices + an "Other…" fallback. The server accepts any
-        // string as the answer, so these are just preset values we send back.
-        // No free-text box shown by default — a blank text field with no idea
-        // what to type is unusable; pick a number, or tap "Other…" to type one.
-        var otherAnswer by remember { mutableStateOf("") }
-        var showOther by remember { mutableStateOf(false) }
+        // Chat-bubble style: the server's question renders as an assistant bubble
+        // so you can actually read what's being asked, then selectable chips for
+        // quick answers, then a free-text field + Send for anything else. The
+        // server accepts any string as the answer, so chips are just preset values.
+        var clarifyAnswer by remember { mutableStateOf("") }
         Dialog(onDismissRequest = { /* must answer */ }) {
             Card(
                 modifier = Modifier
-                    .widthIn(min = 280.dp, max = 420.dp)
+                    .widthIn(min = 300.dp, max = 460.dp)
                     .padding(8.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
@@ -1472,79 +1471,88 @@ fun ChatScreen(
                 ),
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "Clarification Needed",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (pendingClarify.question.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
+                    // ── Question as an assistant chat bubble ──
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            Icons.Outlined.Psychology,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            text = pendingClarify.question,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = "Needs your input",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
-                    Spacer(Modifier.height(12.dp))
-                    // Quick-choice grid (2x2): four preset buttons + an
-                    // "Other…" row that reveals a text field. The server
-                    // accepts any string as the answer, so these are just
-                    // preset values sent back. No blank text box up front —
-                    // pick a number, or tap "Other…" to type one.
-                    val choices = listOf("Yes", "No", "Use default", "Ask again")
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        // Build a true 2-column grid with two Rows of two.
-                        for (r in 0 until 2) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = if (r == 0) 0.dp else 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                val i1 = r * 2
-                                val i2 = i1 + 1
-                                Button(
-                                    onClick = { viewModel.respondToClarify(choices[i1]) },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp),
-                                ) {
-                                    Text("#${i1 + 1} ${choices[i1]}")
-                                }
-                                if (i2 < choices.size) {
-                                    Button(
-                                        onClick = { viewModel.respondToClarify(choices[i2]) },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(10.dp),
-                                    ) {
-                                        Text("#${i2 + 1} ${choices[i2]}")
-                                    }
-                                } else {
-                                    Spacer(Modifier.width(0.dp))
-                                }
-                            }
+                    if (pendingClarify.question.isNotBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            Text(
+                                text = pendingClarify.question,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(12.dp),
+                            )
                         }
-                        OutlinedButton(
-                            onClick = { showOther = !showOther },
+                    }
+
+                    // ── Selectable quick-answer chips ──
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "Quick answer",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    // Two rows of two chips; tapping one sends it immediately.
+                    val choices = listOf("Yes", "No", "Use default", "Ask again")
+                    for (r in 0 until 2) {
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 8.dp),
-                            shape = RoundedCornerShape(10.dp),
+                                .padding(top = if (r == 0) 0.dp else 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Text("Other…")
+                            val i1 = r * 2
+                            val i2 = i1 + 1
+                            AssistChip(
+                                onClick = { viewModel.respondToClarify(choices[i1]) },
+                                label = { Text("${i1 + 1}. ${choices[i1]}" ) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (i2 < choices.size) {
+                                AssistChip(
+                                    onClick = { viewModel.respondToClarify(choices[i2]) },
+                                    label = { Text("${i2 + 1}. ${choices[i2]}" ) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            } else {
+                                Spacer(Modifier.width(0.dp))
+                            }
                         }
                     }
-                    if (showOther) {
-                        Spacer(Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = otherAnswer,
-                            onValueChange = { otherAnswer = it },
-                            placeholder = { Text("Type your answer…") },
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 3,
-                            shape = RoundedCornerShape(8.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(16.dp))
+
+                    // ── Free-text field + Send ──
+                    Spacer(Modifier.height(14.dp))
+                    OutlinedTextField(
+                        value = clarifyAnswer,
+                        onValueChange = { clarifyAnswer = it },
+                        placeholder = { Text("Type your answer…") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 4,
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                    Spacer(Modifier.height(10.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1557,6 +1565,16 @@ fun ChatScreen(
                             modifier = Modifier.weight(1f),
                         ) {
                             Text("Cancel")
+                        }
+                        Button(
+                            onClick = {
+                                val answer = clarifyAnswer.trim()
+                                if (answer.isNotEmpty()) viewModel.respondToClarify(answer)
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = clarifyAnswer.isNotBlank(),
+                        ) {
+                            Text("Send")
                         }
                     }
                 }
