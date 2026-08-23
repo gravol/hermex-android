@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
 **Last updated:** 2026-08-23 — realigned with GitHub (was documenting v0.1.134; current is v0.1.135)
-**Current version:** v0.1.135 (versionCode 135)
+**Current version:** v0.1.136 (versionCode 136)
 **HEAD commit:** `pending` (v0.1.135 — reconnect reconciles a turn that finished while disconnected, so no more "seems crashed" forced reopen)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -161,6 +161,11 @@ A push toward full WebUI/CLI parity: WebUI-style UI (composer capsule, menu draw
   - **Root cause:** the server routes a session's streaming events to ONE transport (`session["transport"]`, re-bound on `prompt.submit`/`resume`; `server.py write_json` + `methods_prompt.py:344`). When the phone's WS drops mid-turn (lock, Doze, network blip, OS backgrounding), the server keeps generating but deltas stop reaching the client. On reconnect the client's lightweight re-attach (`sessionResume(omitMessages=true)`) re-registers the session but **skips message content** — so if the turn already finished during the disconnect, the client never gets the `message.completed` and keeps a placeholder still marked `isStreaming` → frozen/blank UI. Reopening the app does a full `loadMessages()` which is why it "showed up after reopen."
   - **Fix:** added `running` (+`turn_started_at`) to `SessionResumeResult` (`JsonRpcClient.kt`). On reconnect (`state==CONNECTED`), if the resume reports `running == false` but the local UI still has an `isStreaming` assistant message, do a **full `loadMessages()`** to pull the completed turn — self-heals without a forced reopen. (`DashboardChatViewModel.kt` reconnect handler.) `running` is nullable, so a server that omits it won't trigger a spurious reload.
 
+### Recent versions — v0.1.136 (Soul editor JSON-RPC timeout fix, 2026-08-23)
+- **v0.1.136** — **The Agent Soul editor (SOUL.md) stops timing out on open.** Fixes the "json-rpc error -1 request profile.describe timed out after 30000ms" that appears when navigating to the Soul screen.
+  - **Root cause:** `SoulViewModel` (`feature/soul/SoulScreen.kt`) called `wsConnection.connect()` (added in v0.1.129) but **never `rpcClient.start()`**. `start()` launches the consumer coroutine that reads raw WS frames and dispatches them via `processFrame()` → `handleResponse()`. Without it, the server's `profiles.describe` response lands on the socket but is never consumed, so the pending request never completes and the 30s timeout fires. The server side is fine (`profiles.describe` handler at `tui_gateway/methods_profiles.py:526`, dispatches cleanly via `_methods.get(method)`); every OTHER `JsonRpcClient` caller — `DashboardChatViewModel`, `SessionsViewModel`, `NotificationReplyService` — calls both `.connect()` **and** `.start()`. Soul was the sole exception.
+  - **Fix:** add `rpcClient.start()` immediately after each `wsConnection.connect()` in both `reload()` and `save()`, plus matching `rpcClient.stop()` in `onCleared()`. Mirrors the app-wide pattern; `start()` is idempotent (`if (consumerJob?.isActive == true) return`), so no double-consume risk. (`SoulScreen.kt`.)
+
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)
 `ApiClient`, `DTOs`, `SseParser`, `SetupScreen`/`SetupViewModel`, legacy `ChatViewModel`, and `HermesForegroundService` were fully deleted in v0.1.42. The app is dashboard JSON-RPC/WebSocket only.
@@ -169,6 +174,7 @@ A push toward full WebUI/CLI parity: WebUI-style UI (composer capsule, menu draw
 - **Approval dialog only fires for dangerous terminal commands** — Server-side `approval.request` notification is emitted only when `detect_dangerous_command()` matches (e.g. `rm -rf`, `curl | bash`). Normal tools like `web_search`, `ls ~/`, `read_file` auto-approve silently. The Android dialog is correctly built but never triggered for everyday commands. This matches Telegram behavior (only dangerous patterns ask for approval).
 - ~~**ClarifyRequest still auto-denied**~~ **Clarify dialog implemented** — `PendingClarify` state model with free-text answer input. `ClarifyRequest` notifications set `pendingClarify` in `ChatUiState`, triggering a Compose `Dialog` with the server's question and an answer field. Cancel sends empty string to unblock the turn.
 - **Empty sessions in session.list** — `session.list` may return sessions with zero messages or no content. Need server-side filtering or client-side display filtering.
+- ~~**Soul editor: `profiles.describe` times out after 30s (json-rpc error -1)**~~ **Fixed v0.1.136** — the Soul VM connected the WS (`wsConnection.connect()`, added in v0.1.129) but never started the JSON-RPC frame consumer (`rpcClient.start()`), so the response was never read and the request timed out. Added `.start()`/`.stop()` to match every other caller.
 - ~~**Legacy REST/SSE stack cleanup deferred**~~ **Legacy stack cleaned up (Phase 7C)** — `ApiClient.kt`, `DTOs.kt`, `SseParser.kt`, old `SetupViewModel`, `SetupScreen`, old `ChatViewModel`, `HermesForegroundService` stub, and orphaned `feature/` modules all removed.
 - ~~**No background WebSocket keepalive**~~ **Background keepalive implemented (Phase 7B)** — `WsKeepaliveService` foreground service wired into `DashboardChatViewModel`. Starts on WS connect, stops on ViewModel clear. (The old `HermesForegroundService` template was removed in Phase 7C.)
 - **Feature modules contain dead code** — `feature/chat/`, `feature/session/`, `feature/skills/`, etc. contain auto-generated `Component_*.kt` stubs. Not included in `settings.gradle.kts` — do not compile. Safe to delete.

@@ -143,6 +143,12 @@ class SoulViewModel(application: Application) : AndroidViewModel(application) {
             uiState = uiState.copy(loading = true, error = null, saved = false)
             try {
                 wsConnection.connect()
+                // v0.1.136: start the JSON-RPC frame consumer so the server's
+                // response to profiles.describe is actually read off the socket.
+                // connect() alone only opens the WS — without start() the pending
+                // request never completes and times out after 30s ("error -1 ...
+                // timed out"). Every other JsonRpcClient caller starts it too.
+                rpcClient.start()
                 val r = rpcClient.profileDescribe("default")
                 val soul = r["soul"]?.jsonPrimitive?.contentOrNull ?: ""
                 uiState = State(soul = soul, loading = false)
@@ -159,6 +165,9 @@ class SoulViewModel(application: Application) : AndroidViewModel(application) {
             uiState = uiState.copy(saving = true, saved = false, error = null)
             try {
                 wsConnection.connect()
+                // v0.1.136: same as reload — the consumer must be running for the
+                // profiles.configure response to be consumed (else 30s timeout).
+                rpcClient.start()
                 rpcClient.profileConfigure("default", soul)
                 uiState = uiState.copy(saving = false, saved = true)
                 DebugLog.log("RPC", "Soul", "soul saved")
@@ -170,6 +179,7 @@ class SoulViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        rpcClient.stop()
         wsConnection.disconnect()
         super.onCleared()
     }
