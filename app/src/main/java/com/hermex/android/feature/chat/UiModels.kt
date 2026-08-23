@@ -98,8 +98,10 @@ data class PendingApproval(
  * A clarification request waiting for user input.
  * @property requestId Server-side ID for the clarification request.
  * @property question The question the server is asking the user.
+ * @property choices Optional preset answer choices offered by the server (rendered as chips).
  */
 data class PendingClarify(
     val requestId: String,
     val question: String = "",
+    val choices: List<String> = emptyList(),
 )

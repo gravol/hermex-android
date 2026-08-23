@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-23 — realigned with GitHub (was documenting v0.1.131; current is v0.1.132)
-**Current version:** v0.1.132 (versionCode 132)
-**HEAD commit:** `f241aa4` (v0.1.132 — clarify dialog as chat bubble with quick-answer chips + free text)
+**Last updated:** 2026-08-23 — realigned with GitHub (was documenting v0.1.133; current is v0.1.134)
+**Current version:** v0.1.134 (versionCode 134)
+**HEAD commit:** `pending` (v0.1.134 — clarify renders INLINE above composer, not a modal popup)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -49,11 +49,11 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-||| Latest commit | `f241aa4` (v0.1.132 — clarify dialog as chat bubble with quick-answer chips + free text) ||
+||| Latest commit | `pending` (v0.1.134 — clarify renders INLINE above composer, not a modal popup) ||
 || Build command | `./gradlew assembleRelease --no-configuration-cache` |
 || APK output | `app/build/outputs/apk/release/app-release.apk` |
-||| Version | v0.1.132 (versionCode 132) ||
-|| Completed phase | **v0.1.132 — clarify dialog as an in-chat chat bubble** (server question renders as an assistant bubble + quick-answer chips + free-text field; no more blank text box). See below for v0.1.116–v0.1.132 additions. |
+||| Version | v0.1.134 (versionCode 134) ||
+|| Completed phase | **v0.1.134 — clarify renders INLINE above the composer** (dsh-style card, not a modal popup), with server-provided answer choices as chips + free-text fallback. See below for v0.1.116–v0.1.134 additions. |
 | Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) — **DONE v0.1.80** ② custom colors for everything (refine text color/text size controls) — **DONE v0.1.49–58/79/95** ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response — **DONE v0.1.66–79** ④ re-verify Obtainium update flow after CI races — **DONE v0.1.76** ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking) — **DONE v0.1.98**. Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -109,7 +109,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Reconnect resume** — on WebSocket reconnect, calls `session.resume` to re-register the live session (fixes 4001 error after reconnect)
 - **Stop generation** — `stopStreaming()` sends `session.interrupt` RPC, clears per-message `isStreaming` flag on the last assistant message so blinking cursor / thinking ticker / typing dots disappear immediately, and dismisses any visible approval or clarify dialog. Same fix applied to legacy SSE stack.
 - **Tool approval dialog** — `PendingApproval` state model, Compose `Dialog` with Approve/Deny buttons. Notification handler correctly sets state from `ApprovalRequest` events, no more auto-deny in `JsonRpcClient`.
-- **Clarify dialog** — `PendingClarify` state model, Compose `Dialog` with the server's question rendered as an **assistant chat bubble** + numbered quick-answer chips (`1. Yes / 2. No / 3. Use default / 4. Ask again`) + free-text answer input. `ClarifyRequest` notifications set `pendingClarify` state, `respondToClarify()` calls `clarify.respond` RPC. Cancel sends empty string to unblock the turn. (Rebuilt v0.1.132 as a readable in-chat bubble — was a bare title + blank text box.)
+- **Clarify dialog** — `PendingClarify` state model. Renders **INLINE above the composer** (v0.1.134, dsh-style card, not a modal popup): the server's question (always readable) + its **real answer choices** as selectable chips + a free-text fallback + Cancel/Send. `ClarifyRequest` notifications set `pendingClarify`, `respondToClarify()` calls `clarify.respond` RPC (empty = dismiss/unblock). **Root-cause fix (v0.1.134):** the client was reading `params["question"]`/`params["request_id"]` at the top level, but the server wraps them under `params.payload` — so the question never parsed and the dialog was blank. Now reads from `payload`, plus parses `choices` (and batch `questions`).
 - **Approval RPC** — `approvalRespond()` sends correctly-param'd `approval.respond` notification to server (choice: "approve"/"deny", all: bool)
 - **Release CI** — `.github/workflows/release.yml` auto-builds APK and creates GitHub Release on push to master
 - **Debug logging** — in-app ring buffer (1000 entries), exportable from Settings
@@ -147,6 +147,14 @@ A push toward full WebUI/CLI parity: WebUI-style UI (composer capsule, menu draw
 
 ### Recent versions — v0.1.132 (clarify dialog rebuild, 2026-08-23)
 - **v0.1.132** — **Clarify dialog rebuilt as an in-chat chat bubble.** Replaces the old bare "Clarification Needed" popup (which was just a title + blank text box, easy to miss) with a readable card: a "Needs your input" header (psychology icon, primary tint), the server's question rendered as an **assistant-style bubble** in a rounded `surfaceContainerHigh` surface, then a **Quick answer** row of **numbered chips** (`1. Yes / 2. No / 3. Use default / 4. Ask again` — tap sends immediately), then a free-text field + Send (Send enabled only when non-blank) + Cancel. Card widened to 300–460dp. Two commits: `4327b56` (numbered quick-choices + Other… fallback, no more blank text box) then `f241aa4` (chat-bubble styling + quick-answer chips). The server accepts any string as the answer, so chips are just presets. (`ChatScreen.kt` — clarify dialog section; no VM/contract change — `respondToClarify()` already existed.)
+
+### Recent versions — v0.1.133→134 (clarify fix: truly INLINE, readable, real choices; 2026-08-23)
+- **v0.1.133** — version bump only (packaged the v0.1.132 clarify work for a fresh Obtainium release after the v0.1.132 CI tag-skip shipped a stale APK).
+- **v0.1.134** — **Clarify renders INLINE above the composer (dsh-style), not a modal popup, AND the question actually displays.** Three-issue fix driven by field test ("it showed up but I can't see what you're asking"):
+  1. **Root cause of the blank question:** `JsonRpcClient` parsed `clarify.request` from top-level `params["question"]`/`params["request_id"]`, but the server (`server.py _event_frame`) wraps them under `params.payload`. The question therefore never parsed → empty dialog. Now reads from `payload` (matching the `approval.request` convention above it), with a top-level fallback. (`JsonRpcClient.kt`.)
+  2. **Real answer choices honored:** the server sends an optional `choices` array; the client had hardcoded `Yes/No/Use default/Ask again`. Now the server's choices render as selectable chips, falling back to free text when none are sent. Added `choices` to `RpcNotification.ClarifyRequest` + `PendingClarify`, and batch `questions` support (`RpcNotification.ClarifyQuestion`). (`RpcNotification.kt`, `UiModels.kt`, `DashboardChatViewModel.kt`.)
+  3. **No more modal Dialog popup:** replaced the `Dialog` with an `InlineClarifyCard` composable rendered **above the composer row** in the `bottomBar`, so the question is always on-screen and chips are tappable without a modal overlay. (`ChatScreen.kt`.)
+  - Server contract reference: `_clarify_block` in `tui_gateway/server.py` emits `{request_id, question, choices?, multi_select?}` (single) or `{request_id, questions:[{qid, question, choices, multi_select}]}` (batch). `clarify.respond` matches on `request_id`.
 
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)

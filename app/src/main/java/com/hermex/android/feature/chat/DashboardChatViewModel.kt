@@ -1290,11 +1290,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.ClarifyRequest -> {
-                DebugLog.log("RPC", "DashboardChat", "clarify request received: requestId=${n.requestId} question=${n.question ?: ""}")
+                DebugLog.log("RPC", "DashboardChat", "clarify request received: requestId=${n.requestId} question=${n.question ?: ""} choices=${n.choices}")
                 uiState = uiState.copy(
                     pendingClarify = PendingClarify(
                         requestId = n.requestId,
                         question = n.question ?: "",
+                        choices = n.choices ?: emptyList(),
                     )
                 )
             }

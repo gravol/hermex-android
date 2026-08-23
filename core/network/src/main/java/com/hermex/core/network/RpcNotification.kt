@@ -148,13 +148,27 @@ sealed class RpcNotification {
     ) : RpcNotification()
 
     /**
+     * One item in a batch clarify. Correlated back to the tool by qid.
+     */
+    data class ClarifyQuestion(
+        val qid: String,
+        val question: String,
+        val choices: List<String> = emptyList(),
+        val multiSelect: Boolean = false,
+    )
+
+    /**
      * Server needs clarification from the user. Correlated by request_id.
-     * v1 behavior: auto-deny.
+     * Chooses the single-question payload shape: `{request_id, question,
+     * choices?, multi_select?}`; for a batch, `questions` carries a
+     * list of [ClarifyQuestion].
      */
     data class ClarifyRequest(
         override val sessionId: String,
         val requestId: String,
         val question: String? = null,
+        val choices: List<String>? = null,
+        val questions: List<ClarifyQuestion>? = null,
     ) : RpcNotification()
 
     // ── Session info ──

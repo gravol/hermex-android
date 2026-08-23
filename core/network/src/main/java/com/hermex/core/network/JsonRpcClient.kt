@@ -353,11 +353,43 @@ class JsonRpcClient(
                 )
             }
 
-            "clarify.request" -> RpcNotification.ClarifyRequest(
-                sessionId = sessionId ?: "",
-                requestId = params["request_id"]?.jsonPrimitive?.content ?: "",
-                question = params["question"]?.jsonPrimitive?.content,
-            )
+            "clarify.request" -> {
+                // Server wraps clarify fields under params["payload"] (dashboard WS
+                // convention) — NOT at params top level. Same as approval.request.
+                // Payload shape: {request_id, question, choices?, multi_select?} for
+                // a single question, or {questions: [{qid, question, choices,
+                // multi_select}], request_id} for a batch. See server.py _clarify_block.
+                val cp = params["payload"]?.jsonObject
+                val requestId = cp?.get("request_id")?.jsonPrimitive?.content
+                    ?: params["request_id"]?.jsonPrimitive?.content
+                    ?: ""
+                // Single-question path: question + choices at payload top level.
+                val q = cp?.get("question")?.jsonPrimitive?.content
+                val choicesArr = cp?.get("choices") as? JsonArray
+                val choices = choicesArr?.mapNotNull { (it as? JsonPrimitive)?.content }
+                    ?.filter { it.isNotBlank() }
+                // Batch path: a list of questions, each with qid/question/choices.
+                val questionsArr = cp?.get("questions") as? JsonArray
+                val questions = questionsArr?.mapNotNull { el ->
+                    (el as? JsonObject)?.let { qo ->
+                        RpcNotification.ClarifyQuestion(
+                            qid = qo["qid"]?.jsonPrimitive?.content ?: "",
+                            question = qo["question"]?.jsonPrimitive?.content ?: "",
+                            choices = (qo["choices"] as? JsonArray)
+                                ?.mapNotNull { (it as? JsonPrimitive)?.content }
+                                ?.filter { it.isNotBlank() } ?: emptyList(),
+                            multiSelect = qo["multi_select"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false,
+                        )
+                    }
+                }
+                RpcNotification.ClarifyRequest(
+                    sessionId = sessionId ?: "",
+                    requestId = requestId,
+                    question = q,
+                    choices = choices,
+                    questions = questions,
+                )
+            }
 
             "session.info" -> RpcNotification.SessionInfo(
                 sessionId = sessionId ?: "",

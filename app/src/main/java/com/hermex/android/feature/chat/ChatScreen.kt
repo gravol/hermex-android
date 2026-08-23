@@ -988,6 +988,16 @@ fun ChatScreen(
                             }
                         }
                     }
+                    // ── Inline clarify card (v0.1.134): renders the server's
+                    // question ABOVE the composer, dsh-style, instead of a modal
+                    // popup so you can always read what's being asked. ──
+                    val pendingClarify = state.pendingClarify
+                    if (pendingClarify != null) {
+                        InlineClarifyCard(
+                            pendingClarify = pendingClarify,
+                            onAnswer = { answer -> viewModel.respondToClarify(answer) },
+                        )
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1452,135 +1462,8 @@ fun ChatScreen(
         }
     }
 
-    // ── Clarify Dialog ──
-    val pendingClarify = state.pendingClarify
-    if (pendingClarify != null) {
-        // Chat-bubble style: the server's question renders as an assistant bubble
-        // so you can actually read what's being asked, then selectable chips for
-        // quick answers, then a free-text field + Send for anything else. The
-        // server accepts any string as the answer, so chips are just preset values.
-        var clarifyAnswer by remember { mutableStateOf("") }
-        Dialog(onDismissRequest = { /* must answer */ }) {
-            Card(
-                modifier = Modifier
-                    .widthIn(min = 300.dp, max = 460.dp)
-                    .padding(8.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    // ── Question as an assistant chat bubble ──
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            Icons.Outlined.Psychology,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Needs your input",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    if (pendingClarify.question.isNotBlank()) {
-                        Spacer(Modifier.height(10.dp))
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ) {
-                            Text(
-                                text = pendingClarify.question,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(12.dp),
-                            )
-                        }
-                    }
-
-                    // ── Selectable quick-answer chips ──
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        text = "Quick answer",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    // Two rows of two chips; tapping one sends it immediately.
-                    val choices = listOf("Yes", "No", "Use default", "Ask again")
-                    for (r in 0 until 2) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = if (r == 0) 0.dp else 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            val i1 = r * 2
-                            val i2 = i1 + 1
-                            AssistChip(
-                                onClick = { viewModel.respondToClarify(choices[i1]) },
-                                label = { Text("${i1 + 1}. ${choices[i1]}" ) },
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (i2 < choices.size) {
-                                AssistChip(
-                                    onClick = { viewModel.respondToClarify(choices[i2]) },
-                                    label = { Text("${i2 + 1}. ${choices[i2]}" ) },
-                                    modifier = Modifier.weight(1f),
-                                )
-                            } else {
-                                Spacer(Modifier.width(0.dp))
-                            }
-                        }
-                    }
-
-                    // ── Free-text field + Send ──
-                    Spacer(Modifier.height(14.dp))
-                    OutlinedTextField(
-                        value = clarifyAnswer,
-                        onValueChange = { clarifyAnswer = it },
-                        placeholder = { Text("Type your answer…") },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 4,
-                        shape = RoundedCornerShape(10.dp),
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                // Send empty string as "dismiss" to unblock the turn
-                                viewModel.respondToClarify("")
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text("Cancel")
-                        }
-                        Button(
-                            onClick = {
-                                val answer = clarifyAnswer.trim()
-                                if (answer.isNotEmpty()) viewModel.respondToClarify(answer)
-                            },
-                            modifier = Modifier.weight(1f),
-                            enabled = clarifyAnswer.isNotBlank(),
-                        ) {
-                            Text("Send")
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // ── Clarify is rendered INLINE above the composer (bottomBar), see
+    // InlineClarifyCard below — not as a modal Dialog popup. ──
     }
 }
 
@@ -3392,5 +3275,115 @@ private fun ContextRing(used: Long?, max: Long?, modifier: Modifier = Modifier) 
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+// ── INLINE CLARIFY CARD ──
+// v0.1.134: renders a pending clarification INLINE above the composer (dsh-style)
+// instead of a modal Dialog popup, so the question is always readable and the
+// answer chips are selectable. The server sends either a single question with
+// `choices`, or nothing — in which case we fall back to free text (plus a
+// dismiss/Cancel that sends an empty string to unblock the turn).
+@Composable
+private fun InlineClarifyCard(
+    pendingClarify: PendingClarify,
+    onAnswer: (String) -> Unit,
+) {
+    var customAnswer by remember(pendingClarify.requestId) { mutableStateOf("") }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            // Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(
+                    Icons.Outlined.Psychology,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Needs your input",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            // The actual question — always readable, never truncated.
+            if (pendingClarify.question.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = pendingClarify.question,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+
+            // Server-provided answer choices as selectable chips (if any).
+            if (pendingClarify.choices.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                for (choice in pendingClarify.choices) {
+                    AssistChip(
+                        onClick = { onAnswer(choice) },
+                        label = {
+                            Text(
+                                text = choice,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+            }
+
+            // Free-text fallback + actions.
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = customAnswer,
+                    onValueChange = { customAnswer = it },
+                    placeholder = { Text("Type your answer…") },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 3,
+                    shape = RoundedCornerShape(10.dp),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { onAnswer("") }, // empty = dismiss/unblock the turn
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = {
+                        val answer = customAnswer.trim()
+                        if (answer.isNotEmpty()) onAnswer(answer)
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = customAnswer.isNotBlank(),
+                ) {
+                    Text("Send")
+                }
+            }
+        }
     }
 }
