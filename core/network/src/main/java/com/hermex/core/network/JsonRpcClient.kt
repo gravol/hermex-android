@@ -181,7 +181,16 @@ class JsonRpcClient(
             val frame = json.parseToJsonElement(raw).jsonObject
 
             val id = frame["id"]?.jsonPrimitive?.content?.toLongOrNull()
+            // v0.1.137 — envelope-tolerant notification detection. The dashboard
+            // emits notifications with the method under `method`, but a few events
+            // (notably some completion events) have arrived under `event` or with
+            // an empty/absent `params`. Recognize either key so a valid event can
+            // never silently fall through to the "unrecognized" branch and get
+            // dropped — a dropped message.completed/run.completed is exactly what
+            // strands a spinner on a short turn. `result`/`error` still win for
+            // request/response correlation.
             val method = frame["method"]?.jsonPrimitive?.content
+                ?: frame["event"]?.jsonPrimitive?.content
             val result = frame["result"]
             val error = frame["error"]
             val params = frame["params"]?.jsonObject

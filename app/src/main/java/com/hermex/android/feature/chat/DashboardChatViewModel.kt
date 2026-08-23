@@ -59,6 +59,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     private val tempIdCounter = AtomicInteger(0)
     private var resumeCount: Int = 0            // how many times session.resume was called
 
+    // v0.1.137 — tracks whether the current turn has been told it is done
+    // server-side (any completion event seen). Lets us clear `isStreaming`
+    // IMMEDIATELY instead of waiting for the stale-stream watchdog, so a
+    // dropped/late/out-of-order completion signal can no longer strand a
+    // spinner on a short "status check" turn forever.
+    private var turnDoneSeen = false
+
     // WebSocket + JSON-RPC infrastructure
     private val wsConnection = WsConnectionManager(viewModelScope)
     private val rpcClient = JsonRpcClient(wsConnection, viewModelScope)
@@ -71,7 +78,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     // many ms with no new event, the completion signal was lost → clear it so
     // the UI doesn't spin forever. Re-armed on every incoming event.
     private var staleStreamTimeoutJob: Job? = null
-    private val STALE_STREAM_GRACE_MS = 45_000L
+    // v0.1.137: was 45s (far too slow — a short turn freezes until this fires).
+    // Now ~10s, and it clears immediately if a completion signal was already
+    // seen for the still-streaming message (turnDoneSeen). Primary recovery is
+    // immediate in handleNotification; this is belt-and-suspenders.
+    private val STALE_STREAM_GRACE_MS = 10_000L
 
     // ─── Debug: timing & state tracking ───
     private var connectStartTime = 0L
@@ -91,6 +102,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         this.liveSid = ""                    // reset until session.resume returns
         this.resumedSessionId = ""           // reset until session.resume returns
         this.resumeCount = 0
+        // Fresh session VM — clear any leftover completion flag from a previous
+        // chat so the first turn's placeholder isn't immediately finalized.
+        this.turnDoneSeen = false
         this.sessionTitle = title ?: sessionId.take(16)
         uiState = ChatUiState(sessionTitle = this.sessionTitle)
         DebugLog.log("STATE", "SessionID",
@@ -375,6 +389,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         val current = uiState.messages.toMutableList()
         current.add(userMsg)
 
+        // A fresh turn starts here — clear any leftover completion flag from a
+        // previous turn so the new placeholder isn't immediately finalized.
+        this.turnDoneSeen = false
+
         // Add an empty streaming placeholder only when this is the active turn
         // (not a queued prompt sent mid-turn — that one gets its placeholder
         // lazily when its deltas start arriving).
@@ -429,6 +447,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         val userMsg = UiMessage(id = userMsgId, role = "user", content = command, timestamp = now)
         // Placeholder with spinner: slash commands (e.g. /compress) can take
         // minutes with no stream events — the user needs to see it working.
+        // A slash command is a fresh turn; clear any leftover completion flag.
+        this.turnDoneSeen = false
         val asstMsg = UiMessage(
             id = asstMsgId, role = "assistant",
             isStreaming = true, isWaitingForFirstEvent = true, timestamp = now,
@@ -722,6 +742,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         }
 
         // Add streaming assistant placeholder
+        // A retry re-submits the last user prompt — a fresh turn. Clear any
+        // leftover completion flag so this regenerated placeholder isn't
+        // immediately finalized by a stale turnDoneSeen.
+        this.turnDoneSeen = false
         val assistantMsgId = "asst_${tempIdCounter.incrementAndGet()}"
         val now = System.currentTimeMillis()
         msgs.add(UiMessage(
@@ -829,8 +853,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
             if (stillStreaming) {
                 DebugLog.log("RPC", "DashboardChat",
-                    "v0.1.123: stale-stream watchdog fired after ${STALE_STREAM_GRACE_MS}ms — " +
-                    "assistant message still marked isStreaming; completion signal was lost, clearing")
+                    "v0.1.137: stale-stream watchdog fired after ${STALE_STREAM_GRACE_MS}ms — " +
+                    "assistant message still marked isStreaming; completion signal was lost" +
+                    (if (turnDoneSeen) " (already completed server-side)" else "") + ", clearing")
                 val msgs = uiState.messages.toMutableList()
                 var cleared = 0
                 for (i in msgs.indices) {
@@ -877,6 +902,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                 "reconnect detected — re-registering session $sessionId")
                             viewModelScope.launch {
                                 try {
+                                    // Fresh turn context after reconnect — clear the
+                                    // completion flag so a re-attached placeholder isn't
+                                    // immediately finalized by a stale turnDoneSeen.
+                                    turnDoneSeen = false
                                     val result = rpcClient.sessionResume(sessionId, omitMessages = true)
                                     resumeCount++
                                     liveSid = result.session_id
@@ -907,7 +936,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                     val localThinksStreaming = uiState.messages.any {
                                         it.role == "assistant" && it.isStreaming
                                     }
-                                    if (turnDoneServerSide && localThinksStreaming) {
+                                    // v0.1.137 — also reconcile when the server's `running`
+                                    // is ambiguous (null) but we've already seen a turn-completion
+                                    // signal locally and are still stuck streaming: a full history
+                                    // reload surfaces the finished answer instead of a frozen spinner.
+                                    val reconcile = localThinksStreaming &&
+                                        (turnDoneServerSide || turnDoneSeen)
+                                    if (reconcile) {
                                         DebugLog.log("STATE", "SessionID",
                                             "reconnect: turn finished while disconnected (server running=false, " +
                                             "local still streaming=true) — reloading history to reconcile")
@@ -998,13 +1033,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
         val msgs = uiState.messages.toMutableList()
 
-        // v0.1.123 safety net — stuck-spinner guard. If a streaming content event
-        // (delta / tool event) arrives but there is NO live streaming assistant
-        // message, the completion event that was supposed to clear `isStreaming`
-        // was dropped/late/out-of-order and we'd otherwise strand a spinner
-        // forever (the "frozen thinking after a long reply" bug). Re-establish a
-        // placeholder so the late content has somewhere to land and finalize on
-        // the next completed event, instead of leaving the UI stuck.
+        // v0.1.123/137 safety net — stuck-spinner guard. If a streaming content
+        // event (delta / tool event) arrives but there is NO live streaming
+        // assistant message, the completion event that was supposed to clear
+        // `isStreaming` was dropped/late/out-of-order and we'd otherwise strand a
+        // spinner forever (the "frozen" bug). Re-establish a placeholder so the
+        // late content has somewhere to land and finalize on the next completed
+        // event, instead of leaving the UI stuck.
         if (n is RpcNotification.MessageDelta ||
             n is RpcNotification.ThinkingDelta ||
             n is RpcNotification.ReasoningDelta ||
@@ -1015,8 +1050,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             val hasLiveStream = msgs.any { it.role == "assistant" && it.isStreaming }
             if (!hasLiveStream) {
                 DebugLog.log("RPC", "DashboardChat",
-                    "v0.1.123: ${n::class.simpleName} arrived with no live stream — " +
-                    "completion was lost, re-establishing placeholder to avoid stuck spinner")
+                    "v0.1.137: ${n::class.simpleName} arrived with no live stream — " +
+                    "completion was lost, re-establishing placeholder to avoid stuck spinner" +
+                    (if (turnDoneSeen) " (turn already completed server-side)" else ""))
                 ensureStreamingPlaceholder(msgs)
             }
         }
@@ -1169,6 +1205,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
 
             is RpcNotification.MessageCompleted -> {
                 DebugLog.log("RPC", "DashboardChat", "message.completed — finalizing")
+                // The turn is done server-side — record that so even if this
+                // message's content was already applied, we clear the spinner
+                // immediately (no 45s watchdog wait) and a later stray delta can
+                // land on a fresh placeholder instead of stranding the UI.
+                this.turnDoneSeen = true
                 val idx = msgs.indexOfLast { it.role == "assistant" }
                 if (idx >= 0) {
                     val cur = msgs[idx]
@@ -1226,6 +1267,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             }
 
             is RpcNotification.RunCompleted -> {
+                // run.completed means the server finished the turn. If it arrived
+                // before/without message.completed (out-of-order or dropped), we
+                // still know the turn is done — record it so a later stray delta
+                // re-establishes a placeholder rather than stranding this spinner.
+                this.turnDoneSeen = true
                 onTurnFinished()
                 uiState = uiState.copy(isStreaming = false)
                 return
@@ -1350,13 +1396,25 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         }
 
         // Emit updated state with scrollGeneration bump for auto-scroll.
-        // isStreaming follows whether any assistant message is still streaming
-        // (a queued turn's first delta creates its placeholder mid-turn).
+        //
+        // v0.1.137 — self-healing finalization. Normally `isStreaming` follows
+        // whether any assistant message is still streaming (a queued turn's
+        // first delta creates its placeholder mid-turn). BUT if we've already
+        // received a completion signal for this turn (`turnDoneSeen`) and the
+        // only thing still marked streaming is a stale/stray placeholder, force
+        // it closed here so a dropped/out-of-order completion can never strand
+        // a spinner forever — even on a short "status check" turn with no tools.
+        val forcedClosed = turnDoneSeen && msgs.any { it.role == "assistant" && it.isStreaming }
         uiState = uiState.copy(
             messages = msgs,
-            isStreaming = msgs.any { it.role == "assistant" && it.isStreaming },
+            isStreaming = if (forcedClosed) false else msgs.any { it.role == "assistant" && it.isStreaming },
             scrollGeneration = uiState.scrollGeneration + 1,
         )
+        // A forced close just changed the last message's shape — bump scroll so
+        // the final bubble settles at the bottom (mirrors the completion paths).
+        if (forcedClosed) {
+            DebugLog.log("RPC", "DashboardChat", "v0.1.137: turn already completed but a placeholder was still streaming — force-closed to clear spinner")
+        }
     }
 
     override fun toggleTodosExpanded() {

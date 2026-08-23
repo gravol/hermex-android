@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — 2026-08-24 — Self-healing stream finalization (frozen-response fix)
+
+### Fixed
+- **"In-app the response looks frozen and I have to restart Hermex"** — after a turn finishes (even a short "status check" turn with no tools), the client sometimes fails to clear `isStreaming` on the last assistant message, so the UI shows a perpetual spinner even though the server completed the turn correctly. Root cause: a dropped / late / out-of-order `message.completed`/`run.completed` event left the placeholder stranded; the v0.1.123 "no-live-stream" guard only fires when there's *no* live stream, and the v0.1.135 reconnect reconciliation only fires on a disconnect/reconnect cycle — neither covered a turn that finishes normally while connected. Fix (`v0.1.137`): `DashboardChatViewModel` now tracks `turnDoneSeen` (set on any completion event) and **force-closes** `isStreaming` immediately when a turn is known done but a stray placeholder is still streaming — no 45s watchdog wait, no reconnect needed. Watchdog lowered to ~10s as belt-and-suspenders. `JsonRpcClient.processFrame()` now recognizes completion events under either the `method` or `event` key so they can't silently drop into the "unrecognized frame shape" branch. (`DashboardChatViewModel.kt`, `JsonRpcClient.kt`.)
+
 ## [0.1.66] — 2026-08-13 — Slash-command crash fix (NPE in deferred LazyColumn DSL)
 
 ### Fixed
