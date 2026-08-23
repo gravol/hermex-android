@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-08-22 — realigned with GitHub (was documenting v0.1.115; current is v0.1.131)
-**Current version:** v0.1.131 (versionCode 131)
-**HEAD commit:** `21108c6` (v0.1.131 — /queue command ack + native prompt.submit)
+**Last updated:** 2026-08-23 — realigned with GitHub (was documenting v0.1.131; current is v0.1.132)
+**Current version:** v0.1.132 (versionCode 132)
+**HEAD commit:** `f241aa4` (v0.1.132 — clarify dialog as chat bubble with quick-answer chips + free text)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -49,11 +49,11 @@
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-||| Latest commit | `21108c6` (v0.1.131 — /queue command ack + native prompt.submit) ||
+||| Latest commit | `f241aa4` (v0.1.132 — clarify dialog as chat bubble with quick-answer chips + free text) ||
 || Build command | `./gradlew assembleRelease --no-configuration-cache` |
 || APK output | `app/build/outputs/apk/release/app-release.apk` |
-||| Version | v0.1.131 (versionCode 131) ||
-|| Completed phase | **v0.1.131 — /queue ack + native command routing** (`/new` `/reset` via `session.create`, `/steer` via `session.steer`, `/queue` via `prompt.submit`, all with in-chat ack pills). See below for v0.1.116–v0.1.131 additions. |
+||| Version | v0.1.132 (versionCode 132) ||
+|| Completed phase | **v0.1.132 — clarify dialog as an in-chat chat bubble** (server question renders as an assistant bubble + quick-answer chips + free-text field; no more blank text box). See below for v0.1.116–v0.1.132 additions. |
 | Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) — **DONE v0.1.80** ② custom colors for everything (refine text color/text size controls) — **DONE v0.1.49–58/79/95** ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response — **DONE v0.1.66–79** ④ re-verify Obtainium update flow after CI races — **DONE v0.1.76** ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking) — **DONE v0.1.98**. Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.
@@ -109,7 +109,7 @@ This repo (`gravol/hermex-android`) is the canonical, actively developed native 
 - **Reconnect resume** — on WebSocket reconnect, calls `session.resume` to re-register the live session (fixes 4001 error after reconnect)
 - **Stop generation** — `stopStreaming()` sends `session.interrupt` RPC, clears per-message `isStreaming` flag on the last assistant message so blinking cursor / thinking ticker / typing dots disappear immediately, and dismisses any visible approval or clarify dialog. Same fix applied to legacy SSE stack.
 - **Tool approval dialog** — `PendingApproval` state model, Compose `Dialog` with Approve/Deny buttons. Notification handler correctly sets state from `ApprovalRequest` events, no more auto-deny in `JsonRpcClient`.
-- **Clarify dialog** — `PendingClarify` state model, Compose `Dialog` with question display and free-text answer input. `ClarifyRequest` notifications set `pendingClarify` state, `respondToClarify()` calls `clarify.respond` RPC. Cancel sends empty string to unblock the turn.
+- **Clarify dialog** — `PendingClarify` state model, Compose `Dialog` with the server's question rendered as an **assistant chat bubble** + numbered quick-answer chips (`1. Yes / 2. No / 3. Use default / 4. Ask again`) + free-text answer input. `ClarifyRequest` notifications set `pendingClarify` state, `respondToClarify()` calls `clarify.respond` RPC. Cancel sends empty string to unblock the turn. (Rebuilt v0.1.132 as a readable in-chat bubble — was a bare title + blank text box.)
 - **Approval RPC** — `approvalRespond()` sends correctly-param'd `approval.respond` notification to server (choice: "approve"/"deny", all: bool)
 - **Release CI** — `.github/workflows/release.yml` auto-builds APK and creates GitHub Release on push to master
 - **Debug logging** — in-app ring buffer (1000 entries), exportable from Settings
@@ -144,6 +144,9 @@ A push toward full WebUI/CLI parity: WebUI-style UI (composer capsule, menu draw
 - **v0.1.129** — fix Soul editor loading: establish the WebSocket connection **before** the `profiles` RPC so the editor actually loads content. (`SoulScreen.kt`.)
 - **v0.1.130** — **native `/new` & `/reset`** via `session.create` (bypasses `slash.exec` entirely — kills the 5030 slash-worker flakiness); **native `/steer`** via `session.steer` with an in-chat ack (including the 4010 "no active turn, applies next message" case). New `resetTargetSession` on the contract + `ChatScreen` observes it and navigates to the fresh session; lightweight non-streaming ack messages (`isCommandAck`). (`DashboardChatViewModel.handleNewSession/handleSteer/addCommandAck`, `ChatViewModelContract`, `ChatScreen.kt`, `UiModels.kt`, `JsonRpcClient.sessionSteer`.)
 - **v0.1.131** — **native `/queue`** via `prompt.submit` (server auto-queues when busy) with an in-chat ack ("✓ Queued for next turn" vs "✓ Sent"). Completes the native command set: `/new` `/reset` `/steer` `/queue` all bypass `slash.exec` and give in-chat ack pills. (`DashboardChatViewModel.handleQueue`.)
+
+### Recent versions — v0.1.132 (clarify dialog rebuild, 2026-08-23)
+- **v0.1.132** — **Clarify dialog rebuilt as an in-chat chat bubble.** Replaces the old bare "Clarification Needed" popup (which was just a title + blank text box, easy to miss) with a readable card: a "Needs your input" header (psychology icon, primary tint), the server's question rendered as an **assistant-style bubble** in a rounded `surfaceContainerHigh` surface, then a **Quick answer** row of **numbered chips** (`1. Yes / 2. No / 3. Use default / 4. Ask again` — tap sends immediately), then a free-text field + Send (Send enabled only when non-blank) + Cancel. Card widened to 300–460dp. Two commits: `4327b56` (numbered quick-choices + Other… fallback, no more blank text box) then `f241aa4` (chat-bubble styling + quick-answer chips). The server accepts any string as the answer, so chips are just presets. (`ChatScreen.kt` — clarify dialog section; no VM/contract change — `respondToClarify()` already existed.)
 
 
 ### Legacy REST+SSE stack — REMOVED (Phase 7C, v0.1.42)
