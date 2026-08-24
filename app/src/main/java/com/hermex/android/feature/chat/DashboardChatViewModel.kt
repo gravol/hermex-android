@@ -85,6 +85,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     // many ms with no new event, the completion signal was lost → clear it so
     // the UI doesn't spin forever. Re-armed on every incoming event.
     private var staleStreamTimeoutJob: Job? = null
+    // Tracks whether ANY streaming content event has arrived for the current
+    // still-streaming message. If we've seen deltas, a long gap is just a
+    // cold-start/agent-warmup pause — NOT a lost completion — so the watchdog
+    // must NOT nuke the stream (see armStaleStreamGuard). Set true on the first
+    // streaming event; reset in ensureStreamingPlaceholder.
+    private var streamingContentSeen = false
     // v0.1.137: was 45s (far too slow — a short turn freezes until this fires).
     // Now ~10s, and it clears immediately if a completion signal was already
     // seen for the still-streaming message (turnDoneSeen). Primary recovery is
@@ -887,10 +893,14 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         staleStreamTimeoutJob?.cancel()
         staleStreamTimeoutJob = viewModelScope.launch {
             delay(STALE_STREAM_GRACE_MS)
+            // If we've seen ANY streaming content for this message, a long gap is
+            // just agent-warmup (esp. on a fresh /new turn with no warm agent) —
+            // NOT a lost completion. Only nuke the stream if zero content events
+            // ever arrived (truly dead) or a completion was already seen server-side.
             val stillStreaming = uiState.messages.any {
                 it.role == "assistant" && it.isStreaming
             }
-            if (stillStreaming) {
+            if (stillStreaming && !streamingContentSeen && !turnDoneSeen) {
                 DebugLog.log("RPC", "DashboardChat",
                     "v0.1.137: stale-stream watchdog fired after ${STALE_STREAM_GRACE_MS}ms — " +
                     "assistant message still marked isStreaming; completion signal was lost" +
@@ -1056,6 +1066,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     private fun ensureStreamingPlaceholder(msgs: MutableList<UiMessage>): Int {
         val idx = msgs.indexOfLast { it.role == "assistant" && it.isStreaming }
         if (idx >= 0) return idx
+        // New placeholder for a fresh message — reset the streaming-seen flag so
+        // the stale-stream guard starts clean (a brand-new turn may have a long
+        // cold-start gap before the first delta).
+        streamingContentSeen = false
         msgs.add(
             UiMessage(
                 id = "asst_${tempIdCounter.incrementAndGet()}",
@@ -1152,6 +1166,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             is RpcNotification.MessageDelta -> {
                 val idx = ensureStreamingPlaceholder(msgs)
                 val cur = msgs[idx]
+                // First real streaming content for this message — mark so the
+                // stale-stream guard won't mistake a cold-start gap for a lost
+                // completion (see armStaleStreamGuard).
+                streamingContentSeen = true
                 msgs[idx] = cur.copy(
                     content = cur.content + n.text,
                     thinkingHasContent = true,
