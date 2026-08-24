@@ -3,6 +3,7 @@ package com.hermex.android.feature.chat
 import android.app.Application
 import android.util.Log
 import com.hermex.android.AppState
+import kotlin.runCatching
 import com.hermex.android.feature.settings.SettingsRepository
 import com.hermex.android.service.WsKeepaliveService
 import com.hermex.android.notify.CronWatcher
@@ -65,6 +66,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     // dropped/late/out-of-order completion signal can no longer strand a
     // spinner on a short "status check" turn forever.
     private var turnDoneSeen = false
+    // v0.1.140: suppress duplicate turn-finished notifications for a single
+    // completed turn. The reconnect reconciliation and the live RunCompleted
+    // path can both fire for the same completion when the WS drops during a
+    // lock; without this you'd get two pings. Cleared when a new turn starts.
+    private var turnNotifPosted = false
 
     // WebSocket + JSON-RPC infrastructure
     private val wsConnection = WsConnectionManager(viewModelScope)
@@ -105,6 +111,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         // Fresh session VM — clear any leftover completion flag from a previous
         // chat so the first turn's placeholder isn't immediately finalized.
         this.turnDoneSeen = false
+        // v0.1.140: a new chat/session — allow the next completion to ping again.
+        this.turnNotifPosted = false
         this.sessionTitle = title ?: sessionId.take(16)
         uiState = ChatUiState(sessionTitle = this.sessionTitle)
         DebugLog.log("STATE", "SessionID",
@@ -230,6 +238,26 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     "session.resume → ${messages.size} messages in ${loadDuration}ms" +
                     " (message_count=${result.message_count})")
                 sessionLoadStartTime = 0L
+
+                // v0.1.138: turn finished while disconnected. When the phone locks
+                // or Hermex is closed, the WS dies and the completion event never
+                // reaches us — but the turn keeps running server-side and this
+                // resume fetches the final answer (which is why it renders on return).
+                // Detect that case here: if the server says the turn is done AND we
+                // weren't watching, fire the turn-finished notification so you actually
+                // get pinged. Without this, completed-while-away turns are silent.
+                val lastAssistant = messages.lastOrNull { it.role == "assistant" }
+                val turnDoneServerSide = result.running == false
+                if (turnDoneServerSide && lastAssistant != null && !screenVisible) {
+                    val preview = lastAssistant.content.ifBlank { "Turn finished" }.take(200)
+                    DebugLog.log("NOTIF", "DashboardChat",
+                        "loadMessages: turn finished while away — posting turn-finished notification")
+                    runCatching {
+                        NotificationHelper.postTurnFinished(
+                            getApplication(), sessionId, uiState.sessionTitle, preview,
+                        )
+                    }
+                }
             } catch (e: JsonRpcException) {
                 if (e.code == 4007) {
                     // v0.1.89: 4007 = session not found. For a JUST-CREATED
@@ -392,6 +420,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         // A fresh turn starts here — clear any leftover completion flag from a
         // previous turn so the new placeholder isn't immediately finalized.
         this.turnDoneSeen = false
+        // v0.1.140: a new turn — allow the next completion to ping again.
+        this.turnNotifPosted = false
 
         // Add an empty streaming placeholder only when this is the active turn
         // (not a queued prompt sent mid-turn — that one gets its placeholder
@@ -449,6 +479,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         // minutes with no stream events — the user needs to see it working.
         // A slash command is a fresh turn; clear any leftover completion flag.
         this.turnDoneSeen = false
+        // v0.1.140: a new turn — allow the next completion to ping again.
+        this.turnNotifPosted = false
         val asstMsg = UiMessage(
             id = asstMsgId, role = "assistant",
             isStreaming = true, isWaitingForFirstEvent = true, timestamp = now,
@@ -746,6 +778,8 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         // leftover completion flag so this regenerated placeholder isn't
         // immediately finalized by a stale turnDoneSeen.
         this.turnDoneSeen = false
+        // v0.1.140: a fresh turn — allow the next completion to ping again.
+        this.turnNotifPosted = false
         val assistantMsgId = "asst_${tempIdCounter.incrementAndGet()}"
         val now = System.currentTimeMillis()
         msgs.add(UiMessage(
@@ -946,6 +980,21 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                         DebugLog.log("STATE", "SessionID",
                                             "reconnect: turn finished while disconnected (server running=false, " +
                                             "local still streaming=true) — reloading history to reconcile")
+                                        // v0.1.140: the full-history reload surfaces the finished
+                                        // answer, but only notifies if screenVisible was false at
+                                        // this instant. Post explicitly here too (guarded so it
+                                        // can't double-fire with Fix 1 on the same completion).
+                                        val shouldNotify = !screenVisible || com.hermex.android.AppState.isBackgrounded
+                                        if (shouldNotify && !turnNotifPosted) {
+                                            turnNotifPosted = true
+                                            val last = uiState.messages.lastOrNull { it.role == "assistant" }
+                                            val preview = last?.content?.ifBlank { "Turn finished" }?.take(200) ?: "Turn finished"
+                                            runCatching {
+                                                NotificationHelper.postTurnFinished(
+                                                    getApplication(), sessionId, uiState.sessionTitle, preview,
+                                                )
+                                            }
+                                        }
                                         loadMessages()
                                     }
                                 } catch (e: Exception) {
@@ -1272,6 +1321,22 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 // still know the turn is done — record it so a later stray delta
                 // re-establishes a placeholder rather than stranding this spinner.
                 this.turnDoneSeen = true
+                // v0.1.140: run.completed is the primary "turn done" signal but
+                // the block above never posted a turn-finished notification when
+                // away. Mirror the MessageCompleted path so completed-while-away
+                // turns actually ping. Guarded by turnNotifPosted so it can't
+                // double-fire with the reconnect reconciliation on the same turn.
+                val shouldNotify = !screenVisible || com.hermex.android.AppState.isBackgrounded
+                if (shouldNotify && !turnNotifPosted) {
+                    turnNotifPosted = true
+                    val preview = uiState.messages.lastOrNull { it.role == "assistant" }
+                        ?.content?.ifBlank { "Turn finished" }?.take(200) ?: "Turn finished"
+                    runCatching {
+                        NotificationHelper.postTurnFinished(
+                            getApplication(), sessionId, uiState.sessionTitle, preview,
+                        )
+                    }
+                }
                 onTurnFinished()
                 uiState = uiState.copy(isStreaming = false)
                 return

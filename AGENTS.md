@@ -3,12 +3,12 @@
 Hermex Android is a native Kotlin/Compose chat client for the Hermes Agent AI assistant.
 
 ## Current state
-- v0.1.131, repo `gravol/hermex-android` (PUBLIC since 2026-08-12)
+- v0.1.137, repo `gravol/hermex-android` (PUBLIC since 2026-08-12)
 - Dashboard at `http://100.80.204.66:9119` (REST + WebSocket)
 - Full architecture in `PROJECT_HANDOFF_CURRENT.md`
 
 ## Next step
-**None pending** — v0.1.131: native `/new` `/reset` `/steer` `/queue` command routing with in-chat acks; WebUI-style composer + menu drawer; Agent Soul editor; file attachments.
+**Fixes #1 & #2 from field-device QA:** #1 approval-notification-click-kills-in-flight-response (RESOLVED/re-verified 2026-08-22, needs final confirmation), #2 cron check-ins missing (fixed v0.1.118–119, needs live re-verify). See `PROJECT_HANDOFF_CURRENT.md` → "PENDING / NEXT".
 
 ## Key files
 - `PROJECT_HANDOFF_CURRENT.md` — complete project state

@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
 **Last updated:** 2026-08-23 — realigned with GitHub (was documenting v0.1.134; current is v0.1.135)
-**Current version:** v0.1.136 (versionCode 136)
+**Current version:** v0.1.137 (versionCode 137)
 **HEAD commit:** `pending` (v0.1.135 — reconnect reconciles a turn that finished while disconnected, so no more "seems crashed" forced reopen)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -172,6 +172,20 @@ A push toward full WebUI/CLI parity: WebUI-style UI (composer capsule, menu draw
   - **Fix (`JsonRpcClient.kt`):** `processFrame()` now reads the notification `method` from either `frame["method"]` OR `frame["event"]`, so a completion event under an unexpected key can't silently fall through to the "unrecognized frame shape" drop branch. Request/response correlation still checks `id` first, so responses are unaffected.
   - **Fix (reconnect):** reconnect reconciliation now also does a full `loadMessages()` when `isStreaming` is stuck even if the server's `running` flag is ambiguous/absent — covers the reconnect path too.
   - **Covers ALL cases:** short turns, long tool-heavy turns, mid-turn reconnects, and dropped/late/out-of-order completion events. (`DashboardChatViewModel.kt`, `JsonRpcClient.kt`.)
+
+### Recent versions — v0.1.140 (turn-finished notification fix for lock/app-switch, 2026-08-24)
+- **v0.1.140** — **Turn-finished notifications now fire when the phone locks or app is switched away.** Fixes the "completed a turn while locked / backgrounded and never got pinged" bug (field-device QA #3 follow-up).
+  - **Root cause:** The turn-finished notification was posted in exactly ONE place — `MessageCompleted` handler (`handleNotification()`), gated on `!screenVisible || AppState.isBackgrounded`. Two completion paths were silent:
+    1. **`RunCompleted`** (the primary "turn done" signal from the server) set `turnDoneSeen = true` and called `onTurnFinished()` — but `onTurnFinished()` only sets a banner flag (`completedWhileAway`), it never posts a notification. So any turn that completes via `run.completed` while away was silent.
+    2. **Reconnect reconciliation** (WS `Disconnected→Connected`) did a full `loadMessages()` to surface the finished answer, but only posted a notification if `!screenVisible` at that exact instant — during an app-switch `screenVisible` can still be true, so the ping was skipped even though the app was backgrounded.
+  - **Fix (`DashboardChatViewModel.kt`):**
+    - Added `turnNotifPosted` flag (declared alongside `turnDoneSeen`). Set at both notification sites; cleared at every new-turn reset (`init`, `submitPrompt`, `sendSlashCommand`, reconnect resume) so the next completion can ping again. This dedups — the reconnect reconciliation and the live `RunCompleted` path can both fire for the same completion when the WS drops during a lock, so without this you'd get two pings.
+    - **`RunCompleted`** now posts a turn-finished notification (guarded by `!screenVisible || isBackgrounded && !turnNotifPosted`) mirroring the `MessageCompleted` path.
+    - **Reconnect reconciliation** now posts explicitly too, guarded so it can't double-fire with the `RunCompleted` path on the same completion.
+  - **Operator precedence note:** condition is `(!screenVisible || AppState.isBackgrounded) && !turnNotifPosted` — parens are REQUIRED because `&&` binds tighter than `||`. Without them the dedup guard only protects the backgrounded branch.
+  - **Preview source:** reads `uiState.messages.lastOrNull { role == "assistant" }?.content` for the notification preview. Note this may reflect a partial/in-progress reply if the completion event arrives before streaming is cleared — acceptable for a preview line, but flagging it.
+  - **Server-side companion fix (NOT in this repo):** `HERMES_TUI_WS_ORPHAN_REAP_GRACE_S=300` set via systemd drop-in on BigRed's dashboard gateway (`~/.config/systemd/user/hermes-dashboard.service.d/01-orphan-grace.conf`) — extends the WS-orphan reap grace from 20s to 5min so a client that pauses between `session.create` and first message isn't reaped. Without this, the reap race (4007 on fresh sessions) eats the create→first-run window. See `docs/WS_ORPHAN_REAP_BUG.md`.
+  - **Revert path:** remove the systemd drop-in + `systemctl --user daemon-reload && systemctl --user restart hermes-dashboard.service`; revert the ViewModel edits by removing the `turnNotifPosted` field + both notification posts.
 
 ### Recent versions — v0.1.136 (Soul editor JSON-RPC timeout fix, 2026-08-23)
 - **v0.1.136** — **The Agent Soul editor (SOUL.md) stops timing out on open.** Fixes the "json-rpc error -1 request profile.describe timed out after 30000ms" that appears when navigating to the Soul screen.
