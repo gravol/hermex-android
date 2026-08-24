@@ -14,8 +14,9 @@ data class SessionSummary(
     @SerialName("end_reason") val endReason: String? = null,
     @SerialName("message_count") val messageCount: Int = 0,
     @SerialName("tool_call_count") val toolCallCount: Int = 0,
-    @SerialName("input_tokens") val inputTokens: Long = 0,
-    @SerialName("output_tokens") val outputTokens: Long = 0,
+    // Token usage for Insights aggregation (input + output per session).
+    @SerialName("input_tokens") val inputTokens: Long = -1,
+    @SerialName("output_tokens") val outputTokens: Long = -1,
     @SerialName("last_active") val lastActive: Double? = null,
     @SerialName("last_activity_at") val lastActivityAt: Double? = null,
     @SerialName("last_activity_description") val lastActivityDescription: String? = null,

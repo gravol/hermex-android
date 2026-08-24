@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -469,6 +470,8 @@ class JsonRpcClient(
         val model: String? = null,
         val source: String? = null,
         val preview: String? = null,
+        @SerialName("input_tokens") val input_tokens: Long? = null,
+        @SerialName("output_tokens") val output_tokens: Long? = null,
         val is_active: Boolean? = null,
     )
 

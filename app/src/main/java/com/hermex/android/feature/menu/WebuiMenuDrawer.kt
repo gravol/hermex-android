@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -85,6 +86,12 @@ fun WebuiMenuDrawer(
                             onClick = { panel = "tasks" },
                         )
                         RailButton(
+                            icon = { Icons.Filled.BarChart },
+                            label = "Insights",
+                            selected = panel == "insights",
+                            onClick = { panel = "insights" },
+                        )
+                        RailButton(
                             icon = { Icons.Outlined.Handyman },
                             label = "Skills",
                             selected = panel == "skills",
@@ -138,6 +145,10 @@ fun WebuiMenuDrawer(
                                 subtitle = "Hermes skills — browse and inspect.",
                                 actionLabel = "Open Skills",
                                 onAction = { onNavigate("skills") },
+                                onClose = { panel = "chat" },
+                            )
+                            "insights" -> InsightsPanel(
+                                sessions = state.sessions,
                                 onClose = { panel = "chat" },
                             )
                             "settings" -> SettingsPanel(onNavigate = onNavigate)

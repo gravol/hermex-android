@@ -169,6 +169,8 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
             lastActive = updated_at?.let { parseIsoToEpoch(it) },
             messageCount = message_count ?: 0,
             preview = preview,
+            inputTokens = input_tokens ?: -1,
+            outputTokens = output_tokens ?: -1,
         )
     }
 
