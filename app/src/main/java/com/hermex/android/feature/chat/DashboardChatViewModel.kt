@@ -7,6 +7,7 @@ import kotlin.runCatching
 import com.hermex.android.feature.settings.SettingsRepository
 import com.hermex.android.service.WsKeepaliveService
 import com.hermex.android.notify.CronWatcher
+import com.hermex.android.notify.TurnWatcher
 import com.hermex.android.notify.NotificationHelper
 import com.hermex.core.network.DashboardApiClient
 import com.hermex.core.network.NetworkResult
@@ -451,6 +452,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 submitWithSelfHeal(text)
                 DebugLog.log("STATE", "SessionID",
                     "prompt.submit OK: sessionId=$sessionId")
+                // v0.1.141 — arm an alarm to fire ~90s out so a turn-finished
+                // notification can still be posted if the phone is locked/app
+                // backgrounded and the WS completion event never arrives live.
+                TurnWatcher.arm(getApplication(), sessionId)
             } catch (e: Exception) {
                 Log.e("Hermex", "DashboardChatViewModel: promptSubmit failed", e)
                 DebugLog.log("STATE", "SessionID",
@@ -1259,6 +1264,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 // immediately (no 45s watchdog wait) and a later stray delta can
                 // land on a fresh placeholder instead of stranding the UI.
                 this.turnDoneSeen = true
+                // v0.1.141 — turn done live, cancel the pending alarm so it
+                // doesn't fire and double-notify (or wake the phone pointlessly).
+                runCatching { TurnWatcher.cancel(getApplication(), sessionId) }
                 val idx = msgs.indexOfLast { it.role == "assistant" }
                 if (idx >= 0) {
                     val cur = msgs[idx]
@@ -1321,6 +1329,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 // still know the turn is done — record it so a later stray delta
                 // re-establishes a placeholder rather than stranding this spinner.
                 this.turnDoneSeen = true
+                // v0.1.141 — turn done live, cancel the pending alarm so it
+                // doesn't fire and double-notify (or wake the phone pointlessly).
+                runCatching { TurnWatcher.cancel(getApplication(), sessionId) }
                 // v0.1.140: run.completed is the primary "turn done" signal but
                 // the block above never posted a turn-finished notification when
                 // away. Mirror the MessageCompleted path so completed-while-away

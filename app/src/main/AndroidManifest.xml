@@ -76,6 +76,18 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- v0.1.141: turn-finished alarm. exported=true — AlarmManager must be
+             able to deliver the broadcast to this receiver even when the app is
+             backgrounded/killed (same rule as CronAlarmReceiver). -->
+        <receiver
+            android:name=".service.TurnFinishedAlarmReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.hermex.android.action.TURN_FINISHED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
