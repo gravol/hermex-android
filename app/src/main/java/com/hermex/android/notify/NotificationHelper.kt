@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
 import com.hermex.android.MainActivity
+import com.hermex.core.network.DebugLog
 import java.net.URLEncoder
 
 /**
@@ -122,21 +123,30 @@ object NotificationHelper {
         ).addRemoteInput(remoteInput).build()
     }
 
-    /** A chat turn finished while the chat screen wasn't visible. */
+    /** A chat turn finished while the chat screen wasn't visible.
+     *
+     * v0.1.144: built on the loud ALERTS channel (IMPORTANCE_HIGH + vibration +
+     * PRIORITY_HIGH), matching postApproval — a plain IMPORTANCE_DEFAULT
+     * turn-finished notification was silently swallowed / shown as an
+     * unobtrusive card on Android 13+, so "turn finished" never surfaced even
+     * when it fired. This is what made approval requests reliably noticed and
+     * turn-finished notifications effectively silent. */
     fun postTurnFinished(context: Context, sessionKey: String, sessionTitle: String, preview: String) {
         ensureChannels(context)
         val title = sessionTitle.ifBlank { "Hermes" }
         val text = preview.take(200).ifBlank { "Turn finished" }
-        val notification = NotificationCompat.Builder(context, CHANNEL_TURNS)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(openSessionIntent(context, sessionKey, title))
             .addAction(replyAction(context, sessionKey, title))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(turnNotificationId(sessionKey), notification) }
+        DebugLog.log("NOTIF", "TurnWatcher", "postTurnFinished posted for $sessionKey (title=$title)")
     }
 
     /** Foreground notification while NotificationReplyService submits a reply (v0.1.98). */
@@ -155,11 +165,12 @@ object NotificationHelper {
     /** The inline reply could not be delivered (v0.1.98). */
     fun postReplyFailed(context: Context, sessionKey: String, title: String) {
         ensureChannels(context)
-        val notification = NotificationCompat.Builder(context, CHANNEL_TURNS)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentTitle(title.ifBlank { "Hermes" })
             .setContentText("⚠️ Reply failed — check connection and try again")
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(turnNotificationId(sessionKey), notification) }
     }
