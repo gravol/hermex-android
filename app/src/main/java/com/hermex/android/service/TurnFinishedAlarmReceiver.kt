@@ -18,11 +18,20 @@ class TurnFinishedAlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            ACTION_ALARM -> {
-                val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
-                if (sessionId.isNotEmpty()) TurnWatcher.onAlarm(context, sessionId)
+        // goAsync() keeps the receiver alive until the async work finishes —
+        // WITHOUT this, Doze can kill the process mid-coroutine when the app was
+        // backgrounded/killed, silently dropping the notification. Mirrors
+        // CronAlarmReceiver exactly (which is why cron pings work while locked).
+        val pending = goAsync()
+        try {
+            when (intent.action) {
+                ACTION_ALARM -> {
+                    val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
+                    if (sessionId.isNotEmpty()) TurnWatcher.onAlarm(context, sessionId)
+                }
             }
+        } finally {
+            pending.finish()
         }
     }
 }

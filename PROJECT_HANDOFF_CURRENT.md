@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
 **Last updated:** 2026-08-23 — realigned with GitHub (was documenting v0.1.134; current is v0.1.135)
-**Current version:** v0.1.137 (versionCode 137)
+**Current version:** v0.1.141 (versionCode 141)
 **HEAD commit:** `pending` (v0.1.135 — reconnect reconciles a turn that finished while disconnected, so no more "seems crashed" forced reopen)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -186,6 +186,19 @@ A push toward full WebUI/CLI parity: WebUI-style UI (composer capsule, menu draw
   - **Preview source:** reads `uiState.messages.lastOrNull { role == "assistant" }?.content` for the notification preview. Note this may reflect a partial/in-progress reply if the completion event arrives before streaming is cleared — acceptable for a preview line, but flagging it.
   - **Server-side companion fix (NOT in this repo):** `HERMES_TUI_WS_ORPHAN_REAP_GRACE_S=300` set via systemd drop-in on BigRed's dashboard gateway (`~/.config/systemd/user/hermes-dashboard.service.d/01-orphan-grace.conf`) — extends the WS-orphan reap grace from 20s to 5min so a client that pauses between `session.create` and first message isn't reaped. Without this, the reap race (4007 on fresh sessions) eats the create→first-run window. See `docs/WS_ORPHAN_REAP_BUG.md`.
   - **Revert path:** remove the systemd drop-in + `systemctl --user daemon-reload && systemctl --user restart hermes-dashboard.service`; revert the ViewModel edits by removing the `turnNotifPosted` field + both notification posts.
+
+### Recent versions — v0.1.141 (turn-finished notifications while LOCKED via AlarmManager, 2026-08-25)
+- **v0.1.141** — **Turn-finished notifications now fire even when the phone is locked and the app process is killed.** This fixes the v0.1.140 case that still didn't work: locking mid-turn killed the app, the WS dropped, and no completion event ever reached the client — so no notification could fire at all.
+  - **Root cause (the real reason it was elusive):** The turn-finished notification is posted *inside the app process*, triggered by a WebSocket completion event (`message.completed` / `run.completed`). When you lock your phone, Android eventually kills the process and the WS disconnects — so the completion event never arrives at any client code. My v0.1.140 fix (posted in both completion handlers) was correct *but could only fire if the event reached the app first.* The existing v0.1.138 path had the same flaw — that's why this bug persisted.
+  - **The insight:** Your phone already gets notifications while locked for **cron check-ins**. Those work because they use an `AlarmManager` alarm + `CronAlarmReceiver`, not a WS event. Alarms wake the OS directly and bypass app state entirely. So I mirrored that exact pattern.
+  - **Fix — new `TurnWatcher` (`notify/TurnWatcher.kt`) + `TurnFinishedAlarmReceiver` (`service/TurnFinishedAlarmReceiver.kt`):**
+    - On `prompt.submit OK`, `DashboardChatViewModel` calls `TurnWatcher.arm(context, sessionId)` → arms a local alarm to fire ~90s out (`setExactAndAllowWhileIdle`).
+    - When the alarm fires, `TurnFinishedAlarmReceiver` wakes (even if app was killed/locked), calls `TurnWatcher.onAlarm()` which queries `DashboardApiClient.sessionMessages(sessionId, 3)` via REST and checks whether the last assistant message has content (turn done server-side).
+    - If finished → post turn-finished notification once, clear bookkeeping. If still running → re-arm every 2 min up to MAX_CHECKS (30 ≈ 9 min past initial fire), then give up quietly. If it can't reach the server → retry once more.
+    - When a completion event arrives **live** (`MessageCompleted` / `RunCompleted` in `handleNotification()`), `TurnWatcher.cancel(context, sessionId)` is called so the alarm doesn't fire and double-notify (or wake the phone pointlessly).
+  - **Manifest:** `<receiver android:name=".service.TurnFinishedAlarmReceiver" android:exported="true">` registered with action `com.hermex.android.action.TURN_FINISHED`. Must be `exported=true` — same rule as `CronAlarmReceiver` — so AlarmManager can deliver the broadcast when the app is backgrounded/killed.
+  - **Login reuse:** reuses `DashboardApiClient.sessionMessages()` which already does cookie-auth + 401 auto-relogin + `NetworkResult`, no new auth path. Login cooldown (30 min) mirrors CronWatcher to avoid hammering the gateway.
+  - **Revert path:** remove the two files, drop the `<receiver>` from the manifest, revert the two `TurnWatcher.cancel()` calls in `handleNotification()`, and remove the `TurnWatcher.arm()` call after `prompt.submit OK`. (`DashboardChatViewModel.kt`, `AndroidManifest.xml`.)
 
 ### Recent versions — v0.1.136 (Soul editor JSON-RPC timeout fix, 2026-08-23)
 - **v0.1.136** — **The Agent Soul editor (SOUL.md) stops timing out on open.** Fixes the "json-rpc error -1 request profile.describe timed out after 30000ms" that appears when navigating to the Soul screen.
