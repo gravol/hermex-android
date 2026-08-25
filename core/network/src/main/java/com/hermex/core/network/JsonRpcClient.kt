@@ -468,8 +468,9 @@ class JsonRpcClient(
     data class SessionInfo(
         val id: String,
         val title: String? = null,
-        val created_at: String? = null,
-        val updated_at: String? = null,
+        // Server sends started_at/ended_at as epoch seconds (Double), NOT ISO strings.
+        @SerialName("started_at") val started_at: Double? = null,
+        @SerialName("ended_at") val ended_at: Double? = null,
         val message_count: Int? = null,
         val model: String? = null,
         val source: String? = null,

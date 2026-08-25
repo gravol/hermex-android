@@ -17,9 +17,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
 
 data class SessionsUiState(
     val sessions: List<SessionSummary> = emptyList(),
@@ -196,8 +193,9 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
             title = title,
             source = source,
             model = model,
-            startedAt = created_at?.let { parseIsoToEpoch(it) },
-            lastActive = updated_at?.let { parseIsoToEpoch(it) },
+            // Server sends started_at/ended_at as epoch seconds (Double), not ISO strings.
+            startedAt = started_at,
+            endedAt = ended_at,
             messageCount = message_count ?: 0,
             preview = preview,
             inputTokens = input_tokens ?: -1,
@@ -206,21 +204,5 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
     }
 
     companion object {
-        private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-
-        /**
-         * Parse ISO-8601 timestamp (e.g. "2026-07-17T12:34:56") to epoch seconds.
-         * Returns null on parse failure.
-         */
-        private fun parseIsoToEpoch(iso: String): Double? {
-            return try {
-                val date = isoFormat.parse(iso.substringBefore('.').substringBefore('Z'))
-                date?.time?.toDouble()?.div(1000.0)
-            } catch (_: Exception) {
-                null
-            }
-        }
     }
 }
