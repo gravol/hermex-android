@@ -1,5 +1,7 @@
 package com.hermex.android.feature.menu
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,17 +20,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -59,8 +68,17 @@ fun InsightsPanel(
     onClose: () -> Unit,
 ) {
     var window by rememberSaveable { mutableIntStateOf(INSIGHTS_DAY) }
+    // Model filter: null = all models, or a specific model label.
+    val allModels = remember(sessions) {
+        sessions.mapNotNull { it.model?.takeIf { m -> m.isNotBlank() }?.let { modelLabel(it) } }
+            .distinct().sorted()
+    }
+    var selectedModel by rememberSaveable { mutableStateOf<String?>(null) }
 
-    val usable = remember(sessions) { sessions.filter { it.inputTokens >= 0 || it.outputTokens >= 0 } }
+    val usable = remember(sessions) {
+        sessions.filter { it.inputTokens >= 0 || it.outputTokens >= 0 }
+            .filter { selectedModel == null || modelLabel(it.model) == selectedModel }
+    }
 
     // Sessions whose last activity falls inside the selected window.
     val inWindow = remember(usable, window) {
@@ -96,7 +114,7 @@ fun InsightsPanel(
             }
         }
 
-        // Window segmented control: DAY / WEEK / MONTH
+        // Window segmented control: DAY / WEEK / MONTH — uniform size, only color changes.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -105,26 +123,43 @@ fun InsightsPanel(
         ) {
             val labels = listOf("DAY" to INSIGHTS_DAY, "WEEK" to INSIGHTS_WEEK, "MONTH" to INSIGHTS_MONTH)
             labels.forEach { (label, w) ->
-                if (window == w) {
+                Button(
+                    onClick = { window = w },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (window == w) MaterialTheme.colorScheme.primary
+                                          else Color.Transparent,
+                        contentColor = if (window == w) MaterialTheme.colorScheme.onPrimary
+                                       else MaterialTheme.colorScheme.primary,
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                ) {
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primary)
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
                     )
-                } else {
-                    OutlinedButton(
-                        onClick = { window = w },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Text(label, style = MaterialTheme.typography.labelSmall)
-                    }
                 }
+            }
+        }
+
+        // Model filter dropdown (only if multiple models exist).
+        if (allModels.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "MODEL",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF888888),
+                    modifier = Modifier.weight(1f),
+                )
+                ModelFilterDropdown(allModels, selectedModel) { selectedModel = it }
             }
         }
 
@@ -248,6 +283,65 @@ private fun ModelRow(row: ModelUsageRow) {
         )
     }
     HorizontalDivider(color = Color(0xFF2A2A45))
+}
+
+/** Model filter dropdown in the Insights header. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModelFilterDropdown(
+    models: List<String>,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = selected ?: "All Models",
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            modifier = Modifier.menuAnchor(),
+            shape = RoundedCornerShape(8.dp),
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+            ),
+            trailingIcon = {
+                Icon(
+                    Icons.Filled.ArrowDropDown,
+                    contentDescription = "Select model",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            },
+        )
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("All Models") },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                },
+            )
+            models.forEach { model ->
+                DropdownMenuItem(
+                    text = { Text(model) },
+                    onClick = {
+                        onSelect(model)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
 }
 
 // ── Window math ──
