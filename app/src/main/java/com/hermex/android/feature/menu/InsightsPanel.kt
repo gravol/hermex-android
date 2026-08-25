@@ -120,7 +120,7 @@ fun InsightsPanel(
                     OutlinedButton(
                         onClick = { window = w },
                         shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonTextColor(MaterialTheme.colorScheme.primary)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text(label, style = MaterialTheme.typography.labelSmall)
                     }
