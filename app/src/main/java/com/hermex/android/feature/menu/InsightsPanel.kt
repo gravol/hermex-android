@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -109,14 +110,18 @@ fun InsightsPanel(
                         text = label,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF141425),
+                        color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.primary)
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
                     )
                 } else {
-                    OutlinedButton(onClick = { window = w }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                    OutlinedButton(
+                        onClick = { window = w },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonTextColor(MaterialTheme.colorScheme.primary)
+                    ) {
                         Text(label, style = MaterialTheme.typography.labelSmall)
                     }
                 }
