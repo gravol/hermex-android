@@ -178,6 +178,16 @@ sealed class RpcNotification {
         val info: JsonObject? = null,
     ) : RpcNotification()
 
+    /**
+     * The dashboard broadcast a `sessions.changed` event — the session list on
+     * the server changed (cron run, other client, turn completion). Clients that
+     * hold a cached session list (Chat panel, Insights) should refetch so they
+     * never show stale data. Carries no session_id; it's a global broadcast.
+     */
+    data class SessionChanged(
+        override val sessionId: String? = null,
+    ) : RpcNotification()
+
     // ── Fallback for unrecognized events ──
 
     data class Unknown(

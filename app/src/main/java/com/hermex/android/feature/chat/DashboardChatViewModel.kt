@@ -1477,6 +1477,13 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 )
             }
 
+            is RpcNotification.SessionChanged -> {
+                // Global broadcast — the session list changed server-side. The
+                // SessionsViewModel observes this and refetches; here we just
+                // note it so the event isn't silently dropped.
+                DebugLog.log("RPC", "DashboardChat", "sessions.changed — SessionsVM will reload")
+            }
+
             is RpcNotification.Unknown -> {
                 Log.w("Hermex", "DashboardChat: unknown event: ${n.eventType}")
                 DebugLog.log("RPC", "DashboardChat", "unknown event: ${n.eventType} — rawParams=${n.rawParams?.toString()?.take(200)}")

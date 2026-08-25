@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.hermex.android.feature.settings.SettingsRepository
 import com.hermex.core.network.DebugLog
 import com.hermex.core.network.JsonRpcClient
+import com.hermex.core.network.RpcNotification
 import com.hermex.core.network.SessionSummary
 import com.hermex.core.network.WsConnectionManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,12 +36,42 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
 
     private val settingsRepo = SettingsRepository(application)
 
+    /**
+     * Persistent RPC client used to observe `sessions.changed` broadcasts. A
+     * dedicated WS connection lives for the ViewModel's lifetime so session-list
+     * changes reach us without a full reconnect (see [init]).
+     */
+    private var observerClient: JsonRpcClient? = null
+
     /** Locally pinned session ids (desktop-style client-side pinning). */
     val pinnedIds: StateFlow<Set<String>> = settingsRepo.pinnedSessionIds
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     init {
         loadSessions()
+        // Establish a persistent observer connection and start watching for
+        // `sessions.changed` broadcasts. The dashboard fires this after any
+        // external session-list change (cron runs, other clients, turn
+        // completion). Without refetching on it, the cached list goes stale —
+        // which is exactly why Insights showed "no usage data" even after the
+        // gateway started returning token counts.
+        viewModelScope.launch {
+            try {
+                val ws = WsConnectionManager(viewModelScope)
+                ws.connect()
+                observerClient = JsonRpcClient(ws, viewModelScope).apply { start() }
+            } catch (_: Exception) {
+                observerClient = null
+            }
+            observerClient?.let { client ->
+                client.notifications.collect { n ->
+                    if (n is RpcNotification.SessionChanged) {
+                        DebugLog.log("INFO", "SessionsVM", "sessions.changed → reload")
+                        loadDashboardSessions()
+                    }
+                }
+            }
+        }
     }
 
     fun loadSessions() {

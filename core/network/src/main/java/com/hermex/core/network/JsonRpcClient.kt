@@ -411,6 +411,10 @@ class JsonRpcClient(
                 info = params["payload"]?.jsonObject ?: params,
             )
 
+            "sessions.changed" -> RpcNotification.SessionChanged(
+                sessionId = sessionId,
+            )
+
             else -> RpcNotification.Unknown(
                 eventType = eventType,
                 rawParams = params,
