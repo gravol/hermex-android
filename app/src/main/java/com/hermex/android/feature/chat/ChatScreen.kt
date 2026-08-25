@@ -1389,7 +1389,7 @@ fun ChatScreen(
                         )
                     }
 
-                    // ── Command description (what will happen) ──
+                    // ── Command description (what will happen) — scrollable ──
                     if (pendingApproval.description.isNotBlank()) {
                         Spacer(Modifier.height(12.dp))
                         Text(
@@ -1406,14 +1406,16 @@ fun ChatScreen(
                             Text(
                                 text = pendingApproval.description,
                                 style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(12.dp),
+                                modifier = Modifier
+                                    .padding(12.dp)
+                                    .verticalScroll(rememberScrollState()),
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
 
-                    // ── Raw arguments (full detail) ──
+                    // ── Raw arguments (full detail) — scrollable ──
                     if (pendingApproval.toolArgs.isNotEmpty()) {
                         Spacer(Modifier.height(12.dp))
                         Text(
@@ -1430,7 +1432,9 @@ fun ChatScreen(
                             Text(
                                 text = pendingApproval.toolArgs,
                                 style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(12.dp),
+                                modifier = Modifier
+                                    .padding(12.dp)
+                                    .verticalScroll(rememberScrollState()),
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                             )
