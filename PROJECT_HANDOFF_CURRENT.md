@@ -704,6 +704,10 @@ Parked at Jeff's request; implement on a future pass. **Item 6 done in v0.1.95**
 5. **Theme mode System/Dark/Light** — accent + overrides currently force dark (`accentColorScheme` always returns `darkColorScheme`).
 6. ~~**Theme extra surfaces** — code blocks (syntax-highlight bg), thinking box, tool cards, context gauge.~~ **DONE in v0.1.95.**
 
+### DONE in v0.1.153 (2026-08-26) — Live activity panel focused on thinking
+- **Feature** — the docked live `LiveActivityPanel` is now dedicated to showing your reasoning, with tool calls capped at 2 visible rows (expandable). When there are more than 2 tools, a "Show N more" / "Show less" toggle appears in the TOOLS header; only the first 2 render until expanded. Auto-scroll lands on the last row actually shown (uses the capped count, not the full list). (`ChatScreen.kt` — `LiveActivityPanel`, `showAllTools` state, `maxVisibleTools = 2`.)
+- **Note** — finished-message tool boxes (ToolScrollBox) are untouched; this cap is live-panel-only.
+
 ### DONE in v0.1.110 (2026-08-18) — New session creation fixed
 - **Bug** — tapping "New session" did nothing (or hung for 10s then failed silently). Root cause: `fetchWsTicket()` did not call `login()` before fetching the WebSocket ticket. If session cookies were expired/missing, the server returned 401, the `DashboardAuthenticator` interceptor re-logged in but the ticket fetch didn't wait for the new cookies to be set before opening the WS — the ticket fetch failed, the reconnect loop started, `waitForConnection()` timed out after 10s, and `onDone(null)` was called (UI does nothing on null). **Fix:** `fetchWsTicket()` now calls `login(dashboardUsername, dashboardPassword)` before the HTTP call when `isConfigured` is true. (`DashboardApiClient.kt`)
 - **Also:** tok/s rendered fallback verified working.
