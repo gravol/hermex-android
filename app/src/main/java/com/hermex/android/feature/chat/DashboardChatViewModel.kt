@@ -954,7 +954,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                     // Fresh turn context after reconnect — clear the
                                     // completion flag so a re-attached placeholder isn't
                                     // immediately finalized by a stale turnDoneSeen.
-                                    turnDoneSeen = false
+                                    // v0.1.151: keep turnDoneSeen if we've already seen a
+                                    // completion for this session, so a dropped/late completion
+                                    // during reconnect churn still force-clears the spinner.
+                                    if (!turnDoneSeen) turnDoneSeen = false
                                     val result = rpcClient.sessionResume(sessionId, omitMessages = true)
                                     resumeCount++
                                     liveSid = result.session_id
@@ -989,8 +992,14 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                                     // is ambiguous (null) but we've already seen a turn-completion
                                     // signal locally and are still stuck streaming: a full history
                                     // reload surfaces the finished answer instead of a frozen spinner.
+                                    // v0.1.151 — also reconcile if WE think we're still streaming
+                                    // even with no completion signal at all: under heavy reconnect
+                                    // churn (constant sessions.changed reloads) the lightweight
+                                    // omitMessages resume can miss a turn that finished mid-churn,
+                                    // leaving a stranded spinner with neither running=false nor
+                                    // turnDoneSeen set. A full history reload is safe and idempotent.
                                     val reconcile = localThinksStreaming &&
-                                        (turnDoneServerSide || turnDoneSeen)
+                                        (turnDoneServerSide || turnDoneSeen || !streamingContentSeen)
                                     if (reconcile) {
                                         DebugLog.log("STATE", "SessionID",
                                             "reconnect: turn finished while disconnected (server running=false, " +

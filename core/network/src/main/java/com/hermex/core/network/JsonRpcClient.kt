@@ -50,6 +50,11 @@ class JsonRpcClient(
     @PublishedApi
     internal val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    /** Whether the underlying WS connection is currently live. Exposed so callers
+     * (e.g. SessionsViewModel) can reuse a healthy observer socket instead of
+     * opening a fresh one per request. */
+    val isConnected: Boolean get() = connection.isConnected
+
     @PublishedApi
     internal val requestCounter = AtomicLong(1)
     @PublishedApi

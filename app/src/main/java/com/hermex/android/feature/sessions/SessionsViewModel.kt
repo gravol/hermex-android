@@ -144,21 +144,43 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ── Dashboard JSON-RPC session.list ──
-
+    /**
+     * Load the session list from the dashboard via JSON-RPC `session.list`.
+     *
+     * v0.1.151: reuse the persistent observer connection (established in [init])
+     * when it's already live, instead of opening a fresh WS + login on every
+     * reload. `sessions.changed` fires constantly (cron runs, other clients, turn
+     * completion); each reload spinning up a new WS previously triggered a re-login
+     * that tripped the server's brute-force throttle and churned reconnects. The
+     * observer holds one long-lived connection for all reloads. Falls back to a
+     * fresh connection only if the observer isn't available (e.g. it errored out).
+     */
     private suspend fun loadDashboardSessions() {
         DebugLog.log("INFO", "SessionsVM", "loadSessions via DASHBOARD JsonRpcClient.sessionList()")
         Log.d("Hermex", "SessionsViewModel: loading dashboard sessions")
 
-        val wsConnection = WsConnectionManager(viewModelScope)
+        val rpcClient = observerClient?.takeIf { it.isConnected }
+            ?: run {
+                DebugLog.log("INFO", "SessionsVM", "observer unavailable — opening fresh WS connection")
+                val wsConnection = WsConnectionManager(viewModelScope)
+                try {
+                    wsConnection.connect()
+                    JsonRpcClient(wsConnection, viewModelScope).apply { start() }
+                } catch (e: Exception) {
+                    Log.e("Hermex", "SessionsViewModel: fresh session load failed", e)
+                    DebugLog.log("ERROR", "SessionsVM", "fresh session.list failed: ${e.message}")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Dashboard: ${e.message ?: "Session load failed"}",
+                    )
+                    return
+                } finally {
+                    wsConnection.disconnect()
+                }
+                return
+            }
 
         try {
-            // Connect WS
-            wsConnection.connect()
-
-            val rpcClient = JsonRpcClient(wsConnection, viewModelScope)
-            rpcClient.start()
-
             val rpcSessions = rpcClient.sessionList()
             DebugLog.log("INFO", "SessionsVM", "session.list → ${rpcSessions.size} sessions")
 
@@ -180,8 +202,6 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
                 isLoading = false,
                 error = "Dashboard: ${e.message ?: "Session load failed"}",
             )
-        } finally {
-            wsConnection.disconnect()
         }
     }
 
