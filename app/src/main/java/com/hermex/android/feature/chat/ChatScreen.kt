@@ -2284,6 +2284,11 @@ private fun LiveActivityPanel(
         val sec = s % 60
         return if (m > 0) "${m}m ${sec}s" else "${sec}s"
     }
+    // v0.1.138: live panel is dedicated to thinking — cap visible tool rows at
+    // two, with an expand toggle so the rest are still reachable (not hidden).
+    var showAllTools by remember { mutableStateOf(false) }
+    val maxVisibleTools = 2
+    val visibleToolCount = if (showAllTools) toolCalls.size else kotlin.math.min(maxVisibleTools, toolCalls.size)
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
@@ -2376,6 +2381,8 @@ private fun LiveActivityPanel(
                 }
                 // v0.1.96: TOOLS section — its own header (matching the finished
                 // ToolScrollBox), visually separated from the THINKING block.
+                // v0.1.138: capped at 2 visible rows with an expand toggle so the
+                // live panel stays focused on thinking, not a tool dump.
                 if (toolsVisible) {
                     item(key = "tools-header") {
                         Column {
@@ -2401,21 +2408,36 @@ private fun LiveActivityPanel(
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                Spacer(Modifier.weight(1f))
+                                // v0.1.138: expand/collapse when there's more than the
+                                // capped 2 visible rows.
+                                if (toolCalls.size > maxVisibleTools) {
+                                    Text(
+                                        text = if (showAllTools) "Show less" else "Show ${toolCalls.size - maxVisibleTools} more",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
                             }
                         }
                     }
                     // itemsIndexed (positional key): tool ids can duplicate (history
                     // replay defaults them to "tc") — an explicit key would crash.
-                    itemsIndexed(toolCalls) { _, tc ->
+                    // v0.1.138: only render the first N (or all when expanded).
+                    val cappedTools = if (showAllTools) toolCalls else toolCalls.take(maxVisibleTools)
+                    itemsIndexed(cappedTools) { _, tc ->
                         ToolActivityRow(toolCall = tc, now = now)
                     }
                 }
             }
             // Auto-scroll the panel to the newest activity
-            LaunchedEffect(thinking.length, toolCalls.size, toolsVisible, showThinking) {
+            // v0.1.138: count only the capped visible tool rows when collapsed,
+            // so scroll lands on the last row actually shown (not a hidden one).
+            LaunchedEffect(thinking.length, toolCalls.size, toolsVisible, showThinking, showAllTools) {
                 val thinkingShown = showThinking && thinking.isNotBlank()
                 val headerCount = (if (thinkingShown) 1 else 0) + (if (toolsVisible) 1 else 0)
-                val count = (if (toolsVisible) toolCalls.size else 0) + headerCount
+                val count = (if (toolsVisible) visibleToolCount else 0) + headerCount
                 if (count > 0) listState.scrollToItem(count - 1)
             }
         }
