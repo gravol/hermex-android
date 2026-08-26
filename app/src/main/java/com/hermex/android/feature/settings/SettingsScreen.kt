@@ -505,6 +505,11 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            // v0.1.156: filter sections + levels before exporting
+            DebugLogFilters()
+
+            Spacer(Modifier.height(8.dp))
+
             Button(
                 onClick = {
                     scope.launch {
@@ -824,6 +829,70 @@ private fun ColorSwatchRow(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DebugLogFilters() {
+    val sections = listOf(
+        DebugLog.Section.CONNECTION to "Connection",
+        DebugLog.Section.APP to "App",
+        DebugLog.Section.SYSTEM to "System",
+    )
+    val levels = listOf("REQ" to "Requests", "RESP" to "Responses", "SSE" to "Events", "INFO" to "Info", "ERROR" to "Errors")
+
+    Column {
+        // Section toggles
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Sections", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = if (sections.all { DebugLog.isSectionEnabled(it.first) }) "All" else "${sections.count { DebugLog.isSectionEnabled(it.first) }} of ${sections.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        sections.forEach { (section, label) ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                Checkbox(
+                    checked = DebugLog.isSectionEnabled(section),
+                    onCheckedChange = { DebugLog.setSectionEnabled(section, it) },
+                )
+                Text(label, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Level toggles
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Levels", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = if (levels.all { DebugLog.isLevelEnabled(it.first) }) "All" else "${levels.count { DebugLog.isLevelEnabled(it.first) }} of ${levels.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        levels.forEach { (level, label) ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                Checkbox(
+                    checked = DebugLog.isLevelEnabled(level),
+                    onCheckedChange = { DebugLog.setLevelEnabled(level, it) },
+                )
+                Text(label, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Reset filters button
+        OutlinedButton(
+            onClick = { DebugLog.resetFilters() },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Reset All Filters")
         }
     }
 }
