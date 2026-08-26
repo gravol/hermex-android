@@ -155,33 +155,55 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
      * observer holds one long-lived connection for all reloads. Falls back to a
      * fresh connection only if the observer isn't available (e.g. it errored out).
      */
+    /**
+     * Cold-start bug (v0.1.157): the fallback path opened a throwaway WS
+     * connection and `return`ed WITHOUT ever calling sessionList(), so on a
+     * first launch — when the observer connection isn't live yet — the list
+     * stayed stuck on the loading spinner until an unrelated `sessions.changed`
+     * broadcast happened to fire minutes later. Now the fresh connection actually
+     * fetches before it disconnects, and both paths share one apply function.
+     */
     private suspend fun loadDashboardSessions() {
         DebugLog.log("INFO", "SessionsVM", "loadSessions via DASHBOARD JsonRpcClient.sessionList()")
         Log.d("Hermex", "SessionsViewModel: loading dashboard sessions")
 
-        val rpcClient = observerClient?.takeIf { it.isConnected }
-            ?: run {
-                DebugLog.log("INFO", "SessionsVM", "observer unavailable — opening fresh WS connection")
-                val wsConnection = WsConnectionManager(viewModelScope)
-                try {
-                    wsConnection.connect()
-                    JsonRpcClient(wsConnection, viewModelScope).apply { start() }
-                } catch (e: Exception) {
-                    Log.e("Hermex", "SessionsViewModel: fresh session load failed", e)
-                    DebugLog.log("ERROR", "SessionsVM", "fresh session.list failed: ${e.message}")
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Dashboard: ${e.message ?: "Session load failed"}",
-                    )
-                    return
-                } finally {
-                    wsConnection.disconnect()
-                }
-                return
-            }
+        val liveClient = observerClient?.takeIf { it.isConnected }
+        if (liveClient != null) {
+            applySessionList(liveClient)
+            return
+        }
 
+        // Observer not live yet (normal on cold start): open a throwaway WS,
+        // fetch session.list, then disconnect. The old version returned here
+        // without ever calling sessionList(), leaving the list stuck on the
+        // spinner until an unrelated sessions.changed fired minutes later.
+        DebugLog.log("INFO", "SessionsVM", "observer unavailable — opening fresh WS connection")
+        val wsConnection = WsConnectionManager(viewModelScope)
         try {
-            val rpcSessions = rpcClient.sessionList()
+            wsConnection.connect()
+            val freshClient = JsonRpcClient(wsConnection, viewModelScope).apply { start() }
+            applySessionList(freshClient)
+        } catch (e: Exception) {
+            Log.e("Hermex", "SessionsViewModel: fresh session load failed", e)
+            DebugLog.log("ERROR", "SessionsVM", "fresh session.list failed: ${e.message}")
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = "Dashboard: ${e.message ?: "Session load failed"}",
+            )
+        } finally {
+            wsConnection.disconnect()
+        }
+    }
+
+    /**
+     * Fetch session.list and fold the result into [uiState]. Shared by the
+     * live-observer path and the cold-start fresh-connection fallback so both
+     * actually populate the list (the old fresh path silently returned without
+     * fetching — see loadDashboardSessions).
+     */
+    private suspend fun applySessionList(client: JsonRpcClient) {
+        try {
+            val rpcSessions = client.sessionList()
             DebugLog.log("INFO", "SessionsVM", "session.list → ${rpcSessions.size} sessions")
 
             val mapped = rpcSessions.map { it.toSessionSummary() }

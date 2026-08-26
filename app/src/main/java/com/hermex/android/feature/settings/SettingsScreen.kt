@@ -842,22 +842,47 @@ private fun DebugLogFilters() {
     )
     val levels = listOf("REQ" to "Requests", "RESP" to "Responses", "SSE" to "Events", "INFO" to "Info", "ERROR" to "Errors")
 
+    // v0.1.157: the filter state lives in plain (non-snapshot) mutable fields
+    // on DebugLog, so toggling a checkbox mutated them WITHOUT triggering a
+    // recomposition — the M3 Checkbox animates to the new state then snaps back
+    // to its last real `checked` value, so it always looked "solid". Read the
+    // values through Compose snapshot state so the whole panel re-renders on
+    // every toggle. The setters still write DebugLog directly (that's what the
+    // export path reads); we just mirror into local val/vars for display.
+    var sectionEnabled by remember { mutableStateOf(DebugLog.isSectionEnabled(DebugLog.Section.CONNECTION)) }
+    var appEnabled by remember { mutableStateOf(DebugLog.isSectionEnabled(DebugLog.Section.APP)) }
+    var systemEnabled by remember { mutableStateOf(DebugLog.isSectionEnabled(DebugLog.Section.SYSTEM)) }
+    val levelEnabled = levels.associateBy({ it.first }) { DebugLog.isLevelEnabled(it.first) }
+
     Column {
         // Section toggles
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Sections", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.weight(1f))
+            val onCount = listOf(sectionEnabled, appEnabled, systemEnabled).count { it }
             Text(
-                text = if (sections.all { DebugLog.isSectionEnabled(it.first) }) "All" else "${sections.count { DebugLog.isSectionEnabled(it.first) }} of ${sections.size}",
+                text = if (onCount == sections.size) "All" else "$onCount of ${sections.size}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         sections.forEach { (section, label) ->
+            val checked = when (section) {
+                DebugLog.Section.CONNECTION -> sectionEnabled
+                DebugLog.Section.APP -> appEnabled
+                else -> systemEnabled
+            }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                 Checkbox(
-                    checked = DebugLog.isSectionEnabled(section),
-                    onCheckedChange = { DebugLog.setSectionEnabled(section, it) },
+                    checked = checked,
+                    onCheckedChange = { enabled ->
+                        DebugLog.setSectionEnabled(section, enabled)
+                        when (section) {
+                            DebugLog.Section.CONNECTION -> sectionEnabled = enabled
+                            DebugLog.Section.APP -> appEnabled = enabled
+                            else -> systemEnabled = enabled
+                        }
+                    },
                 )
                 Text(label, style = MaterialTheme.typography.bodyMedium)
             }
@@ -869,8 +894,9 @@ private fun DebugLogFilters() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Levels", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.weight(1f))
+            val onLevelCount = levels.count { levelEnabled[it.first] == true }
             Text(
-                text = if (levels.all { DebugLog.isLevelEnabled(it.first) }) "All" else "${levels.count { DebugLog.isLevelEnabled(it.first) }} of ${levels.size}",
+                text = if (onLevelCount == levels.size) "All" else "$onLevelCount of ${levels.size}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -878,8 +904,10 @@ private fun DebugLogFilters() {
         levels.forEach { (level, label) ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                 Checkbox(
-                    checked = DebugLog.isLevelEnabled(level),
-                    onCheckedChange = { DebugLog.setLevelEnabled(level, it) },
+                    checked = levelEnabled[level] == true,
+                    onCheckedChange = { enabled ->
+                        DebugLog.setLevelEnabled(level, enabled)
+                    },
                 )
                 Text(label, style = MaterialTheme.typography.bodyMedium)
             }
@@ -889,7 +917,12 @@ private fun DebugLogFilters() {
 
         // Reset filters button
         OutlinedButton(
-            onClick = { DebugLog.resetFilters() },
+            onClick = {
+                DebugLog.resetFilters()
+                sectionEnabled = true
+                appEnabled = true
+                systemEnabled = true
+            },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Reset All Filters")
