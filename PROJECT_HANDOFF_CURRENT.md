@@ -9,6 +9,14 @@
 
 ---
 
+## [0.1.156] — 2026-08-26 — Debug-log filter checkboxes + cold-start session list
+
+### Fixed
+- **Debug-log section/level toggles do nothing when tapped (all stay "solid")** — the `Checkbox` components read their `checked` value from plain mutable fields on the `DebugLog` object (`isSectionEnabled` / `isLevelEnabled`), which are NOT Compose snapshot state. Toggling a checkbox mutated those fields but never triggered a recomposition, so the fully-controlled M3 `Checkbox` animated to the new state then snapped back to its last real value — it always looked stuck on. Fix: mirror the filter state into local `remember { mutableStateOf(...) }` vars in `DebugLogFilters()` so every toggle re-renders the panel; the setters still write `DebugLog` (what the export path reads). (`SettingsScreen.kt`, `DebugLog.kt`.)
+- **Session list stuck on loading spinner for minutes after first launch** — on a cold start the persistent observer WebSocket isn't connected yet, so `SessionsViewModel.loadDashboardSessions()` took the fresh-connection fallback path, which opened a throwaway WS connection and returned WITHOUT ever calling `session.list()`. The list stayed on the loading spinner until an unrelated `sessions.changed` broadcast happened to fire minutes later (once the observer finally connected). Fix: the fresh-connection path now actually calls `session.list()` before disconnecting; both paths share one `applySessionList()` helper so neither can silently skip the fetch. (`SessionsViewModel.kt`.)
+
+---
+
 ### PENDING / NEXT (unstarted)
 - **Notification bugs from field device QA** — approval notification click kills in-flight response (#1), cron check-ins missing (#2), turn-finished pings missing (#3). Status: partially addressed by the team since the handoff was written:
   - **#2 cron-check-in-missing & #3 turn-finished-pings-missing → fixed v0.1.118–v0.1.119.** v0.1.118 added diagnostics logging turn-finished delivery results; v0.1.119 fixed the root cause — a just-reaped session returns 4007 while its DB row is mid-flush (`ws_orphan_reap` window), so `submitWithSelfHeal` now backs off (~1.5s) and retries `session.resume` before falling back to direct send (see `docs/WS_ORPHAN_REAP_BUG.md`). v0.1.120 added a waiting-for-model label so reasoning-OFF turns don't look stuck; v0.1.121 fixed the THINKING box elapsed-time readout freezing at 0s. **Re-verify on the field device** — these were device-QA notes, and the fixes are code-only (not yet confirmed live).
