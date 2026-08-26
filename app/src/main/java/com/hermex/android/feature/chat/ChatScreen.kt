@@ -1369,7 +1369,12 @@ fun ChatScreen(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 ),
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .heightIn(max = 640.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
                     // ── Title with tool name ──
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1406,9 +1411,7 @@ fun ChatScreen(
                             Text(
                                 text = pendingApproval.description,
                                 style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier
-                                    .padding(12.dp)
-                                    .verticalScroll(rememberScrollState()),
+                                modifier = Modifier.padding(12.dp),
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1432,9 +1435,7 @@ fun ChatScreen(
                             Text(
                                 text = pendingApproval.toolArgs,
                                 style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier
-                                    .padding(12.dp)
-                                    .verticalScroll(rememberScrollState()),
+                                modifier = Modifier.padding(12.dp),
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                             )
