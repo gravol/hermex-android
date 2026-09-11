@@ -1239,10 +1239,21 @@ fun ChatScreen(
                                     && msg.isStreaming
                                     && !msg.thinkingHasContent
 
-                            // During streaming, live thinking + tool activity live
-                            // in the docked LiveActivityPanel (bottom); the
-                            // in-stream versions only render once the turn is
-                            // done (tools + thinking above the final answer).
+                            // v0.1.159: during streaming the main list renders only a
+                            // frozen spinner placeholder — thinking lives inside the
+                            // docked (200dp, clipped) LiveActivityPanel, so there is no
+                            // growing content in the main list for the StreamLoop's
+                            // auto-scroll to follow. Render a truncated inline preview
+                            // line here so the existing StreamLoop snapshot keys on it
+                            // and the chat scrolls to follow while thinking. Cleared
+                            // once real content/tools arrive (turn ends → ThinkingScrollBox).
+                            if (msg.role == "assistant" && msg.isStreaming && showThinking) {
+                                val preview = msg.thinkingText.orEmpty().take(120)
+                                if (preview.isNotBlank()) {
+                                    LiveThinkingPreviewLine(text = preview)
+                                }
+                            }
+
                             if (showLiveThinking && !state.isStreaming && showThinking) {
                                 LiveThinkingTicker(text = msg.thinkingText)
                             }
@@ -1600,6 +1611,42 @@ private fun LiveThinkingTicker(text: String) {
                 )
             }
         }
+    }
+}
+
+// v0.1.159: single-line live-thinking preview rendered INSIDE the main chat
+// list during streaming (see ChatScreen ~line 1246). The StreamLoop's
+// auto-scroll keys on the last item's content length, so this growing line is
+// what makes the chat follow while thinking — before it existed the main list
+// showed only a frozen spinner placeholder and never scrolled until the first
+// tool call. Kept visually quiet (dimmed monospace) so it reads as "thinking",
+// not an answer, and disappears once the turn ends.
+@Composable
+private fun LiveThinkingPreviewLine(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.Start,
+    ) {
+        Text(
+            text = "●",
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+            fontSize = 9.sp,
+            modifier = Modifier.padding(top = 1.dp, end = 6.dp),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontStyle = FontStyle.Italic,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+            ),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

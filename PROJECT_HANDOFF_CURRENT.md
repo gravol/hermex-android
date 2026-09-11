@@ -1,11 +1,41 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-09-11 — realigned with GitHub (current is v0.1.157)
-**Current version:** v0.1.157 (versionCode 158)
-**HEAD commit:** `52bdfcd` (v0.1.157 — bump session.resume/prompt.submit client timeouts)
+**Last updated:** 2026-09-11 — realigned with GitHub (current is v0.1.159)
+**Current version:** v0.1.159 (versionCode 160)
+**HEAD commit:** `fe1f083` (v0.1.158 — bump session.resume/prompt.submit client timeouts)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
+
+---
+
+## [0.1.159] — 2026-09-11 — Thinking auto-scroll during streaming + slash-command (5030) fallback
+
+Two fixes, both verified against current code and the server source:
+
+- **Fix #2 (thinking no auto-scroll):** The plan's root cause was stale. During
+  streaming the main list renders only a frozen spinner placeholder; thinking
+  lives inside the docked (200dp, clipped) `LiveActivityPanel`, so the StreamLoop
+  had nothing to follow. Fixed by rendering a truncated inline live-thinking
+  preview line (`LiveThinkingPreviewLine`) inside the main list during streaming
+  — gives the existing StreamLoop auto-scroll a growing item to follow. Disappears
+  when the turn ends (then `ThinkingScrollBox` renders). Files: `ChatScreen.kt`
+  (~line 1246 insertion + new composable ~line 1625).
+
+- **Fix #3 (`/yolo` / slash commands failing):** The plan's liveSid theory was
+  WRONG. Jeff's actual error was server-side — `JSON-RPC error 5030: slash worker
+  re-spawn failed: slash worker exited`. `slash.exec` routes through a server-side
+  slash-worker subprocess that can crash; no client patch fixes a dead worker. But
+  `command.dispatch` runs these commands in-process (`_handle_yolo_command`,
+  `slash_commands.py:3982`) and never touches the worker. Added a fallback branch
+  in `execSlashWithFallbacks`: on `e.code == 5030 || message.contains("slash
+  worker")`, route through `command.dispatch` (same shape as the existing 4018
+  handler). Fixes `/yolo` and any other slash command dying with a slash-worker
+  error. File: `DashboardChatViewModel.kt` (~line 548).
+
+Build clean (JDK 17): v0.1.159 / versionCode 160, 30.8 MB APK. Nothing pushed to
+GitHub/Obtainium yet — see AGENTS.md release protocol (commit alone → CI → tag
+separately). `/yolo` not fired live.
 
 ---
 

@@ -550,6 +550,19 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             rpcClient.slashExec(sessionId, command)
         } catch (e: JsonRpcException) {
             when {
+                // v0.1.159: slash.exec routes through a server-side slash-worker
+                // subprocess that can crash ("slash worker exited" / 5030). The
+                // command itself is fine — only the worker transport died. Fall
+                // back to command.dispatch, which runs these commands in-process
+                // (e.g. _handle_yolo_command) and never touches the dead worker.
+                e.code == 5030 || e.message?.contains("slash worker") == true -> {
+                    val trimmed = command.trim().removePrefix("/")
+                    val base = trimmed.substringBefore(' ').lowercase()
+                    val arg = trimmed.substringAfter(' ', "").trim()
+                    DebugLog.log("RPC", "DashboardChat",
+                        "slash.exec slash-worker error → command.dispatch name=$base arg=$arg (liveSid=$liveSid)")
+                    rpcClient.commandDispatch(liveSid.ifBlank { sessionId }, base, arg)
+                }
                 e.code == 4018 && e.message?.contains("command.dispatch") == true -> {
                     val trimmed = command.trim().removePrefix("/")
                     val base = trimmed.substringBefore(' ').lowercase()
