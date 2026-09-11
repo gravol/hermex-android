@@ -668,7 +668,7 @@ class JsonRpcClient(
             "sessionResume called with sessionId=$sessionId omitMessages=$omitMessages")
         val params = mutableMapOf<String, Any>("session_id" to sessionId)
         if (omitMessages) params["omit_messages"] = true
-        val result: SessionResumeResult = request("session.resume", params)
+        val result: SessionResumeResult = request("session.resume", params, timeoutMs = 60_000)
         DebugLog.log("STATE", "SessionID",
             "sessionResume result: session_id=${result.session_id} " +
             "resumed=${result.resumed} session_key=${result.session_key} " +
@@ -677,7 +677,7 @@ class JsonRpcClient(
     }
 
     suspend fun promptSubmit(sessionId: String, text: String): PromptSubmitResult =
-        request("prompt.submit", mapOf("session_id" to sessionId, "text" to text))
+        request("prompt.submit", mapOf("session_id" to sessionId, "text" to text), timeoutMs = 120_000)
 
     suspend fun sessionInterrupt(sessionId: String): JsonObject =
         request("session.interrupt", mapOf("session_id" to sessionId))
