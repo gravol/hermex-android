@@ -111,7 +111,10 @@ object NotificationHelper {
             context,
             (sessionKey.hashCode() and 0x7fffffff) + 1000,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            // MUTABLE: a PendingIntent carrying a RemoteInput cannot be FLAG_IMMUTABLE —
+            // Android throws when the notification is built, which silently killed every
+            // turn-finished notification (the build was wrapped in runCatching {}).
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
         val remoteInput = RemoteInput.Builder(KEY_REPLY_TEXT)
             .setLabel("Reply")
