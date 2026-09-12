@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.162] — 2026-09-12 — Single scroll surface for thinking during streaming
+
+### Fixed
+- **Thinking text scrolled in two places at once during a turn.** While the model reasoned, the main transcript rendered a truncated inline `LiveThinkingPreviewLine` *and* the docked LiveActivityPanel ran its own nested LazyColumn, so the same thinking text scrolled independently in both. Fix: removed the preview line from the main list; the main-list auto-scroll now keys on content + tool calls only (the StreamLoop snapshot no longer includes `thinkingText.length`). Thinking scrolls exclusively inside the docked panel during streaming; post-turn `ThinkingScrollBox` behavior is unchanged.
+
 ## [0.1.161] — 2026-09-11 — Live thinking panel auto-scroll on first message
 
 ### Fixed

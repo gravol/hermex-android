@@ -518,7 +518,7 @@ fun ChatScreen(
                 val last = s.messages.last()
                 Triple(
                     s.messages.size,
-                    last.content.length + (last.thinkingText?.length ?: 0),
+                    last.content.length,
                     last.toolCalls.size,
                 )
             }
@@ -1239,20 +1239,14 @@ fun ChatScreen(
                                     && msg.isStreaming
                                     && !msg.thinkingHasContent
 
-                            // v0.1.159: during streaming the main list renders only a
-                            // frozen spinner placeholder — thinking lives inside the
-                            // docked (200dp, clipped) LiveActivityPanel, so there is no
-                            // growing content in the main list for the StreamLoop's
-                            // auto-scroll to follow. Render a truncated inline preview
-                            // line here so the existing StreamLoop snapshot keys on it
-                            // and the chat scrolls to follow while thinking. Cleared
-                            // once real content/tools arrive (turn ends → ThinkingScrollBox).
-                            if (msg.role == "assistant" && msg.isStreaming && showThinking) {
-                                val preview = msg.thinkingText.orEmpty().take(120)
-                                if (preview.isNotBlank()) {
-                                    LiveThinkingPreviewLine(text = preview)
-                                }
-                            }
+                            // v0.1.162: removed — during streaming, thinking lives ONLY in
+                            // the docked LiveActivityPanel (its own nested LazyColumn). The
+                            // main list rendered a truncated inline preview line here too,
+                            // so the same text scrolled in two independent places at
+                            // different rates ("scroll in two places"). Main-list auto-scroll
+                            // now keys on content + tool calls only; thinking scrolls inside
+                            // the panel. Cleared once real content/tools arrive (turn ends →
+                            // ThinkingScrollBox).
 
                             if (showLiveThinking && !state.isStreaming && showThinking) {
                                 LiveThinkingTicker(text = msg.thinkingText)
