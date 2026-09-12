@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.161] — 2026-09-11 — Live thinking panel auto-scroll on first message
+
+### Fixed
+- **Live activity (thinking) panel did not live-scroll on the first assistant turn** — new streaming text appeared below the THINKING box and only began tracking once a tool card fired. Root cause: when no tool calls have arrived yet, the panel's LazyColumn has a single tall THINKING item at index 0, and `scrollToItem(count - 1)` = `scrollToItem(0)` aligns that item's **top** to the viewport top, so text streaming past the 200.dp viewport scrolled off-screen. Fix: in the pure-thinking case (thinking is the only item), scroll by the measured content height minus the viewport (`BoxWithConstraints` + `scrollBy`) so its bottom edge stays visible as it grows; the tools path keeps the original `scrollToItem(count - 1)`.
+
 ## [0.1.156] — 2026-08-26 — Debug-log filter checkboxes + cold-start session list
 
 ### Fixed

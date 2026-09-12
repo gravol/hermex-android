@@ -2399,6 +2399,10 @@ private fun LiveActivityPanel(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
             val listState = rememberLazyListState()
+            // v0.1.161: measured pixel height of the growing THINKING item
+            // (captured via BoxWithConstraints during layout). Used to follow
+            // its bottom edge without racing live layoutInfo timing.
+            var thinkingHeight by remember { mutableStateOf(0f) }
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -2407,9 +2411,15 @@ private fun LiveActivityPanel(
             ) {
                 if (thinkingVisible) {
                     item(key = "thinking") {
-                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                            Text(
-                                text = "THINKING",
+                        BoxWithConstraints(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            // Record the measured height so the scroll effect
+                            // can pin the bottom edge of a tall single item.
+                            thinkingHeight = this.minHeight.value.toFloat()
+                            Column {
+                                Text(
+                                    text = "THINKING",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2426,6 +2436,7 @@ private fun LiveActivityPanel(
                             )
                         }
                     }
+                }
                 }
                 // v0.1.96: TOOLS section — its own header (matching the finished
                 // ToolScrollBox), visually separated from the THINKING block.
@@ -2479,14 +2490,29 @@ private fun LiveActivityPanel(
                     }
                 }
             }
-            // Auto-scroll the panel to the newest activity
-            // v0.1.138: count only the capped visible tool rows when collapsed,
-            // so scroll lands on the last row actually shown (not a hidden one).
+            // Auto-scroll the panel to the newest activity.
+            // v0.1.161: when thinking is the only item (no tool calls yet), it's
+            // a single tall item at index 0; scrollToItem(0) pins its TOP, so new
+            // text streaming past the 200.dp viewport scrolled off-screen and only
+            // started tracking once a tool call added later items. In that
+            // pure-thinking case scroll by the measured height minus the viewport
+            // so its bottom edge is always visible (measured via BoxWithConstraints).
             LaunchedEffect(thinking.length, toolCalls.size, toolsVisible, showThinking, showAllTools) {
                 val thinkingShown = showThinking && thinking.isNotBlank()
                 val headerCount = (if (thinkingShown) 1 else 0) + (if (toolsVisible) 1 else 0)
                 val count = (if (toolsVisible) visibleToolCount else 0) + headerCount
-                if (count > 0) listState.scrollToItem(count - 1)
+                if (count > 0) {
+                    // Pure-thinking case: thinking is the only item and grows in place.
+                    if (!toolsVisible && thinkingShown) {
+                        listState.scrollToItem(0)
+                        val viewportHeight = listState.layoutInfo.viewportSize.height.toFloat()
+                        if (thinkingHeight > viewportHeight) {
+                            listState.scrollBy(thinkingHeight - viewportHeight)
+                        }
+                    } else {
+                        listState.scrollToItem(count - 1)
+                    }
+                }
             }
         }
     }
