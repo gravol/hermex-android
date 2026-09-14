@@ -1,8 +1,8 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-09-11 — realigned with GitHub (current is v0.1.159)
-**Current version:** v0.1.159 (versionCode 160)
-**HEAD commit:** `fe1f083` (v0.1.158 — bump session.resume/prompt.submit client timeouts)
+**Last updated:** 2026-09-14 — realigned with GitHub (current is v0.1.163)
+**Current version:** v0.1.163 (versionCode 164)
+**HEAD commit:** `bae6f9e` → pending v0.1.163 commit
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
@@ -89,11 +89,11 @@ separately). `/yolo` not fired live.
 | Canonical path | `/home/jeff/HermexAndroid` |
 | Remote URL | `git@github.com:gravol/hermex-android.git` |
 | Branch | `master` |
-||| Latest commit | `pending` (v0.1.137 — self-healing stream finalization: a dropped/late completion signal can no longer strand a spinner, even on short turns) ||
-|| Build command | `./gradlew assembleRelease --no-configuration-cache` |
-|| APK output | `app/build/outputs/apk/release/app-release.apk` |
-||| Version | v0.1.137 (versionCode 137) ||
-|| Completed phase | **v0.1.137 — self-healing stream finalization** (see section below). See below for v0.1.116–v0.1.137 additions. |
+|||| Latest commit | `pending` (v0.1.163 — self-healing pure-thinking panel scroll + dead-code cleanup) ||
+||| Build command | `./gradlew assembleRelease --no-configuration-cache` |
+||| APK output | `app/build/outputs/apk/release/app-release.apk` |
+|||| Version | v0.1.163 (versionCode 164) ||
+||| Completed phase | **v0.1.163 — self-healing pure-thinking panel scroll + dead-code cleanup** (see section below). |
 | Next phase | **2026-08-14 plan (from Jeff):** ① move ALL cron management into the app (create/edit/pause/delete from CronScreen — currently list+action only) — **DONE v0.1.80** ② custom colors for everything (refine text color/text size controls) — **DONE v0.1.49–58/79/95** ③ message layout final pass: thinking = own box, tools = own box (tools ONLY), streamed response stays as-is (scrollable live), both boxes sit ABOVE the response — **DONE v0.1.66–79** ④ re-verify Obtainium update flow after CI races — **DONE v0.1.76** ⑤ **lock-screen interaction** — notification "Reply" action with RemoteInput (inline reply from lock screen → prompt.submit → reply arrives as new notification; full lock-screen chat loop without unlocking) — **DONE v0.1.98**. Note: literal lock-screen *widgets* aren't stock Android (launcher-specific); notification actions are the standard path. |
 
 > **Stale copy: `/mnt/storage/projects/HermexPort`** — Different git history (7 commits, no remote, version 0.2.0). Abandoned early port that was never pushed. **Do not edit.** The canonical repo is `/home/jeff/HermexAndroid`.

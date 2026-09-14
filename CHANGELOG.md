@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.163] — 2026-09-14 — Self-healing pure-thinking panel scroll + dead-code cleanup
+
+### Fixed
+- **Pure-thinking live panel could lose the bottom edge and never re-pin it.** During a turn with substantial thinking but no content/tools yet, the docked `LiveActivityPanel` has a single tall THINKING item. The old code scrolled to top (`scrollToItem(0)`) then compensated with `scrollBy(thinkingHeight - viewportHeight)`, where `thinkingHeight` comes from `BoxWithConstraints.minHeight`. That manual math was the *only* path — there was no self-correction loop, so if `thinkingHeight` lagged a frame (or drifted), the newest thinking streamed off-screen and stayed off until some unrelated state change flipped the panel to its tools branch. The tools branch (`scrollToItem(count - 1)`) is robust because LazyColumn computes its own offset from live layout state every frame — so scrolling "worked" once a tool appeared but silently drifted in pure-thinking mode. Fix: after `scrollToItem(0)` (which forces a layout pass), read the actual item bottom from live `layoutInfo` and scrollBy the overflow — the same proven pattern `autoScrollToBottom()` uses for the main list — then cross-check against `thinkingHeight` so any residual frame drift self-corrects instead of piling up. Built on the v0.1.161 BoxWithConstraints lesson (authoritative height source) but adds the missing self-healing correction path.
+
+### Cleaned Up
+- **Removed provably-dead code.** A `showLiveThinking` local fed a `LiveThinkingTicker` branch gated on `msg.isStreaming && !state.isStreaming`. Every Message's `isStreaming` is assigned `= state.isStreaming` (line 1144), so the global never lags the per-message flag and those two states can never diverge — the branch was impossible by construction. Removed rather than leaving dead code that looks like a real post-stream path.
+
 ## [0.1.162] — 2026-09-12 — Single scroll surface for thinking during streaming
 
 ### Fixed

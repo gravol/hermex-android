@@ -1233,11 +1233,14 @@ fun ChatScreen(
                             val sameSender = index > 0 && state.messages[index - 1].role == msg.role
 
                             // Live thinking block: shown ABOVE the assistant bubble
-                            // while thinking is streaming and no real content has arrived yet
-                            val showLiveThinking = msg.role == "assistant"
-                                    && msg.thinkingText != null
-                                    && msg.isStreaming
-                                    && !msg.thinkingHasContent
+                            // while thinking is streaming and no real content has arrived yet.
+                            // v0.1.163: the showLiveThinking local was removed — it fed a
+                            // LiveThinkingTicker branch that required msg.isStreaming &&
+                            // !state.isStreaming, but every Message's isStreaming is assigned
+                            // = state.isStreaming (line 1144), so those two states can never
+                            // diverge and the branch was provably unreachable. Kept here only as
+                            // explanatory history; the inline thinking preview it guarded no
+                            // longer exists in this list block.
 
                             // v0.1.162: removed — during streaming, thinking lives ONLY in
                             // the docked LiveActivityPanel (its own nested LazyColumn). The
@@ -1248,9 +1251,14 @@ fun ChatScreen(
                             // the panel. Cleared once real content/tools arrive (turn ends →
                             // ThinkingScrollBox).
 
-                            if (showLiveThinking && !state.isStreaming && showThinking) {
-                                LiveThinkingTicker(text = msg.thinkingText)
-                            }
+                            // v0.1.163: dead code removed. showLiveThinking requires
+                            // msg.isStreaming == true, but line 1144 assigns every Message's
+                            // isStreaming = state.isStreaming, so the global never lags the
+                            // per-message flag. The condition below therefore required a message
+                            // to be streaming while the global state was NOT — impossible by
+                            // construction. LiveThinkingTicker only ever fired if those two states
+                            // diverged, which they structurally cannot; removed rather than left
+                            // as misleading dead code that looks like a real post-stream path.
 
                             // After the turn, thinking persists as a scrollable
                             // box above the tools+answer (during streaming it
@@ -2497,11 +2505,30 @@ private fun LiveActivityPanel(
                 val count = (if (toolsVisible) visibleToolCount else 0) + headerCount
                 if (count > 0) {
                     // Pure-thinking case: thinking is the only item and grows in place.
+                    // v0.1.163: self-healing bottom-pin. scrollToItem(0) aligns the item
+                    // TOP, so as a tall single item grows past the 200.dp viewport its new
+                    // content below the fold scrolls off until something re-pins the bottom.
+                    // The old code relied solely on scrollBy(thinkingHeight - viewportHeight);
+                    // thinkingHeight (BoxWithConstraints minHeight) is authoritative but can go
+                    // stale if the item isn't laid out every frame, so drift accumulated with no
+                    // correction path — it only "recovered" when a tool call flipped to the other
+                    // branch. Fix: after scrollToItem (which forces a layout pass), read the actual
+                    // item bottom from live layoutInfo and scrollBy the overflow — the same proven
+                    // pattern autoScrollToBottom() uses for the main list — then cross-check
+                    // thinkingHeight so any residual frame drift self-corrects instead of piling up.
                     if (!toolsVisible && thinkingShown) {
                         listState.scrollToItem(0)
-                        val viewportHeight = listState.layoutInfo.viewportSize.height.toFloat()
-                        if (thinkingHeight > viewportHeight) {
-                            listState.scrollBy(thinkingHeight - viewportHeight)
+                        val layoutInfo = listState.layoutInfo
+                        val viewportHeight = layoutInfo.viewportSize.height.toFloat()
+                        val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
+                        val overflow = if (lastVisible != null) {
+                            (lastVisible.offset + lastVisible.size).toFloat() - viewportHeight
+                        } else 0f
+                        val bestOverflow = overflow.coerceAtLeast(
+                            if (thinkingHeight > viewportHeight) thinkingHeight - viewportHeight else 0f
+                        )
+                        if (bestOverflow > 0f) {
+                            listState.scrollBy(bestOverflow)
                         }
                     } else {
                         listState.scrollToItem(count - 1)
