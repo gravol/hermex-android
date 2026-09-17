@@ -148,7 +148,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             "loadMessages(#$callNum) — entering with sessionId=$sessionId")
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, error = null)
-            retryLoad@ try {
+            try {
                 val result = rpcClient.sessionResume(sessionId)
                 resumeCount++
                 // liveSid is DEBUG ONLY — never write into sessionId
@@ -296,7 +296,9 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                         resumeCount++
                         liveSid = recovered.session_id
                         resumedSessionId = recovered.resumed ?: sessionId
-                        continue@retryLoad  // reload with the fresh result below
+                        DebugLog.log("RPC", "DashboardChat",
+                            "loadMessages 4007 recovered — reloading with fresh result: $sessionId")
+                        loadMessages()  // retry with the recovered session
                     }
                     DebugLog.log("RPC", "DashboardChat",
                         "loadMessages 4007 (fresh/deleted session) — starting empty: $sessionId")
