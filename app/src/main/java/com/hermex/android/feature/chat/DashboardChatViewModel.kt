@@ -101,6 +101,19 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     private var connectStartTime = 0L
     private var sessionLoadStartTime = 0L
 
+    // Recovery budget for a reaped/stale session (JSON-RPC 4007 "session no longer
+    // live; retry resume"). After a gateway restart/update the in-memory live
+    // registry is empty and session.resume returns 4007 until the DB row
+    // re-materializes — which can take many seconds. The old budget (2 tries,
+    // ~4.5s total) exhausted before recovery finished, so sendMessage failed with
+    // "session no longer live; retry resume" and the red-panel Retry just emptied
+    // the chat. Exponential backoff capped here gives a generous window without an
+    // absurd wait (usually recovers on the first or second try). Shared by
+    // submitWithSelfHeal (heavy) and loadMessages (lighter via maxAttempts).
+    private val selfHealRetries = 6
+    private val selfHealBaseDelayMs = 3_000L
+    private val selfHealMaxDelayMs = 15_000L
+
     // ── Public API ──
 
     /** Initialize with a session. Call once from the composable. */
@@ -135,7 +148,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
             "loadMessages(#$callNum) — entering with sessionId=$sessionId")
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, error = null)
-            try {
+            retryLoad@ try {
                 val result = rpcClient.sessionResume(sessionId)
                 resumeCount++
                 // liveSid is DEBUG ONLY — never write into sessionId
@@ -272,7 +285,19 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     // row on the first run, so resume can't find it yet. Show
                     // an empty chat; the first prompt.submit attaches the agent
                     // and persists (verified server-side). Also covers deleted
-                    // sessions (nothing to show anyway).
+                    // sessions (nothing to show anyway). BUT a reaped/restarting
+                    // session also 4007s until its DB row re-materializes, so we
+                    // retry resume with capped backoff before giving up — if it
+                    // recovers we load the real history instead of an empty chat.
+                    DebugLog.log("RPC", "DashboardChat",
+                        "loadMessages 4007 (fresh/reaped session) — backing off then retrying: $sessionId")
+                    val recovered = resumeUntilLive(3, selfHealBaseDelayMs, selfHealMaxDelayMs)
+                    if (recovered != null) {
+                        resumeCount++
+                        liveSid = recovered.session_id
+                        resumedSessionId = recovered.resumed ?: sessionId
+                        continue@retryLoad  // reload with the fresh result below
+                    }
                     DebugLog.log("RPC", "DashboardChat",
                         "loadMessages 4007 (fresh/deleted session) — starting empty: $sessionId")
                     uiState = uiState.copy(isLoading = false, messages = emptyList(), error = null)
@@ -301,13 +326,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
      * signal — the next prompt.submit then fails with JSON-RPC 4001
      * "session not found". On 4001 we re-register via session.resume
      * (which re-materializes the session from the DB) and retry once.
-     * If session.resume also 4007 (fresh/deleted session), fall back to a
-     * short backoff + one extra resume attempt before sending directly.
-     * A just-reaped session can return 4007 for a moment while the server's
-     * DB row is mid-flush; waiting ~1.5s and retrying the resume recovers it
-     * instead of failing. Only after both attempts fail do we send directly
-     * (the genuinely-fresh-session path, where the server creates the row on
-     * first turn). Any other error, or a second failure, propagates to caller.
+     * If session.resume also returns 4007 (fresh/deleted/reaping session),
+     * [resumeUntilLive] retries with exponential backoff until the DB row
+     * re-materializes or the budget is exhausted, then falls back to sending
+     * directly (the genuinely-fresh-session path, where the server creates the
+     * row on first turn). Any other error propagates to the caller.
      */
     private suspend fun submitWithSelfHeal(text: String) {
         try {
@@ -320,26 +343,11 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 rpcClient.sessionResume(sessionId)
             } catch (resume4007: JsonRpcException) {
                 if (resume4007.code == 4007) {
-                    // v0.1.111 — a genuinely fresh/deleted session: resume can't
-                    // find it, so send directly and the server creates the row.
-                    // BUT a just-reaped session also returns 4007 while its DB row
-                    // is mid-flush (the ws_orphan_reap window). Give it one more
-                    // chance after a short backoff before giving up — a second
-                    // resume usually succeeds once the flush completes.
                     DebugLog.log("STATE", "SessionID",
                         "self-heal resume 4007 (fresh/reaped) — backing off then retrying: dbKey=$sessionId")
-                    var recovered: JsonRpcClient.SessionResumeResult? = null
-                    repeat(2) { attempt ->
-                        try {
-                            delay(1500L * (attempt + 1))
-                            recovered = rpcClient.sessionResume(sessionId)
-                            if (recovered != null) return@repeat
-                        } catch (retry4007: JsonRpcException) {
-                            if (retry4007.code != 4007) throw retry4007
-                            DebugLog.log("STATE", "SessionID",
-                                "self-heal resume retry #$attempt still 4007 — dbKey=$sessionId")
-                        }
-                    }
+                    // Generational backoff so a post-restart reap window (DB row
+                    // still materializing) can recover instead of failing fast.
+                    val recovered = resumeUntilLive(selfHealRetries, selfHealBaseDelayMs, selfHealMaxDelayMs)
                     recovered
                 } else {
                     throw resume4007
@@ -359,6 +367,40 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 rpcClient.promptSubmit(sessionId, text)
             }
         }
+    }
+
+    /**
+     * Retry session.resume with capped exponential backoff until it succeeds or
+     * the retry budget is exhausted. Returns the successful resume result, or
+     * null if every attempt still 4007'd (caller then falls back to sending a
+     * prompt directly, which materializes a fresh session on first turn). A
+     * non-4007 error propagates immediately — it's not a reaping condition.
+     */
+    private suspend fun resumeUntilLive(
+        maxAttempts: Int,
+        baseDelayMs: Long,
+        maxDelayMs: Long,
+    ): JsonRpcClient.SessionResumeResult? {
+        var recovered: JsonRpcClient.SessionResumeResult? = null
+        repeat(maxAttempts) { attempt ->
+            try {
+                val delayMs = (baseDelayMs * (attempt + 1)).coerceAtMost(maxDelayMs)
+                DebugLog.log("STATE", "SessionID",
+                    "resumeUntilLive attempt ${attempt + 1}/$maxAttempts — waiting ${delayMs}ms before retry: dbKey=$sessionId")
+                delay(delayMs)
+                recovered = rpcClient.sessionResume(sessionId)
+                if (recovered != null) {
+                    DebugLog.log("STATE", "SessionID",
+                        "resumeUntilLive succeeded on attempt ${attempt + 1}: dbKey=$sessionId liveSid=${recovered.session_id}")
+                    return@repeat
+                }
+            } catch (retry4007: JsonRpcException) {
+                if (retry4007.code != 4007) throw retry4007
+                DebugLog.log("STATE", "SessionID",
+                    "resumeUntilLive attempt ${attempt + 1}/$maxAttempts still 4007 — dbKey=$sessionId")
+            }
+        }
+        return recovered
     }
 
     override fun sendMessage(text: String) {
