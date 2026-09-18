@@ -362,6 +362,21 @@ object DashboardApiClient {
     /** A session's messages (cron run output lives here) — v0.1.78. */
     suspend fun sessionMessages(sessionId: String, limit: Int = 10): NetworkResult<SessionMessagesResult> =
         withContext(Dispatchers.IO) {
+            // Defensive guard (resume-bug live-SID misuse): the server's
+            // resolve_session_id only matches a persistent DB key
+            // (YYYYMMDD_HHMMSS_8hex), NOT a transient gateway live SID
+            // (bare 8-hex uuid.hex[:8]). Live SIDs are in-memory-only and
+            // reaped after WS disconnect, so a bare-sid call can never
+            // resolve server-side — it deterministically 404s. Fail loud here
+            // instead of emitting a silent 404 that looks like "no messages".
+            if (looksLikeLiveSid(sessionId)) {
+                DebugLog.log("WARN", "DashboardApiClient",
+                    "REJECTING sessionMessages: sessionId '$sessionId' is a transient live SID, not a DB key — " +
+                    "the caller must pass the stable DB key. /api/sessions/$sessionId/messages would 404.")
+                return@withContext NetworkResult.Error(
+                    IllegalStateException("sessionMessages called with a live SID '$sessionId'; expected DB key")
+                )
+            }
             try {
                 val response = httpClient.newCall(
                     Request.Builder().url("$restUrl/api/sessions/$sessionId/messages?limit=$limit").get().build()
@@ -371,6 +386,13 @@ object DashboardApiClient {
                 NetworkResult.Error(e)
             }
         }
+
+    /** True if [id] matches a bare 8-hex live SID (uuid.hex[:8]) rather than a DB key. */
+    private fun looksLikeLiveSid(id: String): Boolean {
+        val isDbKey = id.matches(Regex("\\d{8}_\\d{6}_[0-9a-f]{8}"))
+        val isBare8Hex = id.matches(Regex("[0-9a-f]{8}"))
+        return isBare8Hex && !isDbKey
+    }
 
     // ── Cron CRUD (v0.1.80): create / update / delete / delivery targets ──
 
