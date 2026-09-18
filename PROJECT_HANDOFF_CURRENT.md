@@ -1,11 +1,24 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-09-14 — realigned with GitHub (current is v0.1.163)
-**Current version:** v0.1.163 (versionCode 164)
-**HEAD commit:** `bae6f9e` → pending v0.1.163 commit
+**Last updated:** 2026-09-18 — current is v0.1.166 (resume-bug live-SID guard)
+**Current version:** v0.1.166 (versionCode 167)
+**HEAD commit:** `f35270d` — Fix resume bug: reject live-SID misuse in sessionMessages (+ v0.1.166 release)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
+
+---
+
+## [0.1.166] — 2026-09-18 — Resume/turn-notification bug: reject live-SID misuse in sessionMessages
+
+Fixes the "resume doesn't work" + turn-completion notifications stop firing bug (investigated 2026-09-17, Neo4j `FailureMode resume-bug-live-sid-misuse`, debug log `.hermes/attachments/hermex_debug_20260917_114307.txt`).
+
+- **Root cause:** The client passes transient gateway LIVE SIDs (bare 8-hex `uuid.hex[:8]`) to REST `/api/sessions/{id}/messages`, but the server's `resolve_session_id` only matches a persistent DB key (`YYYYMMDD_HHMMSS_8hex`). Live SIDs are in-memory-only and reaped after WS disconnect, so a bare-sid call can NEVER resolve server-side → deterministic 404. The debug log shows a burst of five `/messages?limit=3` 404s (ids `45f6686f`, `6b3e0eec`, `278e6e11`, `27446b64`, `3f701521`) right after `session.list`; limit=3 matches `TurnWatcher.onAlarm()` → `DashboardApiClient.sessionMessages(sessionId, 3)`.
+- **Evidence chain (all verified):** (1) The five live-sids exist NOWHERE in `state.db` — not as id/session_key/chat_id/thread_id/turn_leases (substring scan). (2) Recent sessions use real db-keys (`20260918_002628_2a2c8e`, etc.). (3) Client source preserves the db-key through every seam: `DashboardChatViewModel.init()` stores sessionId=db-key with comment "ONLY value for RPC calls, NEVER overwrite with live sid"; `sessionMessages()` builds the URL with no id conversion; `TurnWatcher` passes sessionId cleanly. Server `get_sessions` returns db-keys in `session.list`. So the source path is clean end-to-end — the running artifact must be passing a live SID (likely stale/different installed APK, per GPT's #1 ranked hypothesis).
+- **Judgment (GPT + Grok):** Both gave "Has issues" verdict. Root cause (wrong ID shape → 404) = HIGH confidence. My claim that "source is clean → APK must be stale" = MEDIUM-LOW (HEAD==v0.1.165 doesn't prove the installed APK was built from it). Both agreed on fix priority: **(1) rebuild + install current source first** (diagnostic + likely real fix); **(2) defensively make `sessionMessages` resolve/refuse a live-SID before firing** so the bug class fails loud, not silent-404.
+- **Fix (this release):** Defensive guard in `DashboardApiClient.sessionMessages()` — `looksLikeLiveSid(id)` matches a bare 8-hex id and rejects it with a clear WARN log + `NetworkResult.Error` before the HTTP call. No caller can now pass a live SID silently. Build clean (JDK 17): v0.1.166 / versionCode 167, 30.8 MB APK. Published via CI to GitHub Release v0.1.166 (signed by CI keystore, APK attached) → Obtainium.
+
+**Verified:** guard compiled into new APK (`strings` shows `REJECTING sessionMessages: sessionId '... is a transient live SID, not a DB key`). **Not yet:** installed on the Pixel 8 — no device connected at build time; install when plugged in and re-test resume + a turn-completion notification.
 
 ---
 
