@@ -223,15 +223,19 @@ fun ChatScreen(
 
     // ── Photo attach state ──
     var pendingImageB64 by remember { mutableStateOf<String?>(null) }
-    var pendingImageUri by remember { mutableStateOf<Uri?>(null) }
+    // Render the thumbnail from the already-decoded Bitmap (not the content URI).
+    // The picker-provided URI is ephemeral — the backing file can be replaced or its
+    // read permission revoked between pickup and a Compose re-compose, and passing it
+    // straight to Coil makes Coil re-read a now-dead URI on every recomposition -> crash.
+    var pendingImageBmp by remember { mutableStateOf<Bitmap?>(null) }
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri != null) {
-            val encoded = downscaleAndEncode(context, uri)
-            if (encoded != null) {
-                pendingImageB64 = encoded.first
-                pendingImageUri = uri
+            val bmp = downscaleAndDecode(context, uri)
+            if (bmp != null) {
+                pendingImageBmp = bmp
+                pendingImageB64 = bitmapToDataUrl(bmp)
             } else {
                 Toast.makeText(context, "Couldn't read image", Toast.LENGTH_SHORT).show()
             }
@@ -247,10 +251,10 @@ fun ChatScreen(
         if (ok) {
             val uri = pendingCameraUri
             if (uri != null) {
-                val encoded = downscaleAndEncode(context, uri)
-                if (encoded != null) {
-                    pendingImageB64 = encoded.first
-                    pendingImageUri = uri
+                val bmp = downscaleAndDecode(context, uri)
+                if (bmp != null) {
+                    pendingImageBmp = bmp
+                    pendingImageB64 = bitmapToDataUrl(bmp)
                 } else {
                     Toast.makeText(context, "Couldn't read photo", Toast.LENGTH_SHORT).show()
                 }
@@ -400,13 +404,13 @@ fun ChatScreen(
         val img = pendingImageB64
         if (text.isBlank() && img == null) return
         if (img != null) {
-            viewModel.sendMessageWithImage(text, img, pendingImageUri?.lastPathSegment)
+            viewModel.sendMessageWithImage(text, img, "photo_${System.currentTimeMillis()}.jpg")
         } else {
             viewModel.sendMessage(text)
         }
         composerText = ""
         pendingImageB64 = null
-        pendingImageUri = null
+        pendingImageBmp = null
     }
 
     // ── Slash-command completions (v0.1.65) ──
@@ -813,7 +817,7 @@ fun ChatScreen(
             ) {
                 Column {
                     // Pending image thumbnail (removable)
-                    if (pendingImageUri != null) {
+                    if (pendingImageBmp != null) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -821,7 +825,7 @@ fun ChatScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             AsyncImage(
-                                model = pendingImageUri,
+                                model = pendingImageBmp,
                                 contentDescription = "Attached image",
                                 modifier = Modifier
                                     .size(64.dp)
@@ -837,7 +841,7 @@ fun ChatScreen(
                             )
                             IconButton(onClick = {
                                 pendingImageB64 = null
-                                pendingImageUri = null
+                                pendingImageBmp = null
                             }) {
                                 Icon(Icons.Default.Close, contentDescription = "Remove image")
                             }
@@ -2858,33 +2862,37 @@ private fun ToolCallCard(
 }
 
 /**
- * Downscale an image URI to ≤1600px and encode as base64 JPEG (data URL).
- * Returns (dataUrl, filename) or null on failure. Runs on the caller's thread
- * (pick-launcher callback — small images decode fast; 1600px cap keeps it sane).
+ * Downscale an image URI to a Bitmap (<=1600px). Returns null on failure. Runs on
+ * the caller's thread — decodes once, no second read later (so Coil never re-reads a
+ * now-dead content URI and crashes on recompose). The base64 payload is derived from
+ * this same Bitmap via bitmapToDataUrl().
  */
-private fun downscaleAndEncode(context: Context, uri: Uri): Pair<String, String>? {
+private fun downscaleAndDecode(context: Context, uri: Uri): Bitmap? {
     return try {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, bounds)
-        }
+        } ?: return null
         var sample = 1
         val maxDim = 1600
         while ((bounds.outWidth / sample) > maxDim || (bounds.outHeight / sample) > maxDim) {
             sample *= 2
         }
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        val bmp = context.contentResolver.openInputStream(uri)?.use {
+        context.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, opts)
         } ?: return null
-        val out = ByteArrayOutputStream()
-        bmp.compress(Bitmap.CompressFormat.JPEG, 82, out)
-        val b64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-        val name = "photo_${System.currentTimeMillis()}.jpg"
-        "data:image/jpeg;base64,$b64" to name
     } catch (_: Exception) {
         null
     }
+}
+
+/** Encode a decoded Bitmap as a base64 JPEG data URL for sending to the server. */
+private fun bitmapToDataUrl(bmp: Bitmap): String {
+    val out = ByteArrayOutputStream()
+    bmp.compress(Bitmap.CompressFormat.JPEG, 82, out)
+    val b64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    return "data:image/jpeg;base64,$b64"
 }
 
 /**

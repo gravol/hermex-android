@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.167] — 2026-09-20 — Image-thumbnail Coil crash fix (ephemeral content URI)
+
+### Fixed
+- **Hard process crash on the Pixel 8 when attaching an image.** Crash log: `java.util.NoSuchElementException: List is empty` at `coil.decode.a.invoke` (= `coil.decode.BitmapFactoryDecoder`, R8-mapped) inside `androidx.compose.runtime.SnapshotFlowKt.snapshotFlow`, main thread, ~30s after launch. The composer's attached-image thumbnail (`AsyncImage`) was fed the picker-provided **content URI**. Coil re-reads that URI on every recompose inside its internal snapshotFlow coroutine; the backing file behind a `PickVisualMedia` / `TakePicture` URI is ephemeral and can be replaced or have its read permission revoked between pickup and a recompose (GrapheneOS/Android tightened this). When Coil re-read the now-dead URI, `BitmapFactoryDecoder.first()` threw `NoSuchElementException: List is empty`, escaping uncaught in Compose's snapshotFlow coroutine → process crash. The base64 payload sent to the server was fine (`downscaleAndEncode` decoded on pickup); only the thumbnail's *second* read failed — which is why it "suddenly" started with no app change (thumbnail code + Coil 2.7.0 untouched since v0.1.127). Fix: decode once into a `Bitmap`, store it in `pendingImageBmp`, and render the in-memory Bitmap instead of re-reading the URI; derive the base64 payload from that same Bitmap (`bitmapToDataUrl`). Filename generated inline. (`ChatScreen.kt`.)
+
 ## [0.1.163] — 2026-09-14 — Self-healing pure-thinking panel scroll + dead-code cleanup
 
 ### Fixed

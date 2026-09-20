@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-09-18 — current is v0.1.166 (resume-bug live-SID guard)
-**Current version:** v0.1.166 (versionCode 167)
+**Last updated:** 2026-09-20 — current is v0.1.167 (image-thumbnail Coil crash fix)
+**Current version:** v0.1.167 (versionCode 168)
 **HEAD commit:** `f35270d` — Fix resume bug: reject live-SID misuse in sessionMessages (+ v0.1.166 release)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
@@ -19,6 +19,35 @@ Fixes the "resume doesn't work" + turn-completion notifications stop firing bug 
 - **Fix (this release):** Defensive guard in `DashboardApiClient.sessionMessages()` — `looksLikeLiveSid(id)` matches a bare 8-hex id and rejects it with a clear WARN log + `NetworkResult.Error` before the HTTP call. No caller can now pass a live SID silently. Build clean (JDK 17): v0.1.166 / versionCode 167, 30.8 MB APK. Published via CI to GitHub Release v0.1.166 (signed by CI keystore, APK attached) → Obtainium.
 
 **Verified:** guard compiled into new APK (`strings` shows `REJECTING sessionMessages: sessionId '... is a transient live SID, not a DB key`). **Not yet:** installed on the Pixel 8 — no device connected at build time; install when plugged in and re-test resume + a turn-completion notification.
+
+---
+
+## [0.1.167] — 2026-09-20 — Image-thumbnail Coil crash fix (ephemeral content URI)
+
+Fixes a hard process crash on the Pixel 8 (GrapheneOS) reported 2026-09-20:
+`java.util.NoSuchElementException: List is empty` at `coil.decode.a.invoke`
+(`BitmapFactoryDecoder`) inside `androidx.compose.runtime.SnapshotFlowKt.snapshotFlow`,
+main thread, ~30s after launch.
+
+- **Root cause:** The single `AsyncImage` in the app (composer's attached-image
+  thumbnail) was fed the picker-provided **content URI** (`pendingImageUri`). Coil
+  re-reads that URI on every recompose inside its internal snapshotFlow coroutine.
+  The backing file behind a `PickVisualMedia` / `TakePicture` URI is ephemeral — it
+  can be replaced by the camera/gallery app or have its read permission revoked on
+  resume/recompose (GrapheneOS/Android behavior tightened). When Coil re-reads the
+  now-dead URI, `BitmapFactoryDecoder.first()` throws `NoSuchElementException: List is
+  empty`, which escapes uncaught in Compose's snapshotFlow coroutine → process crash.
+  The base64 payload sent to the server was fine (`downscaleAndEncode` decoded on
+  pickup); only the thumbnail's *second* read failed — hence it "suddenly" started
+  with no app change (verified: thumbnail code + Coil 2.7.0 untouched since v0.1.127).
+- **Fix:** stop handing Coil the ephemeral URI. Pick/camera callbacks now decode once
+  into a `Bitmap` (`downscaleAndDecode`), store it in `pendingImageBmp`, and derive the
+  base64 payload from that same Bitmap (`bitmapToDataUrl`). The thumbnail renders the
+  in-memory `Bitmap`, so there is no second read to fail. Filename is generated inline
+  (no longer depends on the URI's `lastPathSegment`). (`ChatScreen.kt`.)
+- **Verified:** compiles clean; release APK builds, properly signed (Hermex keystore),
+  v0.1.167 / versionCode 168, ~30.8 MB. Published via CI to GitHub Release v0.1.167 →
+  Obtainium.
 
 ---
 
