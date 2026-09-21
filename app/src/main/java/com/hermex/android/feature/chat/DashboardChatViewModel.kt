@@ -303,6 +303,39 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     DebugLog.log("RPC", "DashboardChat",
                         "loadMessages 4007 (fresh/deleted session) — starting empty: $sessionId")
                     uiState = uiState.copy(isLoading = false, messages = emptyList(), error = null)
+                } else if (e.code == 4001) {
+                    // v0.1.169: 4001 = session REAPED by the gateway (ws_orphan_reap /
+                    // idle_timeout / lru_evict). The live socket was orphaned and the
+                    // in-memory registry dropped it, so session.resume can't find it.
+                    // submitWithSelfHeal already self-heals 4001 on prompt.submit, but
+                    // loadMessages did not — opening a reaped session just showed an error
+                    // and died instead of recovering. Force a fresh connection first (a
+                    // silent Tailscale drop can leave the WS unusable while the app still
+                    // thinks it's connected), then resume with backoff so the DB row
+                    // re-materializes and we load real history instead of an empty chat.
+                    DebugLog.log("RPC", "DashboardChat",
+                        "loadMessages 4001 (reaped session) — forceConnect then retrying: $sessionId")
+                    if (!wsConnection.isConnected) {
+                        wsConnection.forceConnect()
+                    }
+                    // resumeUntilLive only retries on 4007 and rethrows anything else
+                    // (incl. a persistent 4001). Wrap it so a lingering 4001 can't escape
+                    // this catch block and crash loadMessages — just start empty instead.
+                    val recovered = runCatching {
+                        resumeUntilLive(3, selfHealBaseDelayMs, selfHealMaxDelayMs)
+                    }.getOrNull()
+                    if (recovered != null) {
+                        resumeCount++
+                        liveSid = recovered.session_id
+                        resumedSessionId = recovered.resumed ?: sessionId
+                        DebugLog.log("RPC", "DashboardChat",
+                            "loadMessages 4001 recovered — reloading with fresh result: $sessionId")
+                        loadMessages()  // retry with the recovered session
+                    } else {
+                        DebugLog.log("RPC", "DashboardChat",
+                            "loadMessages 4001 exhausted — starting empty: $sessionId")
+                        uiState = uiState.copy(isLoading = false, messages = emptyList(), error = null)
+                    }
                 } else {
                     Log.e("Hermex", "DashboardChatViewModel: loadMessages failed", e)
                     uiState = uiState.copy(
