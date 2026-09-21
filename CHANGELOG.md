@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.168] — 2026-09-21 — 4001 "session not found" self-heal fix (dead/mid-reconnect socket)
+
+### Fixed
+- **Persistent `4001 session not found` after a silent socket drop.** The client already had `submitWithSelfHeal()`: on a 4001 it calls `session.resume(sessionId)` and retries. But that resume runs over whatever socket exists at the moment of failure — and if the WebSocket is dead or mid-reconnect (a silent Tailscale drop leaves the WS unusable while `_state == Connected`/`Reconnecting`), `session.resume` cannot complete on it either, so self-heal loops forever and never recovers. Evidence: a debug log showed repeated "observer unavailable — opening fresh WS connection" + multiple `ws-ticket` fetches, i.e. the observer kept dropping and forcing fresh connections without recovery. **Fix:** before resuming on a 4001, ensure a live socket — if `wsConnection.isConnected` is false, call the new `WsConnectionManager.forceConnect()` (cancels any pending reconnect loop so there's exactly one active socket, fetches a fresh ticket, opens the WS, waits for handshake) and only then run resume + submit. Files: `WsConnectionManager.kt` (`forceConnect()`), `DashboardChatViewModel.kt` (`submitWithSelfHeal`).
+
 ## [0.1.167] — 2026-09-20 — Image-thumbnail Coil crash fix (ephemeral content URI)
 
 ### Fixed

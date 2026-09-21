@@ -1,7 +1,7 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-09-20 — current is v0.1.167 (image-thumbnail Coil crash fix)
-**Current version:** v0.1.167 (versionCode 168)
+**Last updated:** 2026-09-21 — current is v0.1.168 (4001 socket-dead self-heal fix)
+**Current version:** v0.1.168 (versionCode 169)
 **HEAD commit:** `f35270d` — Fix resume bug: reject live-SID misuse in sessionMessages (+ v0.1.166 release)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  

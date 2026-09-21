@@ -340,7 +340,16 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         } catch (e: JsonRpcException) {
             if (e.code != 4001) throw e
             DebugLog.log("STATE", "SessionID",
-                "prompt.submit 4001 (session reaped) — re-registering via session.resume: dbKey=$sessionId")
+                "prompt.submit 4001 (session reaped) — ensuring live socket before resume: dbKey=$sessionId")
+            // The socket may be dead or mid-reconnect (a silent Tailscale drop leaves the WS
+            // unusable while the app still thinks it's connected). session.resume over a dead
+            // socket can't complete, so self-heal loops forever without recovering. Force a fresh
+            // connection first so resume has a working transport to re-attach the live session to.
+            if (!wsConnection.isConnected) {
+                DebugLog.log("STATE", "SessionID",
+                    "self-heal — socket not Connected, forceConnect() before resume: dbKey=$sessionId")
+                wsConnection.forceConnect()
+            }
             val result = try {
                 rpcClient.sessionResume(sessionId)
             } catch (resume4007: JsonRpcException) {

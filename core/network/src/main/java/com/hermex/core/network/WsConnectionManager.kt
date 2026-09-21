@@ -99,6 +99,28 @@ class WsConnectionManager(
         DebugLog.log("WS", "Connection", "connect() — WebSocket ready")
     }
 
+    /** Force a fresh connection regardless of current state (used when the socket is dead
+     *  mid-session — e.g. a silent Tailscale drop leaves resume/submit retrying over a dead
+     *  socket). Cancels any pending reconnect loop first so there's exactly one active socket. */
+    suspend fun forceConnect() {
+        reconnectJob?.cancel(); reconnectJob = null
+        if (isUserDisconnect) return
+        _state.value = State.Connecting
+        DebugLog.log("WS", "Connection", "forceConnect() — fresh socket")
+        val ticketResult = DashboardApiClient.fetchWsTicket()
+        when (ticketResult) {
+            is NetworkResult.Success -> {
+                openWebSocket(ticketResult.data.ticket)
+                waitForConnection()
+            }
+            is NetworkResult.Error, is NetworkResult.HttpError -> {
+                DebugLog.log("WS", "Connection", "forceConnect ticket failed — reconnect loop")
+                _state.value = State.Disconnected
+                startReconnectLoop()
+            }
+        }
+    }
+
     /** Clean disconnect — cancels reconnect, closes WS. */
     fun disconnect() {
         isUserDisconnect = true
