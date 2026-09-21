@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -64,6 +65,22 @@ class JsonRpcClient(
     private val notificationChannel = Channel<RpcNotification>(UNLIMITED)
     /** Server-pushed events (message.delta, tool.started, approval.request, etc.). */
     val notifications: Flow<RpcNotification> = notificationChannel.receiveAsFlow()
+
+    /**
+     * Server→client JSON-RPC requests: the backend asks a question and waits for one
+     * response frame carrying the same id. Approvals (id `srq-<hex>`), clarify, sudo,
+     * secret, vault prompts all arrive this way — NOT as notifications. The client must
+     * send back `{jsonrpc:"2.0", id:<same>, result:{...}}`. Without a handler the frame
+     * falls through to "Unknown" and the gateway stalls for the full deadline.
+     */
+    data class ServerRequest(
+        val id: String,
+        val method: String,
+        val params: JsonObject,
+    )
+
+    private val serverRequestChannel = Channel<ServerRequest>(UNLIMITED)
+    val serverRequests: Flow<ServerRequest> = serverRequestChannel.receiveAsFlow()
 
     private var consumerJob: Job? = null
 
@@ -210,9 +227,19 @@ class JsonRpcClient(
                 id != null && error != null -> {
                     handleError(id, error.jsonObject)
                 }
-                // Server-pushed notification (no id, has method)
+            // Server-pushed notification (no id, has method)
                 id == null && method != null && params != null -> {
                     handleNotification(method, params)
+                }
+                // Server→client request (has a string id like `srq-<hex>`, a method, but
+                // no result/error yet): the backend is asking a question and waiting for one
+                // response frame on this same id. Route to serverRequests so a handler can
+                // answer via respondRequest(...). Without this it falls through to "Unknown"
+                // and the gateway stalls out the full deadline (approval/clarify/sudo fail).
+                id != null && method != null && result == null && error == null -> {
+                    serverRequestChannel.trySend(
+                        ServerRequest(id = id.toString(), method = method, params = params ?: JsonObject(emptyMap()))
+                    )
                 }
                 // Server-pushed notification with method at top level
                 id == null && method != null -> {
@@ -691,29 +718,57 @@ class JsonRpcClient(
         return result.session?.get("session_id")?.jsonPrimitive?.content ?: sessionId
     }
 
-    /**
-     * Respond to a tool approval request.
-     * Server expects session_id (DB key), choice ("approve"|"deny"), and optional all.
-     * Uses notify() (fire-and-forget) — the server processes it either way.
+    /** Answer a server→client request with one JSON-RPC response frame carrying the
+     * same id. The gateway's resolve_response() matches on `id` and reads `result`,
+     * so this must be `{jsonrpc:"2.0", id:<same>, result:{...}}`. Use for approvals,
+     * clarify, sudo, secret, vault prompts — anything the backend asked a question
+     * about over the socket (NOT fire-and-forget notifications). [result] is the body
+     * of the `result` member (for an error response, pass `{code, message}`); callers
+     * that need to emit an error object directly can build it here.
      */
-    fun approvalRespond(sessionId: String, choice: String, all: Boolean = false) {
-        notify("approval.respond", mapOf(
-            "session_id" to sessionId,
-            "choice" to choice,
-            "all" to all.takeIf { it },
-        ))
+    fun respondRequest(id: String, result: JsonObject) {
+        val frame = buildJsonObject {
+            put("jsonrpc", JsonPrimitive("2.0"))
+            put("id", JsonPrimitive(id))
+            if (result.isNotEmpty()) putJsonObject("result") { result.forEach { (k, v) -> put(k, v) } }
+        }
+        connection.send(frame.toString())
+        DebugLog.log("RPC", "Response", "[$id] answered")
     }
 
-    /**
-     * Respond to a clarify request.
+    /** Respond to a tool approval request.
+     * Server expects session_id (DB key), choice ("approve"|"deny"), and optional all.
+     * Uses respondRequest() so the gateway's server→client request resolves on its id —
+     * NOT notify(), which leaves the request open and the gateway stalls for the deadline.
+     */
+    fun approvalRespond(sessionId: String, choice: String, requestId: String?, all: Boolean = false) {
+        val result = buildJsonObject {
+            put("choice", JsonPrimitive(choice))
+            if (all) put("all", JsonPrimitive(true))
+            // session_id is part of the request params on the wire; echo it so the
+            // gateway can correlate the answer to the right session queue.
+            if (sessionId.isNotBlank()) put("session_id", JsonPrimitive(sessionId))
+        }
+        val reqId = requestId ?: ""
+        connection.send(buildJsonObject {
+            put("jsonrpc", JsonPrimitive("2.0"))
+            put("id", JsonPrimitive(reqId.ifBlank { "approval" }))
+            putJsonObject("result") { result.forEach { (k, v) -> put(k, v) } }
+        }.toString())
+        DebugLog.log("RPC", "Approval", "responded choice=$choice requestId=$reqId all=$all")
+    }
+
+    /** Respond to a clarify request.
      * Server expects request_id and answer.
-     * Uses notify() (fire-and-forget).
+     * Uses respondRequest() so the gateway's server→client request resolves on its id.
      */
     fun clarifyRespond(requestId: String, answer: String) {
-        notify("clarify.respond", mapOf(
-            "request_id" to requestId,
-            "answer" to answer,
-        ))
+        connection.send(buildJsonObject {
+            put("jsonrpc", JsonPrimitive("2.0"))
+            put("id", JsonPrimitive(requestId))
+            putJsonObject("result") { put("answer", JsonPrimitive(answer)) }
+        }.toString())
+        DebugLog.log("RPC", "Clarify", "responded requestId=$requestId")
     }
 }
 

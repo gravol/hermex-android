@@ -144,6 +144,20 @@ class WsConnectionManager(
         }
     }
 
+    /**
+     * Advertise that this client answers server→client requests. Sent once per
+     * connection generation (from onOpen). The gateway gates approval/clarify/sudo/…
+     * behind this: a WebSocket client that never sends it is treated as older than
+     * the server-request half of the protocol and every such request fails fast with
+     * "the attached client cannot answer approval requests". Returns immediately;
+     * the response frame (if any) is handled by onMessage like any other.
+     */
+    private fun advertiseCapabilities() {
+        val frame = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"client.capabilities\",\"params\":{\"server_requests\":true}}"
+        send(frame)
+        DebugLog.log("WS", "Connection", "advertised client.capabilities {server_requests:true}")
+    }
+
     // ── Internal ──
 
     private fun openWebSocket(ticket: String) {
@@ -160,6 +174,13 @@ class WsConnectionManager(
                 Log.d("Hermex", "WsConnectionManager: onOpen")
                 DebugLog.log("WS", "Connection", "onOpen — connected")
                 _state.value = State.Connected
+                // v0.1.170: advertise that this client answers server→client requests
+                // (approval, clarify, sudo, …). Without it the gateway treats us as an
+                // old build and fails every approval/clarify immediately with "the
+                // attached client cannot answer approval requests". Sent once per
+                // connection generation; the gateway ignores a -32601 from an older
+                // backend. Must be sent after onOpen, before any tool call can fire.
+                advertiseCapabilities()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {

@@ -25,13 +25,18 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -79,6 +84,12 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     /** Set by /new or /reset — ChatScreen observes it and navigates to the fresh session. */
     override var resetTargetSession: String? by mutableStateOf(null)
     private var notificationCollectorJob: Job? = null
+    // v0.1.170: server→client requests (approval/clarify/sudo/…) arrive with a string id
+    // (`srq-<hex>`) and need a JSON-RPC response frame on that id — NOT a notification.
+    // Route them into the same UI state as notifications, but capture the request id so we
+    // can answer via respondRequest(...). Without this every approval/clarify stalls out
+    // the gateway deadline and the agent idles.
+    private var serverRequestCollectorJob: Job? = null
 
     // ── v0.1.123 stuck-spinner watchdog ──
     // If a streaming assistant message is still marked isStreaming after this
@@ -930,7 +941,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         val pending = uiState.pendingApproval ?: return
         DebugLog.log("RPC", "DashboardChat",
             "approving tool: ${pending.toolName} all=$approveAll")
-        rpcClient.approvalRespond(sessionId, "approve", approveAll)
+        rpcClient.approvalRespond(sessionId, "approve", pending.requestId, approveAll)
         uiState = uiState.copy(pendingApproval = null)
     }
 
@@ -939,7 +950,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
         val pending = uiState.pendingApproval ?: return
         DebugLog.log("RPC", "DashboardChat",
             "denying tool: ${pending.toolName} all=$denyAll")
-        rpcClient.approvalRespond(sessionId, "deny", denyAll)
+        rpcClient.approvalRespond(sessionId, "deny", pending.requestId, denyAll)
         uiState = uiState.copy(pendingApproval = null)
     }
 
@@ -976,6 +987,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
      */
     fun dispose() {
         notificationCollectorJob?.cancel()
+        serverRequestCollectorJob?.cancel()
         staleStreamTimeoutJob?.cancel()
         wsConnection.disconnect()
     }
@@ -1147,6 +1159,16 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                 notificationCollectorJob = launch {
                     rpcClient.notifications.collect { notification ->
                         handleNotification(notification)
+                    }
+                }
+
+                // v0.1.170: collect server→client requests (approval/clarify/sudo/…) and
+                // route them into UI state, capturing the srq id so we can answer via
+                // respondRequest(...). These arrive with a string id + method but no
+                // result — distinct from notifications.
+                serverRequestCollectorJob = launch {
+                    rpcClient.serverRequests.collect { req ->
+                        handleServerRequest(req)
                     }
                 }
 
@@ -1629,6 +1651,95 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
     override fun toggleTodosExpanded() {
         uiState = uiState.copy(todosExpanded = !uiState.todosExpanded)
     }
+
+    // ── v0.1.170: server→client requests (approval/clarify/sudo/…) ──
+    //
+    // These arrive with a string id (`srq-<hex>`) + `method` but NO result/error — the
+    // gateway is asking a question and waiting for one JSON-RPC response frame on that id.
+    // Distinct from notifications (no id). We mirror the notification handlers to populate
+    // UI state, then answer via respondRequest(...). Parsing reads params at top level, since
+    // server→client requests place fields directly under params (unlike notifications, which
+    // nest them under params["payload"]).
+
+    private fun handleServerRequest(req: JsonRpcClient.ServerRequest) {
+        val p = req.params
+        when (req.method) {
+            "approval" -> {
+                // Server→client approval params sit at the top level of `params`
+                // (request_id, command, description, choices, tool_name, allow_permanent,
+                // smart_denied — see ApprovalRequestParams), unlike notifications which
+                // nest under params["payload"].
+                val commandLine = p["command"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val serverDescription = p["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val rawToolName = p["tool_name"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { "command" }
+
+                DebugLog.log("RPC", "DashboardChat",
+                    "server→client approval request: id=${req.id} tool=$rawToolName command=${commandLine.ifBlank { "<none>" }}")
+
+                uiState = uiState.copy(
+                    pendingApproval = PendingApproval(
+                        toolName = rawToolName,
+                        toolArgs = "",
+                        description = serverDescription.ifBlank { "Runs ${rawToolName}" },
+                        requestId = req.id,  // v0.1.170: capture so we can respond via JSON-RPC
+                    )
+                )
+
+                // When the user isn't watching, also push a notification so the approval is
+                // seen before the gateway deadline. The dialog + response come from the approve/deny
+                // buttons calling approveCurrentTool() / denyCurrentTool(), which now answer via the
+                // captured request id.
+                if (!screenVisible || AppState.isBackgrounded) {
+                    runCatching {
+                        NotificationHelper.postApproval(
+                            getApplication(), sessionId, rawToolName,
+                            commandLine.ifBlank { "" }.take(200),
+                        )
+                    }
+                }
+            }
+
+            "clarify" -> {
+                val requestId = p["request_id"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    ?: p["requestId"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val question = p["question"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val choicesArr = p["choices"] as? JsonArray
+                val choices = choicesArr?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                    ?.filter { it.isNotBlank() }.orEmpty()
+
+                DebugLog.log("RPC", "DashboardChat",
+                    "server→client clarify request: id=$requestId question=$question")
+
+                uiState = uiState.copy(
+                    pendingClarify = PendingClarify(
+                        requestId = requestId,
+                        question = question,
+                        choices = choices,
+                    )
+                )
+            }
+
+            else -> {
+                Log.w("Hermex", "DashboardChat: unhandled server→client request: ${req.method}")
+                DebugLog.log("RPC", "DashboardChat",
+                    "server→client request: method=${req.method} id=${req.id} — no local handler")
+                // Answer with -32601 (method not found) so the gateway fails fast instead of
+                // stalling out its deadline. This matches createServerRequestHandler's contract.
+                respondJsonRpc(req.id, buildJsonObject {
+                    put("error", buildJsonObject {
+                        put("code", JsonPrimitive(-32601))
+                        put("message", JsonPrimitive("method not found: ${req.method}"))
+                    })
+                })
+            }
+        }
+    }
+
+    /** Answer a server→client request with one JSON-RPC response frame on the same id. */
+    private fun respondJsonRpc(id: String, result: JsonObject) {
+        rpcClient.respondRequest(id, result)
+    }
+
 
     override suspend fun completeSlash(text: String): List<JsonRpcClient.SlashItem> =
         rpcClient.completeSlash(text)
