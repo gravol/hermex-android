@@ -1,11 +1,27 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-09-21 — current is v0.1.168 (4001 socket-dead self-heal fix)
-**Current version:** v0.1.168 (versionCode 169)
-**HEAD commit:** `f35270d` — Fix resume bug: reject live-SID misuse in sessionMessages (+ v0.1.166 release)
+**Last updated:** 2026-09-22 — current is v0.1.170 (client.capabilities RPC id collision fix)
+**Current version:** v0.1.170 (versionCode 170)
+**HEAD commit:** `961cf87` — fix(0.1.170): client.capabilities RPC id collided with session.list/create (+ approvals/clarify server→client request answering in `4b84e69`)
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
+
+---
+
+## [0.1.170] — 2026-09-22 — client.capabilities RPC id collided with session.list/create
+
+The app logged a deterministic crash on launch/first message: `session.list` failed with kotlinx.serialization `MissingFieldException: "Field 'sessions' is required ... but it was missing"`, and `session.create` returned no `session_id`. Installed build was v0.1.170 (versionCode 171), newer than committed HEAD at the time.
+
+- **Root cause:** `WsConnectionManager.advertiseCapabilities()` fired from `onOpen()` on every fresh connection with a hardcoded JSON-RPC id of `1`, which collided with the first real request (`session.list` / `session.create`). The gateway routed that id's reply to whoever was waiting — so `session.list` decoded `{server_requests:true}` as its `SessionListResult` ("Field 'sessions' is required … missing") and `session.create` returned no `session_id`.
+- **Fix:** gave capabilities() its own JSON-RPC id counter (`AtomicLong(1_000_000)`) so it can never collide with request ids. (`WsConnectionManager.kt` — `advertiseCapabilities()` + new `capabilitiesCounter` field.)
+- **Verified against live gateway:** three fresh connections all resolved `capabilities` + `session.list` + `session.create` cleanly on their own ids; a contrast row reproduced the exact crash with capabilities at id=1. `:core:network:assembleRelease` BUILD SUCCESSFUL.
+
+---
+
+## [0.1.169] — 2026-09-21 — approvals/clarify now answer server→client requests
+
+`4b84e69`: the client could not answer the gateway's new server→client request half of the protocol (approvals, clarify, sudo), so every such request failed fast with "the attached client cannot answer approval requests". Added the client-capabilities handshake + response handling so the app can answer these. Part of the v0.1.170 line; documented here for continuity.
 
 ---
 
