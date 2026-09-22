@@ -1,21 +1,22 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-09-22 — current is v0.1.170 (client.capabilities RPC id collision fix)
-**Current version:** v0.1.170 (versionCode 170)
-**HEAD commit:** `961cf87` — fix(0.1.170): client.capabilities RPC id collided with session.list/create (+ approvals/clarify server→client request answering in `4b84e69`)
+**Last updated:** 2026-09-22 — current is v0.1.171 (client.capabilities RPC id collision fix, released to Obtainium)
+**Current version:** v0.1.171 (versionCode 172)
+**HEAD commit:** `3cb162b` — bump to v0.1.171 (versionCode 172): ship client.capabilities RPC id collision fix; the underlying fix is in `961cf87`, release built/tagged/published via CI
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
 
 ---
 
-## [0.1.170] — 2026-09-22 — client.capabilities RPC id collided with session.list/create
+## [0.1.171] — 2026-09-22 — client.capabilities RPC id collided with session.list/create (released to Obtainium)
 
 The app logged a deterministic crash on launch/first message: `session.list` failed with kotlinx.serialization `MissingFieldException: "Field 'sessions' is required ... but it was missing"`, and `session.create` returned no `session_id`. Installed build was v0.1.170 (versionCode 171), newer than committed HEAD at the time.
 
 - **Root cause:** `WsConnectionManager.advertiseCapabilities()` fired from `onOpen()` on every fresh connection with a hardcoded JSON-RPC id of `1`, which collided with the first real request (`session.list` / `session.create`). The gateway routed that id's reply to whoever was waiting — so `session.list` decoded `{server_requests:true}` as its `SessionListResult` ("Field 'sessions' is required … missing") and `session.create` returned no `session_id`.
 - **Fix:** gave capabilities() its own JSON-RPC id counter (`AtomicLong(1_000_000)`) so it can never collide with request ids. (`WsConnectionManager.kt` — `advertiseCapabilities()` + new `capabilitiesCounter` field.)
 - **Verified against live gateway:** three fresh connections all resolved `capabilities` + `session.list` + `session.create` cleanly on their own ids; a contrast row reproduced the exact crash with capabilities at id=1. `:core:network:assembleRelease` BUILD SUCCESSFUL.
+- **Shipped as v0.1.171 (versionCode 172):** the fix landed in commit `961cf87` *without* a version bump, so the installed v0.1.170 would not have picked it up. A follow-up bump (`3cb162b`) to versionCode 172 made CI build + tag + publish a real release — GitHub Release `v0.1.171` with `app-release.apk` attached, available via Obtainium/Obtainium update.
 
 ---
 
