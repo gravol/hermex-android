@@ -48,6 +48,14 @@ class WsConnectionManager(
     private var reconnectJob: Job? = null
     private var isUserDisconnect = false
 
+    // v0.1.170 fix: capabilities() needs its OWN id space, never the request-counter range.
+    // advertiseCapabilities() fires from onOpen() on every fresh connection BEFORE any real
+    // request; if it reused a request id (it used a hardcoded 1, colliding with the first
+    // session.list/session.create) its result hijacked pendingRequests[thatId], so session.list
+    // decoded {server_requests} as SessionListResult ("Field 'sessions' is required ... missing")
+    // and session.create got no session_id. Start high so it can never collide with request ids.
+    private val capabilitiesCounter = java.util.concurrent.atomic.AtomicLong(1_000_000)
+
     private val wsClient: OkHttpClient by lazy {
         DashboardApiClient.httpClient().newBuilder()
             .pingInterval(300, TimeUnit.SECONDS)  // v0.1.74: 5-min liveness ping — the server never drops a silent WS (no read timeout) and streaming traffic verifies liveness anyway; 30s was ~10x more radio wakeups than needed
@@ -144,20 +152,12 @@ class WsConnectionManager(
         }
     }
 
-    /**
-     * Advertise that this client answers server→client requests. Sent once per
-     * connection generation (from onOpen). The gateway gates approval/clarify/sudo/…
-     * behind this: a WebSocket client that never sends it is treated as older than
-     * the server-request half of the protocol and every such request fails fast with
-     * "the attached client cannot answer approval requests". Returns immediately;
-     * the response frame (if any) is handled by onMessage like any other.
-     */
     private fun advertiseCapabilities() {
-        val frame = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"client.capabilities\",\"params\":{\"server_requests\":true}}"
+        val id = capabilitiesCounter.getAndIncrement()
+        val frame = "{\"jsonrpc\":\"2.0\",\"id\":$id,\"method\":\"client.capabilities\",\"params\":{\"server_requests\":true}}"
         send(frame)
         DebugLog.log("WS", "Connection", "advertised client.capabilities {server_requests:true}")
     }
-
     // ── Internal ──
 
     private fun openWebSocket(ticket: String) {
