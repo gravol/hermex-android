@@ -38,7 +38,9 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
      * dedicated WS connection lives for the ViewModel's lifetime so session-list
      * changes reach us without a full reconnect (see [init]).
      */
+    private var observerWs: WsConnectionManager? = null
     private var observerClient: JsonRpcClient? = null
+    private var observerReady = false
 
     /** Locally pinned session ids (desktop-style client-side pinning). */
     val pinnedIds: StateFlow<Set<String>> = settingsRepo.pinnedSessionIds
@@ -46,28 +48,61 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
 
     init {
         loadSessions()
-        // Establish a persistent observer connection and start watching for
-        // `sessions.changed` broadcasts. The dashboard fires this after any
-        // external session-list change (cron runs, other clients, turn
-        // completion). Without refetching on it, the cached list goes stale —
-        // which is exactly why Insights showed "no usage data" even after the
-        // gateway started returning token counts.
+        // Establish ONE persistent observer connection for the ViewModel's
+        // lifetime and keep watching for `sessions.changed` broadcasts. The
+        // dashboard fires this after any external session-list change (cron
+        // runs, other clients, turn completion). Without refetching on it the
+        // cached list goes stale — which is exactly why Insights showed "no
+        // usage data" even after the gateway started returning token counts.
+        //
+        // v0.1.172: this connection lives for the ViewModel's lifetime and is
+        // REUSED across every reload. The old code opened a fresh throwaway WS
+        // + ticket on each `sessions.changed` when the observer wasn't instantly
+        // live, then disconnected — so frequent broadcasts spun up one socket per
+        // reload, racing the reap window and thrashing the brute-force throttle.
+        // Reusing one socket (reconnecting in place if it dies) removes that churn.
         viewModelScope.launch {
             try {
                 val ws = WsConnectionManager(viewModelScope)
                 ws.connect()
                 observerClient = JsonRpcClient(ws, viewModelScope).apply { start() }
+                observerWs = ws
+                observerReady = true
             } catch (_: Exception) {
                 observerClient = null
+                observerWs = null
+                observerReady = false
             }
-            observerClient?.let { client ->
-                client.notifications.collect { n ->
+            if (observerClient != null) {
+                observerClient!!.notifications.collect { n ->
                     if (n is RpcNotification.SessionChanged) {
                         DebugLog.log("INFO", "SessionsVM", "sessions.changed → reload")
                         loadDashboardSessions()
                     }
                 }
             }
+        }
+    }
+
+    /** Ensure a live observer socket, reconnecting in place if the old one died. */
+    private suspend fun ensureObserver(): WsConnectionManager? {
+        val existing = observerWs
+        if (existing != null && existing.isConnected) return existing
+        try {
+            val ws = WsConnectionManager(viewModelScope)
+            ws.connect()
+            observerClient = JsonRpcClient(ws, viewModelScope).apply { start() }
+            observerWs = ws
+            observerReady = true
+            DebugLog.log("INFO", "SessionsVM", "observer reconnected — live socket")
+            return ws
+        } catch (e: Exception) {
+            Log.e("Hermex", "SessionsViewModel: observer reconnect failed", e)
+            DebugLog.log("ERROR", "SessionsVM", "observer reconnect failed: ${e.message}")
+            observerClient = null
+            observerWs = null
+            observerReady = false
+            return null
         }
     }
 
@@ -163,35 +198,40 @@ class SessionsViewModel(application: Application) : AndroidViewModel(application
      * broadcast happened to fire minutes later. Now the fresh connection actually
      * fetches before it disconnects, and both paths share one apply function.
      */
+    /**
+     * v0.1.172: stop opening a throwaway socket per reload. The old fallback path
+     * opened a fresh WS + ticket on every `sessions.changed` when the observer
+     * wasn't instantly live, then disconnected — so frequent broadcasts spun up
+     * one socket per reload, racing the reap window and thrashing the brute-force
+     * throttle (the exact "observer unavailable — opening fresh WS connection"
+     * churn in the crash loop). Now we REUSE the persistent observer socket and
+     * only reconnect it IN PLACE if it died. No throwaway sockets, no per-reload
+     * ticket fetch.
+     */
     private suspend fun loadDashboardSessions() {
         DebugLog.log("INFO", "SessionsVM", "loadSessions via DASHBOARD JsonRpcClient.sessionList()")
         Log.d("Hermex", "SessionsViewModel: loading dashboard sessions")
 
         val liveClient = observerClient?.takeIf { it.isConnected }
-        if (liveClient != null) {
-            applySessionList(liveClient)
+            ?: ensureObserver()?.let { JsonRpcClient(it, viewModelScope) }
+        if (liveClient == null) {
+            DebugLog.log("ERROR", "SessionsVM", "no observer socket — session.list deferred")
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = "Dashboard: observer connection unavailable",
+            )
             return
         }
 
-        // Observer not live yet (normal on cold start): open a throwaway WS,
-        // fetch session.list, then disconnect. The old version returned here
-        // without ever calling sessionList(), leaving the list stuck on the
-        // spinner until an unrelated sessions.changed fired minutes later.
-        DebugLog.log("INFO", "SessionsVM", "observer unavailable — opening fresh WS connection")
-        val wsConnection = WsConnectionManager(viewModelScope)
         try {
-            wsConnection.connect()
-            val freshClient = JsonRpcClient(wsConnection, viewModelScope).apply { start() }
-            applySessionList(freshClient)
+            applySessionList(liveClient)
         } catch (e: Exception) {
-            Log.e("Hermex", "SessionsViewModel: fresh session load failed", e)
-            DebugLog.log("ERROR", "SessionsVM", "fresh session.list failed: ${e.message}")
+            Log.e("Hermex", "SessionsViewModel: session.list failed", e)
+            DebugLog.log("ERROR", "SessionsVM", "session.list failed: ${e.message}")
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 error = "Dashboard: ${e.message ?: "Session load failed"}",
             )
-        } finally {
-            wsConnection.disconnect()
         }
     }
 
