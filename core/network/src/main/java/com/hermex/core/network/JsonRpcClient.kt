@@ -203,7 +203,12 @@ class JsonRpcClient(
         try {
             val frame = json.parseToJsonElement(raw).jsonObject
 
-            val id = frame["id"]?.jsonPrimitive?.content?.toLongOrNull()
+            val rawId = frame["id"]?.jsonPrimitive?.content
+            // Outgoing requests use numeric ids (from requestCounter) so responses complete via
+            // handleResponse/handleError. Server→client questions use a string id (`srq-<hex>`);
+            // toLongOrNull() returns null for those, so we keep the raw string to route them to
+            // serverRequests instead of mistaking them for notifications (which have no id).
+            val numericId = rawId?.toLongOrNull()
             // v0.1.137 — envelope-tolerant notification detection. The dashboard
             // emits notifications with the method under `method`, but a few events
             // (notably some completion events) have arrived under `event` or with
@@ -220,29 +225,28 @@ class JsonRpcClient(
 
             when {
                 // Response to one of our requests
-                id != null && result != null -> {
-                    handleResponse(id, result)
+                numericId != null && result != null -> {
+                    handleResponse(numericId, result)
                 }
                 // Error response
-                id != null && error != null -> {
-                    handleError(id, error.jsonObject)
+                numericId != null && error != null -> {
+                    handleError(numericId, error.jsonObject)
                 }
-            // Server-pushed notification (no id, has method)
-                id == null && method != null && params != null -> {
-                    handleNotification(method, params)
-                }
-                // Server→client request (has a string id like `srq-<hex>`, a method, but
-                // no result/error yet): the backend is asking a question and waiting for one
-                // response frame on this same id. Route to serverRequests so a handler can
-                // answer via respondRequest(...). Without this it falls through to "Unknown"
-                // and the gateway stalls out the full deadline (approval/clarify/sudo fail).
-                id != null && method != null && result == null && error == null -> {
+            // Server→client request (string id like `srq-<hex>`, a method, but no result/error yet):
+            // the backend is asking a question and waiting for one response frame on this same id.
+            // Route to serverRequests so a handler can answer via respondRequest(...). Without this
+            // it falls through to "Unknown" and the gateway stalls out the full deadline (approval/clarify/sudo fail).
+                rawId != null && numericId == null && method != null && result == null && error == null -> {
                     serverRequestChannel.trySend(
-                        ServerRequest(id = id.toString(), method = method, params = params ?: JsonObject(emptyMap()))
+                        ServerRequest(id = rawId, method = method, params = params ?: JsonObject(emptyMap()))
                     )
                 }
-                // Server-pushed notification with method at top level
-                id == null && method != null -> {
+            // Server-pushed notification (no id, has method)
+                numericId == null && method != null && params != null -> {
+                    handleNotification(method, params)
+                }
+            // Server-pushed notification with method at top level
+                numericId == null && method != null -> {
                     handleNotification(method, params ?: JsonObject(emptyMap()))
                 }
                 else -> {
