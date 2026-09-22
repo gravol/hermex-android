@@ -1,13 +1,28 @@
 # Hermex Android — Project Handoff (Current State)
 
-**Last updated:** 2026-09-22 — current is v0.1.171 (client.capabilities RPC id collision fix, released to Obtainium)
-**Current version:** v0.1.171 (versionCode 172)
-**HEAD commit:** `3cb162b` — bump to v0.1.171 (versionCode 172): ship client.capabilities RPC id collision fix; the underlying fix is in `961cf87`, release built/tagged/published via CI
+**Last updated:** 2026-09-22 — current is v0.1.172 (session-list reload-loop fix, released to Obtainium)
+**Current version:** v0.1.172 (versionCode 173)
+**HEAD commit:** `d8d1f65` — fix(0.1.172): stop per-reload throwaway WS in SessionsViewModel; built locally, released to Obtainium via CI
 **Branch:** `master`  
 **Repository:** `git@github.com:gravol/hermex-android.git`  
 **Working directory:** `/home/jeff/HermexAndroid` (canonical)
 
 ---
+
+## [0.1.172] — 2026-09-22 — session-list reload-loop fix (released to Obtainium)
+
+**Status:** FIXED, committed `d8d1f65`, built + released to Obtainium.
+
+**Problem:** The reported crash loop ("rpc can't find session" / "observer unavailable — opening fresh WS connection") was NOT the chat self-heal (`forceConnect`/`resumeUntilLive`, already compiled into v0.1.171). It lived in `SessionsViewModel`: `loadDashboardSessions` opened a **throwaway WebSocket + ws-ticket on every reload** when the observer wasn't instantly live, then disconnected. Frequent `sessions.changed` broadcasts → one socket per reload → racing the reap window and thrashing the brute-force throttle. This is exactly the loop in the user's log.
+
+**Fix:** Rewrote the session-list loader to **reuse one persistent observer socket** for the ViewModel's lifetime; only reconnect it in place if it dies (`ensureObserver()`). No throwaway sockets, no per-reload ticket fetch. Bumped `versionCode 173 / versionName 0.1.172`.
+
+**Verified:**
+- `./gradlew assembleRelease` → BUILD SUCCESSFUL (~2m 6s)
+- APK signed with Hermex key; badging: `versionCode=173 versionName=0.1.172`
+- dex check: `ensureObserver` present in compiled dex (`classes2.dex`); old churn string removed
+
+**Limitation:** Opening a session right after coming back from idle can still hit a brief 4001 while the reconnect settles — but it no longer loops. Server-side reap (`ws_orphan_reap`, 20s grace) is dashboard code, not app code.
 
 ## [0.1.171] — 2026-09-22 — client.capabilities RPC id collided with session.list/create (released to Obtainium)
 
