@@ -644,7 +644,10 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
      */
     private suspend fun execSlashWithFallbacks(command: String): JsonObject {
         return try {
-            rpcClient.slashExec(sessionId, command)
+            // slash.exec resolves _sessions by LIVE SID only (no DB-key fallback —
+            // proven live: a persisted DB key 4001s while the live SID works), so
+            // pass the live SID when we have it, same rule as command.dispatch.
+            rpcClient.slashExec(liveSid.ifBlank { sessionId }, command)
         } catch (e: JsonRpcException) {
             when {
                 // v0.1.159: slash.exec routes through a server-side slash-worker
@@ -674,7 +677,7 @@ class DashboardChatViewModel(application: Application) : ChatViewModelContract(a
                     val resume = rpcClient.sessionResume(sessionId, omitMessages = true)
                     liveSid = resume.session_id
                     resumedSessionId = resume.resumed ?: sessionId
-                    rpcClient.slashExec(sessionId, command)
+                    rpcClient.slashExec(liveSid.ifBlank { sessionId }, command)
                 }
                 else -> throw e
             }
