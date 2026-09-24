@@ -73,11 +73,11 @@ fun InsightsPanel(
         }
     }
 
-    // Per-model rollups within the window: total tokens + session count.
+    // Per-model rollups within the window: input + output + total tokens + session count.
     val modelRows = remember(inWindow) { computeModelRows(inWindow) }
-    val grandTotal = remember(inWindow) {
-        inWindow.sumOf { it.inputTokens.coerceAtLeast(0) + it.outputTokens.coerceAtLeast(0) }
-    }
+    val grandInput = remember(inWindow) { inWindow.sumOf { it.inputTokens.coerceAtLeast(0) } }
+    val grandOutput = remember(inWindow) { inWindow.sumOf { it.outputTokens.coerceAtLeast(0) } }
+    val grandTotal = grandInput + grandOutput
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Header: INSIGHTS + close
@@ -145,10 +145,17 @@ fun InsightsPanel(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = formatTokens(grandTotal),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
+                    text = "${formatTokens(grandInput)} in / ${formatTokens(grandOutput)} out",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = Color(0xFFE8E8E8),
+                )
+                Spacer(Modifier.height(1.dp))
+                Text(
+                    text = "Total ${formatTokens(grandTotal)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             Icon(
@@ -196,6 +203,8 @@ fun InsightsPanel(
 
 private data class ModelUsageRow(
     val model: String,
+    val inputTokens: Long,
+    val outputTokens: Long,
     val totalTokens: Long,
     val sessionCount: Int,
 )
@@ -208,12 +217,16 @@ private fun modelLabel(model: String?): String {
 }
 
 private fun computeModelRows(sessions: List<SessionSummary>): List<ModelUsageRow> {
-    val grouped = sessions.filter { it.inputTokens >= 0 || it.outputTokens >= 0 }
+    val grouped = sessions.filter { it.inputTokens >= 0 && it.outputTokens >= 0 }
         .groupBy { modelLabel(it.model) }
     return grouped.entries.map { (model, list) ->
+        val input = list.sumOf { it.inputTokens.coerceAtLeast(0) }
+        val output = list.sumOf { it.outputTokens.coerceAtLeast(0) }
         ModelUsageRow(
             model = model,
-            totalTokens = list.sumOf { (it.inputTokens.coerceAtLeast(0) + it.outputTokens.coerceAtLeast(0)) },
+            inputTokens = input,
+            outputTokens = output,
+            totalTokens = input + output,
             sessionCount = list.size,
         )
     }.sortedByDescending { it.totalTokens }
@@ -241,12 +254,25 @@ private fun ModelRow(row: ModelUsageRow) {
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF888888),
             )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "${formatTokens(row.inputTokens)} in / ${formatTokens(row.outputTokens)} out",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFA0A0A0),
+            )
         }
-        Text(
-            text = formatTokens(row.totalTokens),
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.primary,
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = formatTokens(row.totalTokens),
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = "total",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF888888),
+            )
+        }
     }
     HorizontalDivider(color = Color(0xFF2A2A45))
 }
